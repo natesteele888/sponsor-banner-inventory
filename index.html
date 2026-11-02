@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sponsor Banners</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Sponsor Banners</h1>
+  <nav class="tabs">
+    <button class="tab-btn" data-view="list">List</button>
+    <button class="tab-btn" data-view="map">Map</button>
+    <button class="tab-btn" data-view="add">＋ Add</button>
+  </nav>
+</header>
+
+<main id="app">
+
+  <!-- LIST VIEW -->
+  <section id="view-list" class="view">
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search sponsor name…">
+      <div class="chips" id="filterChips">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="hung">Hung</button>
+        <button class="chip" data-filter="notHung">Not hung</button>
+        <button class="chip" data-filter="onList">2026 sponsor</button>
+        <button class="chip" data-filter="legacy">Legacy</button>
+      </div>
+    </div>
+    <div id="status" class="status"></div>
+    <ul id="bannerList" class="banner-list"></ul>
+  </section>
+
+  <!-- MAP VIEW -->
+  <section id="view-map" class="view hidden">
+    <p class="hint">Banners with a dropped pin show up here. Tap a pin for details, or drop a new one from a banner's detail view.</p>
+    <div id="map" class="map"></div>
+  </section>
+
+  <!-- ADD VIEW -->
+  <section id="view-add" class="view hidden">
+    <form id="addForm" class="form">
+      <h2>Add a new banner</h2>
+      <label>Photo
+        <input type="file" id="addPhoto" accept="image/*" required>
+      </label>
+      <img id="addPreview" class="preview hidden" alt="Preview">
+      <label>Sponsor name
+        <input type="text" id="addSponsorName" required>
+      </label>
+      <label>Tier
+        <input type="text" id="addTier" placeholder="MVP, Championship, All-Star…">
+      </label>
+      <label>Amount paid
+        <input type="text" id="addAmount" placeholder="$500.00">
+      </label>
+      <label>Contact name
+        <input type="text" id="addContactName">
+      </label>
+      <label>Contact phone
+        <input type="tel" id="addContactPhone">
+      </label>
+      <label>Contact email
+        <input type="email" id="addContactEmail">
+      </label>
+      <label>Address
+        <input type="text" id="addAddress">
+      </label>
+      <label>Condition
+        <input type="text" id="addCondition" placeholder="Good" value="Good">
+      </label>
+      <label class="row">
+        <input type="checkbox" id="addOnList">
+        On the current sponsor list
+      </label>
+      <label class="row">
+        <input type="checkbox" id="addHung">
+        Currently hung
+      </label>
+      <label>Notes
+        <textarea id="addNotes" rows="3"></textarea>
+      </label>
+      <button type="submit" class="btn primary" id="addSubmit">Add banner</button>
+      <p id="addStatus" class="status"></p>
+    </form>
+  </section>
+
+</main>
+
+<!-- DETAIL SHEET -->
+<div id="detailScrim" class="scrim hidden"></div>
+<section id="detailSheet" class="sheet hidden" role="dialog" aria-label="Banner detail">
+  <div class="sheet-top">
+    <button class="btn small" id="detailClose">Close</button>
+    <span id="detailBadge" class="pill"></span>
+  </div>
+  <div class="sheet-body">
+    <img id="detailImg" class="detail-img" alt="Banner photo">
+    <div id="detailImgStatus" class="status"></div>
+    <div class="field-grid">
+      <label>Sponsor name <input id="f_sponsorName" type="text"></label>
+      <label>Tier <input id="f_tier" type="text"></label>
+      <label>Amount paid <input id="f_amountPaid" type="text"></label>
+      <label>Condition <input id="f_condition" type="text"></label>
+      <label>Contact name <input id="f_contactName" type="text"></label>
+      <label>Contact phone <input id="f_contactPhone" type="tel"></label>
+      <label>Contact email <input id="f_contactEmail" type="email"></label>
+      <label>Address <input id="f_address" type="text"></label>
+      <label class="row"><input id="f_onSponsorList" type="checkbox"> On the current sponsor list</label>
+      <label class="row hung-row"><input id="f_hung" type="checkbox"> Currently hung</label>
+      <label class="full">Notes <textarea id="f_notes" rows="3"></textarea></label>
+    </div>
+    <div class="pin-block">
+      <div id="pinStatus" class="hint"></div>
+      <button class="btn" id="dropPinBtn" type="button">📍 Drop pin on map</button>
+      <div id="pinPicker" class="pin-picker hidden"></div>
+    </div>
+    <div class="sheet-acts">
+      <button class="btn primary" id="detailSave" type="button">Save</button>
+      <span id="detailStatus" class="status"></span>
+    </div>
+  </div>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

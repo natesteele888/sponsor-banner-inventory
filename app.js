@@ -1,0 +1,412 @@
+(function () {
+  'use strict';
+
+  var CFG = window.APP_CONFIG || {};
+  var NOT_CONFIGURED = !CFG.APPS_SCRIPT_URL || CFG.APPS_SCRIPT_URL.indexOf('PASTE_') === 0;
+
+  var state = {
+    banners: [],
+    loaded: false,
+    filter: 'all',
+    search: '',
+    imageCache: {},   // driveFileId:size -> data URI
+    currentId: null,
+    map: null,
+    mapMarkers: [],
+    pinPicker: null,
+    pendingPin: null  // {lat,lng} chosen in the picker, not yet saved
+  };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+  var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
+
+  function apiGet(params) {
+    var url = new URL(CFG.APPS_SCRIPT_URL);
+    url.searchParams.set('token', CFG.ACCESS_TOKEN);
+    Object.keys(params || {}).forEach(function (k) { url.searchParams.set(k, params[k]); });
+    return fetch(url.toString()).then(function (r) { return r.json(); });
+  }
+
+  function apiPost(body) {
+    body = Object.assign({ token: CFG.ACCESS_TOKEN }, body);
+    return fetch(CFG.APPS_SCRIPT_URL, {
+      method: 'POST',
+      // text/plain avoids a CORS preflight against the Apps Script /exec
+      // endpoint, which doesn't handle OPTIONS.
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); });
+  }
+
+  // ---------- bootstrap ----------
+
+  function showConfigWarning() {
+    $('#status').textContent =
+      'Not set up yet: paste your Apps Script Web App URL and access token into config.js (see README.md).';
+  }
+
+  function loadBanners() {
+    $('#status').textContent = 'Loading…';
+    return apiGet({ action: 'list' }).then(function (res) {
+      if (!res.ok) throw new Error(res.error || 'Could not load banners.');
+      state.banners = res.banners;
+      state.loaded = true;
+      $('#status').textContent = '';
+      renderList();
+    }).catch(function (err) {
+      $('#status').textContent = 'Could not load banners: ' + err.message;
+    });
+  }
+
+  // ---------- list view ----------
+
+  function matchesFilter(b) {
+    if (state.filter === 'hung') return b.hung;
+    if (state.filter === 'notHung') return !b.hung;
+    if (state.filter === 'onList') return b.onSponsorList;
+    if (state.filter === 'legacy') return !b.onSponsorList;
+    return true;
+  }
+
+  function matchesSearch(b) {
+    if (!state.search) return true;
+    return (b.sponsorName || '').toLowerCase().indexOf(state.search.toLowerCase()) > -1;
+  }
+
+  function renderList() {
+    var list = $('#bannerList');
+    var items = state.banners.filter(matchesFilter).filter(matchesSearch)
+      .sort(function (a, b) { return (a.sponsorName || '').localeCompare(b.sponsorName || ''); });
+
+    list.innerHTML = items.map(function (b) {
+      return '<li class="banner-card" data-id="' + b.id + '">' +
+        '<div class="thumb-placeholder" data-thumb="' + b.driveFileId + '"></div>' +
+        '<div class="info">' +
+          '<div class="name">' + esc(b.sponsorName || '(unnamed)') + '</div>' +
+          '<div class="meta">' +
+            pill(b.hung ? 'Hung' : 'Not hung', b.hung ? 'hung' : 'not-hung') +
+            (b.onSponsorList ? pill('2026 sponsor', 'on-list') : pill('Legacy', 'legacy')) +
+            (b.tier ? pill(b.tier, '') : '') +
+          '</div>' +
+        '</div>' +
+      '</li>';
+    }).join('') || '<p class="hint">No banners match that filter.</p>';
+
+    $$('.banner-card').forEach(function (card) {
+      card.addEventListener('click', function () { openDetail(card.dataset.id); });
+    });
+
+    lazyLoadThumbs();
+  }
+
+  function pill(text, cls) {
+    return '<span class="pill ' + cls + '">' + esc(text) + '</span>';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function lazyLoadThumbs() {
+    var placeholders = $$('[data-thumb]');
+    if (!('IntersectionObserver' in window)) {
+      placeholders.forEach(loadThumb);
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          loadThumb(entry.target);
+          io.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '200px' });
+    placeholders.forEach(function (el) { io.observe(el); });
+  }
+
+  function loadThumb(el) {
+    var fileId = el.dataset.thumb;
+    if (!fileId) return;
+    fetchImage(fileId, 'thumb').then(function (dataUri) {
+      if (!dataUri) return;
+      var img = document.createElement('img');
+      img.src = dataUri;
+      img.alt = '';
+      el.replaceWith(img);
+    });
+  }
+
+  function fetchImage(driveFileId, size) {
+    var key = driveFileId + ':' + size;
+    if (state.imageCache[key]) return Promise.resolve(state.imageCache[key]);
+    return apiGet({ action: 'image', id: driveFileId, size: size }).then(function (res) {
+      if (!res.ok) return null;
+      var uri = 'data:' + res.mime + ';base64,' + res.base64;
+      state.imageCache[key] = uri;
+      return uri;
+    }).catch(function () { return null; });
+  }
+
+  // ---------- detail sheet ----------
+
+  function openDetail(id) {
+    var b = state.banners.find(function (x) { return String(x.id) === String(id); });
+    if (!b) return;
+    state.currentId = b.id;
+    state.pendingPin = null;
+
+    $('#detailBadge').textContent = b.hung ? 'Hung' : 'Not hung';
+    $('#detailBadge').className = 'pill ' + (b.hung ? 'hung' : 'not-hung');
+    $('#detailImg').removeAttribute('src');
+    $('#detailImgStatus').textContent = 'Loading photo…';
+
+    $('#f_sponsorName').value = b.sponsorName || '';
+    $('#f_tier').value = b.tier || '';
+    $('#f_amountPaid').value = b.amountPaid || '';
+    $('#f_condition').value = b.condition || '';
+    $('#f_contactName').value = b.contactName || '';
+    $('#f_contactPhone').value = b.contactPhone || '';
+    $('#f_contactEmail').value = b.contactEmail || '';
+    $('#f_address').value = b.address || '';
+    $('#f_onSponsorList').checked = !!b.onSponsorList;
+    $('#f_hung').checked = !!b.hung;
+    $('#f_notes').value = b.notes || '';
+
+    updatePinStatus(b);
+    $('#pinPicker').classList.add('hidden');
+    $('#pinPicker').innerHTML = '';
+    state.pinPicker = null;
+
+    $('#detailStatus').textContent = '';
+    $('#detailScrim').classList.remove('hidden');
+    $('#detailSheet').classList.remove('hidden');
+
+    fetchImage(b.driveFileId, 'full').then(function (uri) {
+      if (uri) {
+        $('#detailImg').src = uri;
+        $('#detailImgStatus').textContent = '';
+      } else {
+        $('#detailImgStatus').textContent = 'Could not load the photo.';
+      }
+    });
+  }
+
+  function updatePinStatus(b) {
+    var lat = state.pendingPin ? state.pendingPin.lat : b.lat;
+    var lng = state.pendingPin ? state.pendingPin.lng : b.lng;
+    $('#pinStatus').textContent = (lat != null && lng != null)
+      ? 'Pinned at ' + Number(lat).toFixed(5) + ', ' + Number(lng).toFixed(5)
+      : 'No pin dropped yet.';
+  }
+
+  function closeDetail() {
+    $('#detailScrim').classList.add('hidden');
+    $('#detailSheet').classList.add('hidden');
+    state.currentId = null;
+  }
+
+  function saveDetail() {
+    var b = state.banners.find(function (x) { return String(x.id) === String(state.currentId); });
+    if (!b) return;
+    var payload = {
+      action: 'update',
+      id: b.id,
+      sponsorName: $('#f_sponsorName').value,
+      tier: $('#f_tier').value,
+      amountPaid: $('#f_amountPaid').value,
+      condition: $('#f_condition').value,
+      contactName: $('#f_contactName').value,
+      contactPhone: $('#f_contactPhone').value,
+      contactEmail: $('#f_contactEmail').value,
+      address: $('#f_address').value,
+      onSponsorList: $('#f_onSponsorList').checked,
+      hung: $('#f_hung').checked,
+      notes: $('#f_notes').value
+    };
+    if (state.pendingPin) {
+      payload.lat = state.pendingPin.lat;
+      payload.lng = state.pendingPin.lng;
+    }
+    $('#detailStatus').textContent = 'Saving…';
+    apiPost(payload).then(function (res) {
+      if (!res.ok) throw new Error(res.error || 'Save failed.');
+      Object.assign(b, payload);
+      if (state.pendingPin) { b.lat = state.pendingPin.lat; b.lng = state.pendingPin.lng; }
+      $('#detailStatus').textContent = 'Saved.';
+      renderList();
+      setTimeout(function () { closeDetail(); }, 400);
+    }).catch(function (err) {
+      $('#detailStatus').textContent = 'Error: ' + err.message;
+    });
+  }
+
+  function openPinPicker() {
+    var picker = $('#pinPicker');
+    picker.classList.remove('hidden');
+    if (state.pinPicker) { state.pinPicker.invalidateSize(); return; }
+
+    var b = state.banners.find(function (x) { return String(x.id) === String(state.currentId); });
+    var start = state.pendingPin || (b.lat != null ? { lat: b.lat, lng: b.lng } : { lat: 42.6757, lng: -71.7323 }); // Lunenburg, MA
+
+    var map = L.map(picker, { attributionControl: true }).setView([start.lat, start.lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    var marker = L.marker([start.lat, start.lng], { draggable: true }).addTo(map);
+    marker.on('dragend', function () {
+      var p = marker.getLatLng();
+      state.pendingPin = { lat: p.lat, lng: p.lng };
+      updatePinStatus(b);
+    });
+    map.on('click', function (e) {
+      marker.setLatLng(e.latlng);
+      state.pendingPin = { lat: e.latlng.lat, lng: e.latlng.lng };
+      updatePinStatus(b);
+    });
+
+    state.pinPicker = map;
+  }
+
+  // ---------- map view ----------
+
+  function renderMap() {
+    if (!state.map) {
+      state.map = L.map('map').setView([42.6757, -71.7323], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(state.map);
+    } else {
+      state.map.invalidateSize();
+    }
+    state.mapMarkers.forEach(function (m) { state.map.removeLayer(m); });
+    state.mapMarkers = [];
+
+    var pinned = state.banners.filter(function (b) { return b.lat != null && b.lng != null; });
+    pinned.forEach(function (b) {
+      var marker = L.marker([b.lat, b.lng]).addTo(state.map);
+      marker.bindPopup(
+        '<b>' + esc(b.sponsorName) + '</b><br>' + (b.hung ? 'Hung' : 'Not hung') +
+        '<br><a href="#" data-open-id="' + b.id + '">Open</a>'
+      );
+      marker.on('popupopen', function () {
+        var link = document.querySelector('[data-open-id="' + b.id + '"]');
+        if (link) link.addEventListener('click', function (e) { e.preventDefault(); openDetail(b.id); });
+      });
+      state.mapMarkers.push(marker);
+    });
+
+    if (pinned.length) {
+      state.map.fitBounds(L.latLngBounds(pinned.map(function (b) { return [b.lat, b.lng]; })), { padding: [30, 30], maxZoom: 17 });
+    }
+  }
+
+  // ---------- add view ----------
+
+  function resetAddForm() {
+    $('#addForm').reset();
+    $('#addPreview').classList.add('hidden');
+    $('#addCondition').value = 'Good';
+    $('#addStatus').textContent = '';
+  }
+
+  function submitAdd(e) {
+    e.preventDefault();
+    var fileInput = $('#addPhoto');
+    var file = fileInput.files[0];
+    if (!file) { $('#addStatus').textContent = 'Choose a photo first.'; return; }
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      $('#addStatus').textContent = 'Uploading…';
+      $('#addSubmit').disabled = true;
+      apiPost({
+        action: 'upload',
+        photo: reader.result,
+        sponsorName: $('#addSponsorName').value,
+        tier: $('#addTier').value,
+        amountPaid: $('#addAmount').value,
+        contactName: $('#addContactName').value,
+        contactPhone: $('#addContactPhone').value,
+        contactEmail: $('#addContactEmail').value,
+        address: $('#addAddress').value,
+        condition: $('#addCondition').value,
+        onSponsorList: $('#addOnList').checked,
+        hung: $('#addHung').checked,
+        notes: $('#addNotes').value
+      }).then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'Upload failed.');
+        $('#addStatus').textContent = 'Added!';
+        resetAddForm();
+        return loadBanners();
+      }).catch(function (err) {
+        $('#addStatus').textContent = 'Error: ' + err.message;
+      }).finally(function () {
+        $('#addSubmit').disabled = false;
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ---------- navigation ----------
+
+  function showView(name) {
+    $$('.view').forEach(function (v) { v.classList.add('hidden'); });
+    $('#view-' + name).classList.remove('hidden');
+    $$('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.view === name); });
+    if (name === 'map') renderMap();
+  }
+
+  // ---------- wire up ----------
+
+  function init() {
+    if (NOT_CONFIGURED) { showConfigWarning(); }
+    else { loadBanners(); }
+
+    $$('.tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { showView(btn.dataset.view); });
+    });
+
+    $('#search').addEventListener('input', function (e) {
+      state.search = e.target.value;
+      renderList();
+    });
+    $$('.chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        state.filter = chip.dataset.filter;
+        $$('.chip').forEach(function (c) { c.classList.remove('active'); });
+        chip.classList.add('active');
+        renderList();
+      });
+    });
+
+    $('#detailClose').addEventListener('click', closeDetail);
+    $('#detailScrim').addEventListener('click', closeDetail);
+    $('#detailSave').addEventListener('click', saveDetail);
+    $('#f_hung').addEventListener('change', function () {
+      $('#detailBadge').textContent = $('#f_hung').checked ? 'Hung' : 'Not hung';
+      $('#detailBadge').className = 'pill ' + ($('#f_hung').checked ? 'hung' : 'not-hung');
+    });
+    $('#dropPinBtn').addEventListener('click', openPinPicker);
+
+    $('#addForm').addEventListener('submit', submitAdd);
+    $('#addPhoto').addEventListener('change', function () {
+      var file = $('#addPhoto').files[0];
+      if (!file) { $('#addPreview').classList.add('hidden'); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        $('#addPreview').src = reader.result;
+        $('#addPreview').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    showView('list');
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
