@@ -34,39 +34,41 @@ trade-off: `ACCESS_TOKEN` in `config.js` is a speed bump, not real security
 person reading the page source. Fine for a private tool only Nate uses;
 flag it if that stops being true.
 
-## One-time setup (you — about 10 minutes)
+## One-time setup
 
-1. **Open the Sheet.** "Sponsor Banner Inventory (data)" already exists in
-   the "Sponsor Banners" Drive folder, already seeded with all 35 banners
-   (sponsor name, tier, contact info, condition — matched against the 2026
-   sponsorship sheet; see "How the seed data was built" below for the few
-   calls I had to make).
-2. **Deploy the backend.** In that Sheet: Extensions → Apps Script. Delete
-   the placeholder code, paste in `apps-script/Code.gs` from this repo. Set
-   `ACCESS_TOKEN` near the top to a long random string (anything — a
-   password generator's output is fine). Deploy → New deployment → **Web
-   app** → Execute as **Me**, Who has access **Anyone**. Copy the `/exec`
-   URL it gives you.
-3. **Wire up the front end.** Open `config.js` in this repo and paste in
-   that URL and the same `ACCESS_TOKEN` string.
-4. **Put it online.** Create a GitHub repo (e.g. `sponsor-banner-inventory`
+1. ~~Open the Sheet, deploy the backend, wire up config.js~~ — **done.** The
+   backend is live as a standalone Apps Script project ("Sponsor Banner
+   Inventory", not bound to the Sheet — it references it by `SHEET_ID` so it
+   didn't need the Sheets UI's "Extensions → Apps Script" link, which only
+   opens from a real click). `config.js` already has the real `/exec` URL
+   and access token in it. The one click I couldn't do myself — Google's
+   OAuth consent screen, which browser automation can't click through by
+   design — Nate did directly in the Apps Script editor.
+2. **Put it online** (needs you — I have no `gh` CLI or GitHub session to
+   do this myself). Create a GitHub repo (e.g. `sponsor-banner-inventory`
    under your account), push this folder to it, then Settings → Pages →
    deploy from the `main` branch, root. GitHub gives you a URL like
    `https://natesteele888.github.io/sponsor-banner-inventory/`.
-5. **Point the Toolbox at it.** The Toolbox's "link changed" banner (the one
+3. **Point the Toolbox at it.** The Toolbox's "link changed" banner (the one
    that already fixed Gameday Picks and the Signal Study Guide) needs an
    entry in `apps/registry.json` in your `natesteele888.github.io` repo — I
    don't have that repo, so add this yourself:
    ```json
    { "match": "claude.ai/artifact/12zwnZ5N9q53yegAmby4js", "live": "https://natesteele888.github.io/sponsor-banner-inventory/" }
    ```
-   (adjust the URL to wherever step 4 actually lands). Next time you open
+   (adjust the URL to wherever step 2 actually lands). Next time you open
    the Toolbox, it'll offer to update the link — same one-tap flow as the
    other two apps.
-6. Open the live URL on your phone and add it to your home screen.
+4. Open the live URL on your phone and add it to your home screen.
 
-If you'd rather I do steps 4–5 myself, give me push access to the repo (or
+If you'd rather I do steps 2–3 myself, give me push access to the repo (or
 tell me to create one) and I can finish the deploy next time.
+
+**Apps Script project:** https://script.google.com/home/projects/1v62MCGPSN1mejTXsYfosCWnidALXejuhVxEPmeLHek03ANNQHuAJueNE/edit
+— if `Code.gs` ever needs a code change, edit it there (or paste an updated
+copy in), then Deploy → Manage deployments → pencil icon → Version: **New
+version** → Deploy, which keeps the same `/exec` URL so `config.js` doesn't
+need to change.
 
 ## What's in the Sheet
 

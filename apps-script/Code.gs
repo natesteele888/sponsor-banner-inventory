@@ -21,14 +21,13 @@
  *
  * SETUP — about five minutes, once
  *
- *  1. Open "Sponsor Banner Inventory (data)" in Google Sheets (Nate already
- *     has this — Claude created and seeded it from the Drive folder + the
- *     2026 sponsorship sheet). Extensions → Apps Script.
+ *  1. script.google.com → New project. (Standalone, not bound to the Sheet —
+ *     SHEET_ID below points at it explicitly, so it works either way; this
+ *     avoids the Sheets UI's "Extensions → Apps Script" link, which only
+ *     opens from a real click, not from a script.)
  *  2. Delete the placeholder code and paste this whole file in.
- *  3. SHEET_ID below should already match (it's bound to this sheet, so
- *     SpreadsheetApp.getActiveSpreadsheet() finds it automatically — no
- *     paste needed there). Just fill in ACCESS_TOKEN with a long random
- *     string of your choosing.
+ *  3. SHEET_ID below is already filled in. Just fill in ACCESS_TOKEN with a
+ *     long random string of your choosing.
  *  4. Deploy → New deployment → Web app.
  *       Execute as:        Me
  *       Who has access:    Anyone
@@ -44,11 +43,13 @@
  */
 
 // Fill this in with a long random string, and the same value in config.js.
-var ACCESS_TOKEN = 'PASTE_A_LONG_RANDOM_STRING_HERE';
+var ACCESS_TOKEN = 'G5zo_rOE5G1RWUOK6iH1OyII2d5e-eBg';
 
 // The "Sponsor Banners" Drive folder — where every banner photo lives.
 var DRIVE_FOLDER_ID = '1jptziLDOEAp2MKAcP3wQKe9cVrT4BRS0';
 
+// "Sponsor Banner Inventory (data)" — the database sheet.
+var SHEET_ID = '1lG860tUAPOy12itwcs9Yc48_7QZa3r9CPIKe-G9HTTQ';
 var SHEET_NAME = 'Sheet1';
 
 // A single upload larger than this is refused, so one giant photo can't fill
@@ -117,6 +118,11 @@ function listBanners() {
         var v = idx[col] !== undefined ? row[idx[col]] : '';
         if (col === 'onSponsorList' || col === 'hung') v = String(v).toUpperCase() === 'TRUE';
         if (col === 'lat' || col === 'lng') v = v === '' ? null : Number(v);
+        // Sheets silently turns a typed "$500.00" into a currency-formatted
+        // number — format it back to a string so the app always shows money
+        // consistently, whether a row came from the seed import or the app's
+        // own update/upload (which already send strings).
+        if (col === 'amountPaid') v = formatMoney(v);
         o[col] = v;
       });
       return o;
@@ -239,7 +245,13 @@ function upload(data) {
 // ---------- helpers ----------
 
 function getSheet() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  return SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+}
+
+function formatMoney(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (typeof v === 'number') return '$' + v.toFixed(2);
+  return String(v);
 }
 
 function todayStamp() {
