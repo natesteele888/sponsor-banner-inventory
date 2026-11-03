@@ -3,14 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/png" sizes="192x192" href="https://natesteele888.github.io/apps/icons/sponsor-banners-192.png">
+<link rel="apple-touch-icon" href="https://natesteele888.github.io/apps/icons/sponsor-banners-512.png">
 <title>Sponsor Banners</title>
+<meta name="theme-color" content="#0a1628">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="topbar">
-  <h1>Sponsor Banners</h1>
+  <div class="header-left" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+    <img src="logo.svg" alt="LYBS logo" style="height:36px;width:auto;flex-shrink:0;" loading="lazy">
+    <h1 style="margin:0;">Sponsor <span class="accent">Banners</span></h1>
+  </div>
   <nav class="tabs">
     <button class="tab-btn" data-view="list">List</button>
     <button class="tab-btn" data-view="map">Map</button>
