@@ -164,3 +164,14 @@ input::placeholder, textarea::placeholder { color: var(--text2); }
 @media (min-width: 640px) {
   .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
 }
+
+/* Sign-in */
+.hidden { display: none !important; }
+.signin { max-width: 380px; margin: 0 auto; padding: 48px 20px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.signin-logo { height: 64px; width: auto; margin: 0 auto; }
+.signin h1 { margin: 0; }
+.signin p { margin: 0; color: var(--text2); }
+.signin form { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; text-align: left; }
+.signin label { color: var(--text2); font-size: 13px; }
+.signin input { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; }
+.signin-msg { color: var(--red) !important; min-height: 20px; }

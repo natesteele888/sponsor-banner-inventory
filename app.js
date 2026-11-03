@@ -20,22 +20,78 @@
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
+  function currentToken() {
+    var u = firebase.auth().currentUser;
+    if (!u) return Promise.reject(new Error('Please sign in.'));
+    return u.getIdToken();
+  }
+
   function apiGet(params) {
-    var url = new URL(CFG.APPS_SCRIPT_URL);
-    url.searchParams.set('token', CFG.ACCESS_TOKEN);
-    Object.keys(params || {}).forEach(function (k) { url.searchParams.set(k, params[k]); });
-    return fetch(url.toString()).then(function (r) { return r.json(); });
+    return apiPost(params);
   }
 
   function apiPost(body) {
-    body = Object.assign({ token: CFG.ACCESS_TOKEN }, body);
-    return fetch(CFG.APPS_SCRIPT_URL, {
-      method: 'POST',
-      // text/plain avoids a CORS preflight against the Apps Script /exec
-      // endpoint, which doesn't handle OPTIONS.
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
+    return currentToken().then(function (idToken) {
+      return fetch(CFG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        // text/plain avoids a CORS preflight against the Apps Script /exec
+        // endpoint, which doesn't handle OPTIONS.
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ idToken: idToken }, body))
+      });
     }).then(function (r) { return r.json(); });
+  }
+
+  // ---------- sign-in: the same accounts and roles as the LYBS Dashboard ----------
+
+  function setSignedIn(user) {
+    $('#signin').classList.toggle('hidden', !!user);
+    $('.topbar').classList.toggle('hidden', !user);
+    $('#app').classList.toggle('hidden', !user);
+  }
+
+  function signInError(err) {
+    var c = err && err.code;
+    if (c === 'auth/popup-closed-by-user') return '';
+    if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') return 'That email or password is not right.';
+    if (c === 'auth/unauthorized-domain') return 'This site is not allowed to sign in yet.';
+    return 'Could not sign in. Please try again.';
+  }
+
+  function wireSignIn() {
+    firebase.initializeApp(CFG.FIREBASE);
+    var auth = firebase.auth();
+    var msg = $('#signinMsg');
+    auth.getRedirectResult().catch(function (err) { msg.textContent = signInError(err); });
+    $('#googleBtn').addEventListener('click', function () {
+      msg.textContent = '';
+      var provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      auth.signInWithPopup(provider).catch(function (err) {
+        // A pop-up can fail inside an installed phone app; a full-page redirect still works there.
+        if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].indexOf(err.code) >= 0) {
+          return auth.signInWithRedirect(provider);
+        }
+        msg.textContent = signInError(err);
+      });
+    });
+    $('#emailForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      msg.textContent = '';
+      auth.signInWithEmailAndPassword($('#signinEmail').value.trim(), $('#signinPass').value)
+        .catch(function (err) { msg.textContent = signInError(err); });
+    });
+    $('#signOutBtn').addEventListener('click', function () { auth.signOut(); });
+    auth.onAuthStateChanged(function (user) {
+      setSignedIn(user);
+      if (!user) {
+        state.banners = [];
+        state.imageCache = {};
+        state.loaded = false;
+        return;
+      }
+      if (!state.loaded) loadBanners();
+    });
   }
 
   // ---------- bootstrap ----------
@@ -365,7 +421,6 @@
 
   function init() {
     if (NOT_CONFIGURED) { showConfigWarning(); }
-    else { loadBanners(); }
 
     $$('.tab-btn').forEach(function (btn) {
       btn.addEventListener('click', function () { showView(btn.dataset.view); });
@@ -406,6 +461,7 @@
     });
 
     showView('list');
+    wireSignIn();
   }
 
   document.addEventListener('DOMContentLoaded', init);

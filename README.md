@@ -25,14 +25,11 @@ apps-script/Code.gs, deployed as a Web App   (the only thing that reads/writes t
 index.html / app.js / style.css   (static, hosted on GitHub Pages — what Nate opens)
 ```
 
-There's no Firebase project and no sign-in. The Sheet and Drive folder are
-already in Nate's own Drive, same as every other document the league uses —
-nothing new to create there, no Blaze-plan upgrade, no OAuth setup. The
-trade-off: `ACCESS_TOKEN` in `config.js` is a speed bump, not real security
-(same posture lybs-reporting's photo-intake script documents for its own
-`FORM_TOKEN`) — it stops a crawler stumbling on the URL, not a determined
-person reading the page source. Fine for a private tool only Nate uses;
-flag it if that stops being true.
+Sign-in uses the LYBS Dashboard's accounts and roles. The page signs in through
+the Dashboard's Firebase project and sends that sign-in with every request. The
+Apps Script checks it and allows only the board, director and admin roles from
+the Dashboard's approved list. To give someone access, set their role in
+Dashboard → Manage. The repo holds no secret and no sponsor data.
 
 ## One-time setup
 
@@ -41,7 +38,7 @@ flag it if that stops being true.
    Inventory", not bound to the Sheet — it references it by `SHEET_ID` so it
    didn't need the Sheets UI's "Extensions → Apps Script" link, which only
    opens from a real click). `config.js` already has the real `/exec` URL
-   and access token in it. The one click I couldn't do myself — Google's
+   in it. The one click I couldn't do myself — Google's
    OAuth consent screen, which browser automation can't click through by
    design — Nate did directly in the Apps Script editor.
 2. **Put it online** (needs you — I have no `gh` CLI or GitHub session to

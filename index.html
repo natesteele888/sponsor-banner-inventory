@@ -7,13 +7,28 @@
 <link rel="apple-touch-icon" href="https://natesteele888.github.io/apps/icons/sponsor-banners-512.png">
 <title>Sponsor Banners</title>
 <meta name="theme-color" content="#0a1628">
+<link rel="manifest" href="manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header class="topbar">
+<section id="signin" class="signin hidden" aria-label="Sign in">
+  <img src="logo.svg" alt="LYBS logo" class="signin-logo">
+  <h1>Sponsor <span class="accent">Banners</span></h1>
+  <p>For LYBS board members. Use your LYBS Dashboard account.</p>
+  <button class="btn primary" id="googleBtn" type="button">Sign in with Google</button>
+  <form id="emailForm">
+    <label for="signinEmail">Or use your Dashboard email and password</label>
+    <input id="signinEmail" type="email" autocomplete="username" placeholder="Email" required>
+    <input id="signinPass" type="password" autocomplete="current-password" placeholder="Password" required>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+  <p id="signinMsg" class="signin-msg" role="alert"></p>
+</section>
+
+<header class="topbar hidden">
   <div class="header-left" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
     <img src="logo.svg" alt="LYBS logo" style="height:36px;width:auto;flex-shrink:0;" loading="lazy">
     <h1 style="margin:0;">Sponsor <span class="accent">Banners</span></h1>
@@ -22,10 +37,11 @@
     <button class="tab-btn" data-view="list">List</button>
     <button class="tab-btn" data-view="map">Map</button>
     <button class="tab-btn" data-view="add">＋ Add</button>
+    <button class="tab-btn" id="signOutBtn" type="button">Sign out</button>
   </nav>
 </header>
 
-<main id="app">
+<main id="app" class="hidden">
 
   <!-- LIST VIEW -->
   <section id="view-list" class="view">
@@ -135,6 +151,8 @@
 </section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>

@@ -19,31 +19,21 @@
  * updates a row when Nate edits a banner (hung toggle, map pin, contact info,
  * notes).
  *
- * SETUP — about five minutes, once
+ * SETUP
  *
- *  1. script.google.com → New project. (Standalone, not bound to the Sheet —
- *     SHEET_ID below points at it explicitly, so it works either way; this
- *     avoids the Sheets UI's "Extensions → Apps Script" link, which only
- *     opens from a real click, not from a script.)
- *  2. Delete the placeholder code and paste this whole file in.
- *  3. SHEET_ID below is already filled in. Just fill in ACCESS_TOKEN with a
- *     long random string of your choosing.
- *  4. Deploy → New deployment → Web app.
- *       Execute as:        Me
- *       Who has access:    Anyone
- *     "Anyone" is needed because the app has no sign-in. ACCESS_TOKEN below
- *     is a speed bump, not real security — anyone who reads app.js's source
- *     can find it. What it stops is a crawler stumbling on the /exec URL and
- *     scraping sponsor contact info or filling the Drive folder with junk.
- *     Treat it like a shared secret anyway: don't post the URL publicly.
- *  5. Copy the resulting /exec URL and ACCESS_TOKEN into config.js next to
- *     index.html.
- *  6. Run `listBanners` once from the editor (Run ▸ listBanners) to grant
- *     the Sheets/Drive permissions the first call will need.
+ *  Deploy → Web app, Execute as: Me, Who has access: Anyone. "Anyone" only
+ *  means Google lets the request reach this script. authorize() below is the
+ *  real lock: every call must carry a Firebase sign-in token from the LYBS
+ *  Dashboard, and that account must hold the board, director or admin role.
+ *  To add or remove someone, change their role in Dashboard → Manage.
  */
 
-// Fill this in with a long random string, and the same value in config.js.
-var ACCESS_TOKEN = 'G5zo_rOE5G1RWUOK6iH1OyII2d5e-eBg';
+// The LYBS Dashboard's Firebase project. The web API key is a public identifier
+// (it ships in the Dashboard's own pages); it can't read anything by itself.
+var FIREBASE_PROJECT = 'lybs-dashboard';
+var FIREBASE_WEB_API_KEY = 'AIzaSyAnFzm4QNqrEtre71SbTjG45w0SlLQ-8QA';
+var ALLOWED_ROLES = ['board', 'director', 'admin'];
+var BOOTSTRAP_ADMIN_EMAIL = 'natesteele888@gmail.com';
 
 // The "Sponsor Banners" Drive folder — where every banner photo lives.
 var DRIVE_FOLDER_ID = '1jptziLDOEAp2MKAcP3wQKe9cVrT4BRS0';
@@ -67,18 +57,8 @@ var COLUMNS = ['id', 'filename', 'driveFileId', 'sponsorName', 'onSponsorList',
                'notes', 'updatedAt'];
 
 
-function doGet(e) {
-  var p = e.parameter || {};
-  if (String(p.token || '') !== ACCESS_TOKEN) return fail('Not authorized.');
-  var action = String(p.action || 'list');
-  try {
-    if (action === 'list') return ok({ banners: listBanners() });
-    if (action === 'image') return ok(getImage(p.id, p.size));
-    return fail('Unknown action.');
-  } catch (err) {
-    console.log('doGet failed: ' + err);
-    return fail('Something went wrong loading that.');
-  }
+function doGet() {
+  return fail('Not authorized.');
 }
 
 function doPost(e) {
@@ -88,17 +68,70 @@ function doPost(e) {
   } catch (err) {
     return fail('Malformed request.');
   }
-  if (String(data.token || '') !== ACCESS_TOKEN) return fail('Not authorized.');
+
+  var who = authorize(String(data.idToken || ''));
+  if (!who.ok) return fail(who.error);
 
   try {
     var action = String(data.action || '');
+    if (action === 'list') return ok({ banners: listBanners() });
+    if (action === 'image') return ok(getImage(data.id, data.size));
     if (action === 'update') return update(data);
     if (action === 'upload') return upload(data);
     return fail('Unknown action.');
   } catch (err) {
     console.log('doPost failed: ' + err);
-    return fail('Could not save that. Try again, and check the Apps Script log if it keeps happening.');
+    return fail('Could not complete that. Try again, and check the Apps Script log if it keeps happening.');
   }
+}
+
+
+// ---------- sign-in ----------
+
+// Google checks the token, and the Dashboard's own approved list supplies the
+// role, so there is one list of who is on the board. An answer is remembered
+// for five minutes, because each banner photo is its own request.
+function authorize(idToken) {
+  var denied = { ok: false, error: 'This account does not have board access to Sponsor Banners.' };
+  if (!idToken) return { ok: false, error: 'Please sign in.' };
+
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken);
+  var cacheKey = 'auth_' + Utilities.base64EncodeWebSafe(digest);
+  var cache = CacheService.getScriptCache();
+  if (cache.get(cacheKey) === 'yes') return { ok: true };
+
+  var lookup = UrlFetchApp.fetch(
+    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FIREBASE_WEB_API_KEY,
+    { method: 'post', contentType: 'application/json',
+      payload: JSON.stringify({ idToken: idToken }), muteHttpExceptions: true });
+  if (lookup.getResponseCode() !== 200) return { ok: false, error: 'Your sign-in expired. Please sign in again.' };
+  var user = (JSON.parse(lookup.getContentText()).users || [])[0];
+  if (!user || !user.localId) return denied;
+
+  var allowed = false;
+  if (user.emailVerified && String(user.email || '').toLowerCase() === BOOTSTRAP_ADMIN_EMAIL) {
+    allowed = true;
+  } else {
+    var doc = UrlFetchApp.fetch(
+      'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT +
+        '/databases/(default)/documents/lybs_bins/lybs-approved?mask.fieldPaths=uids',
+      { headers: { Authorization: 'Bearer ' + idToken }, muteHttpExceptions: true });
+    if (doc.getResponseCode() !== 200) return denied;
+    allowed = ALLOWED_ROLES.indexOf(roleFromApproved(JSON.parse(doc.getContentText()), user.localId)) >= 0;
+  }
+  if (!allowed) return denied;
+  cache.put(cacheKey, 'yes', 300);
+  return { ok: true };
+}
+
+// A stored entry is either a role string or a map holding role plus assignments.
+function roleFromApproved(doc, uid) {
+  var uids = doc && doc.fields && doc.fields.uids && doc.fields.uids.mapValue && doc.fields.uids.mapValue.fields;
+  var entry = uids && uids[uid];
+  if (!entry) return '';
+  if (entry.stringValue) return String(entry.stringValue).toLowerCase();
+  var fields = entry.mapValue && entry.mapValue.fields;
+  return fields && fields.role && fields.role.stringValue ? String(fields.role.stringValue).toLowerCase() : '';
 }
 
 
