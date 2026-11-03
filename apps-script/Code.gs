@@ -69,7 +69,13 @@ function doPost(e) {
     return fail('Malformed request.');
   }
 
-  var who = authorize(String(data.idToken || ''));
+  var who;
+  try {
+    who = authorize(String(data.idToken || ''));
+  } catch (err) {
+    console.log('authorize failed: ' + err);
+    return fail('Could not check your sign-in. Try again in a minute.');
+  }
   if (!who.ok) return fail(who.error);
 
   try {
@@ -87,6 +93,13 @@ function doPost(e) {
 
 
 // ---------- sign-in ----------
+
+// Run this once from the editor to grant or test the permissions authorize() needs.
+function accessCheck() {
+  console.log(UrlFetchApp.fetch('https://www.googleapis.com/discovery/v1/apis', { muteHttpExceptions: true }).getResponseCode());
+  CacheService.getScriptCache().put('accessCheck', 'yes', 60);
+  console.log(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'x').length);
+}
 
 // Google checks the token, and the Dashboard's own approved list supplies the
 // role, so there is one list of who is on the board. An answer is remembered
