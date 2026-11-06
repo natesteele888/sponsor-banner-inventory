@@ -80,23 +80,23 @@ reads/writes it through Code.gs.
 I matched all 35 Drive photos (now all renamed with sponsor names — that
 waypoint is done) against the **2026_Sponsorship Sheet** (the one
 `build_league_report.py` in lybs-reporting calls "the 2026 sponsor sheet,"
-owned by Lauren) and against your Oct 24 board email "Sponsor Banner
+owned by the sponsorship lead) and against your Oct 24 board email "Sponsor Banner
 Inventory — Fall 2026" (which has per-banner condition and is where I got
 "currently all in storage at the Powell snack shack, none hung").
 
 Two things worth your eyes:
 - **Black Bear Flooring** (banner filename) only has a plausible match in
-  the sheet as **Black Bear Coating & Concrete** (Justin Tousigant) — same
+  the sheet as **Black Bear Coating & Concrete** (contact in the Sheet) — same
   business under a different name on the banner, or two different
   businesses? I matched them; flagged it in that row's notes either way.
 - 11 banners (BriCo Welding, Jacobs Landscaping, Pit Stop Auto, Aho's Carpet
-  Cleaning, Lynn Walsh, Thomas Fuel, Mass Ave Towing, KD Custom Apparel, All
+  Cleaning, one sponsor listed under a person's name, Thomas Fuel, Mass Ave Towing, KD Custom Apparel, All
   Town Collision, Stiles Co.) aren't current paid 2026 sponsors — marked
   "Legacy" in the app. P.J. Keating's banner is flagged "Poor" condition per
   your email — that's the one needing a reprint.
 
 I used the live Sheet rather than the old artifact's cross-reference against
-the public website sponsor page, since the Sheet is the one Lauren actively
+the public website sponsor page, since the Sheet is the one the sponsorship lead actively
 maintains and has the contact info the app needs — the old artifact's "3
 banners not on the list" note doesn't match this Sheet (Whalom Wash and Maki
 are both paid 2026 sponsors here), likely because the public page lags.
@@ -112,5 +112,5 @@ Google Maps tiles; that just needs an API key with billing enabled on it.
 Use the **＋ Add** tab in the app — upload a photo, fill in sponsor/contact
 info, save. It writes straight to the Drive folder and the Sheet; no need to
 touch either by hand. There's no automatic re-sync against the sponsorship
-sheet for future seasons — if Lauren's sheet changes a lot season to season,
+sheet for future seasons — if the sponsorship lead's sheet changes a lot season to season,
 that's a manual add (or ask me to build a sync pass).
