@@ -176,14 +176,30 @@ function listBanners() {
 }
 
 // size: 'thumb' (fast, for the scrollable list) or 'full' (detail view).
+// Only ids in the Sheet's driveFileId column are served. The script runs as
+// Nate, so without this check any Drive file id would open any of his files.
 function getImage(driveFileId, size) {
+  driveFileId = String(driveFileId || '');
   if (!driveFileId) throw new Error('No file id given.');
+  if (!isBannerPhoto(driveFileId)) throw new Error('Not a banner photo: ' + driveFileId);
   var file = DriveApp.getFileById(driveFileId);
   var blob = size === 'full' ? file.getBlob() : (file.getThumbnail() || file.getBlob());
   return {
     mime: blob.getContentType(),
     base64: Utilities.base64Encode(blob.getBytes())
   };
+}
+
+function isBannerPhoto(driveFileId) {
+  var sheet = getSheet();
+  var lastRow = sheet.getLastRow();
+  var col = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].indexOf('driveFileId');
+  if (col < 0 || lastRow < 2) return false;
+  var ids = sheet.getRange(2, col + 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === driveFileId) return true;
+  }
+  return false;
 }
 
 
@@ -223,7 +239,7 @@ function update(data) {
       v = clean(v, col === 'notes' ? 2000 : 300);
     }
     if (col === 'hung' || col === 'onSponsorList') v = v ? 'TRUE' : 'FALSE';
-    if (col === 'lat' || col === 'lng') v = (v === null || v === '' || v === undefined) ? '' : Number(v);
+    if (col === 'lat' || col === 'lng') v = toCoord(v);
     sheet.getRange(rowNum, idx[col] + 1).setValue(v);
   });
   sheet.getRange(rowNum, idx.updatedAt + 1).setValue(todayStamp());
@@ -277,8 +293,8 @@ function upload(data) {
   row[idx.address] = clean(data.address, 300);
   row[idx.condition] = clean(data.condition, 300) || 'Good';
   row[idx.hung] = data.hung ? 'TRUE' : 'FALSE';
-  row[idx.lat] = data.lat || '';
-  row[idx.lng] = data.lng || '';
+  row[idx.lat] = toCoord(data.lat);
+  row[idx.lng] = toCoord(data.lng);
   row[idx.locationLabel] = clean(data.locationLabel, 300);
   row[idx.notes] = clean(data.notes, 2000);
   row[idx.updatedAt] = todayStamp();
@@ -302,6 +318,11 @@ function formatMoney(v) {
 
 function todayStamp() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+// lat/lng are stored as numbers or left blank, never as client text.
+function toCoord(v) {
+  return (v === null || v === '' || v === undefined) ? '' : Number(v);
 }
 
 // Every field from the client is untrusted text headed for a spreadsheet —
