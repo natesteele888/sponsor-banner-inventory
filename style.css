@@ -69,6 +69,7 @@ main { position: relative; z-index: 1; padding: 12px 16px 32px; max-width: 720px
   background: var(--card); color: var(--text2); font-size: 12px; font-weight: 600;
   font-family: 'DM Sans'; cursor: pointer; transition: all .15s;
 }
+.chip { min-height: 36px; }
 .chip:hover { background: var(--card2); color: var(--text); }
 .chip.active { background: rgba(245,166,35,0.15); color: var(--gold); border-color: var(--gold); }
 
@@ -127,6 +128,8 @@ main { position: relative; z-index: 1; padding: 12px 16px 32px; max-width: 720px
   flex-direction: row; align-items: center; gap: 8px; font-size: 14px; font-weight: 600;
   text-transform: none; letter-spacing: normal; color: var(--text);
 }
+.field-grid label.row, .form label.row { min-height: 36px; cursor: pointer; }
+label.row input[type=checkbox] { width: 20px; height: 20px; flex: none; margin: 0; }
 .field-grid label.full { grid-column: 1 / -1; }
 input[type=text], input[type=tel], input[type=email], input[type=search], input[type=file], textarea {
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
@@ -147,7 +150,7 @@ input::placeholder, textarea::placeholder { color: var(--text2); }
   transition: all .18s; font-family: 'DM Sans'; display: inline-flex; align-items: center; gap: 6px;
 }
 .btn:hover { background: var(--card2); color: var(--text); }
-.btn.small { padding: 6px 12px; font-size: 12px; }
+.btn.small { padding: 6px 12px; font-size: 12px; min-height: 36px; }
 .btn.primary { background: var(--blue2); color: #fff; border-color: var(--blue2); }
 .btn.primary:hover { background: #1d4ed8; }
 
