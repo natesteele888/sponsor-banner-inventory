@@ -59,6 +59,19 @@
   }
 
   function wireSignIn() {
+    // No signal: the sign-in library never loaded. Say so instead of leaving a blank screen.
+    if (typeof firebase === 'undefined') {
+      $('#signin').classList.remove('hidden');
+      $('#googleBtn').classList.add('hidden');
+      $('#emailForm').classList.add('hidden');
+      var m = $('#signinMsg');
+      m.textContent = "Can't reach sign-in. Check your signal, then tap Try again.";
+      var retry = document.createElement('button');
+      retry.type = 'button'; retry.className = 'btn primary'; retry.textContent = 'Try again';
+      retry.addEventListener('click', function () { location.reload(); });
+      m.parentNode.insertBefore(retry, m.nextSibling);
+      return;
+    }
     firebase.initializeApp(CFG.FIREBASE);
     var auth = firebase.auth();
     var msg = $('#signinMsg');
