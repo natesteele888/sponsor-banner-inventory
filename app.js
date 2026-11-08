@@ -14,7 +14,9 @@
     map: null,
     mapMarkers: [],
     pinPicker: null,
-    pendingPin: null  // {lat,lng} chosen in the picker, not yet saved
+    pendingPin: null,  // {lat,lng} chosen in the picker, not yet saved
+    sheetEntry: false, // the open sheet added a history entry for the Back gesture
+    skipPop: false     // the next popstate is us giving that entry back
   };
 
   var $ = function (sel) { return document.querySelector(sel); };
@@ -252,6 +254,8 @@
     $('#detailStatus').textContent = '';
     $('#detailScrim').classList.remove('hidden');
     $('#detailSheet').classList.remove('hidden');
+    // Without its own history entry, Back on a phone leaves the installed app.
+    if (!state.sheetEntry && !state.skipPop) addSheetEntry();
 
     fetchImage(b.driveFileId, 'full').then(function (uri) {
       if (uri) {
@@ -271,10 +275,37 @@
       : 'No pin dropped yet.';
   }
 
-  function closeDetail() {
+  function addSheetEntry() {
+    history.pushState({ bannerSheet: true }, '');
+    state.sheetEntry = true;
+  }
+
+  function hideDetail() {
     $('#detailScrim').classList.add('hidden');
     $('#detailSheet').classList.add('hidden');
     state.currentId = null;
+  }
+
+  function closeDetail() {
+    hideDetail();
+    if (state.sheetEntry) {
+      state.sheetEntry = false;
+      state.skipPop = true;
+      history.back();
+    }
+  }
+
+  function onPopState() {
+    if (state.skipPop) {
+      state.skipPop = false;
+      // A banner opened while the old entry was still being given back.
+      if (state.currentId != null && !state.sheetEntry) addSheetEntry();
+      return;
+    }
+    if (state.sheetEntry) {
+      state.sheetEntry = false;
+      hideDetail();
+    }
   }
 
   function saveDetail() {
@@ -453,6 +484,7 @@
       });
     });
 
+    window.addEventListener('popstate', onPopState);
     $('#detailClose').addEventListener('click', closeDetail);
     $('#detailScrim').addEventListener('click', closeDetail);
     $('#detailSave').addEventListener('click', saveDetail);
