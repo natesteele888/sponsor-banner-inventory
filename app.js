@@ -245,8 +245,9 @@
 
     updatePinStatus(b);
     $('#pinPicker').classList.add('hidden');
+    // Leaflet refuses to start twice on one element unless the old map is removed.
+    if (state.pinPicker) { state.pinPicker.remove(); state.pinPicker = null; }
     $('#pinPicker').innerHTML = '';
-    state.pinPicker = null;
 
     $('#detailStatus').textContent = '';
     $('#detailScrim').classList.remove('hidden');
