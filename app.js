@@ -103,6 +103,7 @@
         state.banners = [];
         state.imageCache = {};
         state.loaded = false;
+        $('#bannerList').innerHTML = '';
         return;
       }
       if (!state.loaded) loadBanners();
@@ -118,14 +119,23 @@
 
   function loadBanners() {
     $('#status').textContent = 'Loading…';
+    $('#loadRetry').classList.add('hidden');
     return apiGet({ action: 'list' }).then(function (res) {
-      if (!res.ok) throw new Error(res.error || 'Could not load banners.');
+      if (!res.ok) {
+        var denied = new Error(res.error || 'Could not load banners.');
+        denied.fromBackend = true;
+        throw denied;
+      }
       state.banners = res.banners;
       state.loaded = true;
       $('#status').textContent = '';
       renderList();
     }).catch(function (err) {
-      $('#status').textContent = 'Could not load banners: ' + err.message;
+      // The browser's own text ("Failed to fetch", "Unexpected token <") means
+      // nothing to a person; only the backend's messages are worth showing.
+      var fromBackend = err && err.fromBackend;
+      $('#status').textContent = fromBackend ? err.message : "Can't reach the banner list. Check your signal, then tap Try again.";
+      $('#loadRetry').classList.remove('hidden');
     });
   }
 
@@ -485,6 +495,7 @@
     });
 
     window.addEventListener('popstate', onPopState);
+    $('#loadRetry').addEventListener('click', loadBanners);
     $('#detailClose').addEventListener('click', closeDetail);
     $('#detailScrim').addEventListener('click', closeDetail);
     $('#detailSave').addEventListener('click', saveDetail);
