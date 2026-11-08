@@ -410,8 +410,8 @@
         notes: $('#addNotes').value
       }).then(function (res) {
         if (!res.ok) throw new Error(res.error || 'Upload failed.');
-        $('#addStatus').textContent = 'Added!';
         resetAddForm();
+        $('#addStatus').textContent = 'Added!';
         return loadBanners();
       }).catch(function (err) {
         $('#addStatus').textContent = 'Error: ' + err.message;
