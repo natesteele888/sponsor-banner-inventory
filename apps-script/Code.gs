@@ -33,7 +33,9 @@
 var FIREBASE_PROJECT = 'lybs-dashboard';
 var FIREBASE_WEB_API_KEY = 'AIzaSyAnFzm4QNqrEtre71SbTjG45w0SlLQ-8QA';
 var ALLOWED_ROLES = ['board', 'director', 'admin'];
-var BOOTSTRAP_ADMIN_EMAIL = 'natesteele888@gmail.com';
+// SHA-256 (web-safe base64) of the lowercased bootstrap admin email, so the
+// address itself stays out of this public file. Make a new one with emailHash_().
+var BOOTSTRAP_ADMIN_EMAIL_HASH = 'uohdwMkKg4ltUZSWMQgEvvsVW6-iK8HavFhPSKQjkGk=';
 
 // The "Sponsor Banners" Drive folder — where every banner photo lives.
 var DRIVE_FOLDER_ID = '1jptziLDOEAp2MKAcP3wQKe9cVrT4BRS0';
@@ -122,7 +124,7 @@ function authorize(idToken) {
   if (!user || !user.localId) return denied;
 
   var allowed = false;
-  if (user.emailVerified && String(user.email || '').toLowerCase() === BOOTSTRAP_ADMIN_EMAIL) {
+  if (user.emailVerified && emailHash_(user.email) === BOOTSTRAP_ADMIN_EMAIL_HASH) {
     allowed = true;
   } else {
     var doc = UrlFetchApp.fetch(
@@ -135,6 +137,12 @@ function authorize(idToken) {
   if (!allowed) return denied;
   cache.put(cacheKey, 'yes', 300);
   return { ok: true };
+}
+
+function emailHash_(email) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+    String(email || '').toLowerCase(), Utilities.Charset.UTF_8);
+  return Utilities.base64EncodeWebSafe(bytes);
 }
 
 // A stored entry is either a role string or a map holding role plus assignments.
