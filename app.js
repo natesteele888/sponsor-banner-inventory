@@ -19,6 +19,8 @@
     skipPop: false     // the next popstate is us giving that entry back
   };
 
+  var NO_MAP_TEXT = "The map couldn't load. Check your signal, then close and reopen the app.";
+
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
@@ -366,6 +368,7 @@
 
   function openPinPicker() {
     var picker = $('#pinPicker');
+    if (typeof L === 'undefined') { $('#pinStatus').textContent = NO_MAP_TEXT; return; }
     picker.classList.remove('hidden');
     if (state.pinPicker) { state.pinPicker.invalidateSize(); return; }
 
@@ -396,6 +399,8 @@
   // ---------- map view ----------
 
   function renderMap() {
+    // The map library comes from the web, so on weak signal it may not have loaded.
+    if (typeof L === 'undefined') { $('#map').textContent = NO_MAP_TEXT; return; }
     if (!state.map) {
       state.map = L.map('map').setView([42.6757, -71.7323], 14);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
