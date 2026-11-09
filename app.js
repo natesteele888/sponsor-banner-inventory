@@ -477,7 +477,8 @@
   function init() {
     if (NOT_CONFIGURED) { showConfigWarning(); }
 
-    $$('.tab-btn').forEach(function (btn) {
+    // Sign out is styled as a tab but has no view of its own.
+    $$('.tab-btn[data-view]').forEach(function (btn) {
       btn.addEventListener('click', function () { showView(btn.dataset.view); });
     });
 
