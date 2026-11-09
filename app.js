@@ -139,6 +139,17 @@
     });
   }
 
+  // Saving and adding: same idea as the banner list above. Keep the backend's
+  // own messages; swap the browser's text ("Failed to fetch") for a plain one.
+  function backendError(text) {
+    var e = new Error(text);
+    e.fromBackend = true;
+    return e;
+  }
+  function sendErrorText(err, noSignalText) {
+    return err && err.fromBackend ? err.message : noSignalText;
+  }
+
   // ---------- list view ----------
 
   function matchesFilter(b) {
@@ -342,14 +353,14 @@
     }
     $('#detailStatus').textContent = 'Saving…';
     apiPost(payload).then(function (res) {
-      if (!res.ok) throw new Error(res.error || 'Save failed.');
+      if (!res.ok) throw backendError(res.error || 'Save failed.');
       Object.assign(b, payload);
       if (state.pendingPin) { b.lat = state.pendingPin.lat; b.lng = state.pendingPin.lng; }
       $('#detailStatus').textContent = 'Saved.';
       renderList();
       setTimeout(function () { closeDetail(); }, 400);
     }).catch(function (err) {
-      $('#detailStatus').textContent = 'Error: ' + err.message;
+      $('#detailStatus').textContent = sendErrorText(err, "Couldn't save. Check your signal, then tap Save again.");
     });
   }
 
@@ -450,12 +461,12 @@
         hung: $('#addHung').checked,
         notes: $('#addNotes').value
       }).then(function (res) {
-        if (!res.ok) throw new Error(res.error || 'Upload failed.');
+        if (!res.ok) throw backendError(res.error || 'Upload failed.');
         resetAddForm();
         $('#addStatus').textContent = 'Added!';
         return loadBanners();
       }).catch(function (err) {
-        $('#addStatus').textContent = 'Error: ' + err.message;
+        $('#addStatus').textContent = sendErrorText(err, "Couldn't add the banner. Check your signal, then tap Add banner again.");
       }).finally(function () {
         $('#addSubmit').disabled = false;
       });
