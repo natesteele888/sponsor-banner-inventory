@@ -136,6 +136,7 @@
       // The browser's own text ("Failed to fetch", "Unexpected token <") means
       // nothing to a person; only the backend's messages are worth showing.
       var fromBackend = err && err.fromBackend;
+      noteProblem('Banner list did not load', err);
       $('#status').textContent = fromBackend ? err.message : "Can't reach the banner list. Check your signal, then tap Try again.";
       $('#loadRetry').classList.remove('hidden');
     });
@@ -147,6 +148,11 @@
     var e = new Error(text);
     e.fromBackend = true;
     return e;
+  }
+  // Log the failure on this phone for the Something wrong? report: a fixed
+  // message only, never a sponsor's name or details.
+  function noteProblem(what, err) {
+    if (window.nateHealth) window.nateHealth.note('sync', what + (err && err.fromBackend ? ' (refused by the backend)' : ' (no answer)'));
   }
   function sendErrorText(err, noSignalText) {
     return err && err.fromBackend ? err.message : noSignalText;
@@ -362,6 +368,7 @@
       renderList();
       setTimeout(function () { closeDetail(); }, 400);
     }).catch(function (err) {
+      noteProblem('Banner save failed', err);
       $('#detailStatus').textContent = sendErrorText(err, "Couldn't save. Check your signal, then tap Save again.");
     });
   }
@@ -471,6 +478,7 @@
         $('#addStatus').textContent = 'Added!';
         return loadBanners();
       }).catch(function (err) {
+        noteProblem('New banner upload failed', err);
         $('#addStatus').textContent = sendErrorText(err, "Couldn't add the banner. Check your signal, then tap Add banner again.");
       }).finally(function () {
         $('#addSubmit').disabled = false;
