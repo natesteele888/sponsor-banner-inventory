@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#0a1628">
 <link rel="manifest" href="manifest.json">
 <script src="https://natesteele888.github.io/apps/install.js" defer></script>
+<script src="https://natesteele888.github.io/apps/health.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
@@ -59,6 +60,7 @@
     <div id="status" class="status"></div>
     <button class="btn primary hidden" id="loadRetry" type="button">Try again</button>
     <ul id="bannerList" class="banner-list"></ul>
+    <p class="report-wrap"><button type="button" class="btn" onclick="window.nateHealth&&nateHealth.report()">Something wrong? Send a report</button></p>
   </section>
 
   <!-- MAP VIEW -->

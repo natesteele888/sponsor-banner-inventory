@@ -178,3 +178,5 @@ input::placeholder, textarea::placeholder { color: var(--text2); }
 .signin label { color: var(--text2); font-size: 13px; }
 .signin input { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; }
 .signin-msg { color: var(--red) !important; min-height: 20px; }
+.report-wrap { text-align: center; margin: 24px 0 8px; }
+.report-wrap .btn { min-height: 44px; }
