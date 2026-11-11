@@ -41,7 +41,7 @@ body::before {
   padding: 14px 16px 10px;
 }
 .topbar h1 {
-  font-family: 'Bebas Neue'; font-size: 24px; letter-spacing: 1.5px;
+  font-family: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif; font-size: 24px; letter-spacing: 1.5px;
   color: #fff; margin: 0 0 10px;
 }
 .topbar h1 .accent { color: var(--gold); }
@@ -49,7 +49,7 @@ body::before {
 .tab-btn {
   flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
   background: transparent; color: var(--text2); font-size: 13px; font-weight: 600;
-  font-family: 'DM Sans'; cursor: pointer; transition: all .15s;
+  font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all .15s;
 }
 .tab-btn:hover { background: var(--card2); color: var(--text); }
 .tab-btn.active { background: var(--blue2); color: #fff; border-color: var(--blue2); box-shadow: 0 2px 8px rgba(37,99,235,0.35); }
@@ -60,14 +60,14 @@ main { position: relative; z-index: 1; padding: 12px 16px 32px; max-width: 720px
 .toolbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 #search {
   width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--card); color: var(--text); font-size: 15px; font-family: 'DM Sans';
+  background: var(--card); color: var(--text); font-size: 15px; font-family: 'DM Sans', sans-serif;
 }
 #search::placeholder { color: var(--text2); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
   padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
   background: var(--card); color: var(--text2); font-size: 12px; font-weight: 600;
-  font-family: 'DM Sans'; cursor: pointer; transition: all .15s;
+  font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all .15s;
 }
 .chip { min-height: 36px; }
 .chip:hover { background: var(--card2); color: var(--text); }
@@ -133,7 +133,7 @@ label.row input[type=checkbox] { width: 20px; height: 20px; flex: none; margin: 
 .field-grid label.full { grid-column: 1 / -1; }
 input[type=text], input[type=tel], input[type=email], input[type=search], input[type=file], textarea {
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--navy3); color: var(--text); font-size: 14px; width: 100%; font-family: 'DM Sans';
+  background: var(--navy3); color: var(--text); font-size: 14px; width: 100%; font-family: 'DM Sans', sans-serif;
 }
 input::placeholder, textarea::placeholder { color: var(--text2); }
 .hung-row { padding: 8px 10px; border-radius: 8px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); }
@@ -147,7 +147,7 @@ input::placeholder, textarea::placeholder { color: var(--text2); }
 .btn {
   padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
   cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text2);
-  transition: all .18s; font-family: 'DM Sans'; display: inline-flex; align-items: center; gap: 6px;
+  transition: all .18s; font-family: 'DM Sans', sans-serif; display: inline-flex; align-items: center; gap: 6px;
 }
 .btn:hover { background: var(--card2); color: var(--text); }
 .btn.small { padding: 6px 12px; font-size: 12px; min-height: 36px; }
@@ -156,7 +156,7 @@ input::placeholder, textarea::placeholder { color: var(--text2); }
 
 .form { display: flex; flex-direction: column; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
 .form h2 {
-  font-family: 'Bebas Neue'; font-size: 20px; letter-spacing: 1px; color: #fff;
+  font-family: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif; font-size: 20px; letter-spacing: 1px; color: #fff;
   margin: 0 0 4px; display: flex; align-items: center; gap: 8px;
 }
 .preview { width: 100%; max-height: 240px; object-fit: contain; border-radius: 10px; background: var(--navy3); }
