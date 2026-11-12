@@ -1,5 +1,5 @@
 // Network first: updates show right away; the saved copy is only for opening with no signal.
-const CACHE = "banners-v4";
+const CACHE = "banners-v5";
 // Save the page at install, or the first visit caches nothing and an offline open fails.
 // This site's own files only: sponsor data comes from the Apps Script backend and is never saved here.
 const SHELL = ["./", "index.html", "app.js", "config.js", "style.css", "logo.svg", "manifest.json"];
