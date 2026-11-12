@@ -179,7 +179,7 @@
       .sort(function (a, b) { return (a.sponsorName || '').localeCompare(b.sponsorName || ''); });
 
     list.innerHTML = items.map(function (b) {
-      return '<li class="banner-card" data-id="' + b.id + '">' +
+      return '<li class="banner-card" role="button" tabindex="0" data-id="' + esc(b.id) + '">' +
         '<div class="thumb-placeholder" data-thumb="' + b.driveFileId + '"></div>' +
         '<div class="info">' +
           '<div class="name">' + esc(b.sponsorName || '(unnamed)') + '</div>' +
@@ -194,6 +194,10 @@
 
     $$('.banner-card').forEach(function (card) {
       card.addEventListener('click', function () { openDetail(card.dataset.id); });
+      // A keyboard or screen reader opens a banner the same way a tap does.
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(card.dataset.id); }
+      });
     });
 
     lazyLoadThumbs();

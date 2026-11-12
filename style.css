@@ -83,6 +83,7 @@ main { position: relative; z-index: 1; padding: 12px 16px 32px; max-width: 720px
   padding: 10px; cursor: pointer; text-align: left; transition: transform .15s, border-color .15s;
 }
 .banner-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+.banner-card:focus-visible { outline: 3px solid var(--gold, #f5b82e); outline-offset: 2px; }
 .banner-card img {
   width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--navy3);
   flex-shrink: 0;
