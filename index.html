@@ -11,7 +11,8 @@
 <script src="https://natesteele888.github.io/apps/install.js" defer></script>
 <script src="https://natesteele888.github.io/apps/health.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<!-- Loaded without blocking: a slow stylesheet here would hold up every script below it. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -154,7 +155,8 @@
   </div>
 </section>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- async: only the Map tab and Drop pin need it, so it must not hold up the list. -->
+<script id="leafletJs" async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.leafletDone=1" onerror="window.leafletDone=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="config.js"></script>
