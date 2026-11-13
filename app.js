@@ -377,9 +377,29 @@
     });
   }
 
+  // Leaflet loads async (index.html). If it is still on its way, say so and
+  // finish the job when it lands; only give up once it has really failed.
+  function withLeaflet(statusEl, fn) {
+    if (typeof L !== 'undefined') return fn();
+    var s = $('#leafletJs');
+    if (window.leafletDone || !s) { statusEl.textContent = NO_MAP_TEXT; return; }
+    statusEl.textContent = 'Loading the map\u2026';
+    var go = function () {
+      s.removeEventListener('load', go); s.removeEventListener('error', go);
+      if (typeof L === 'undefined') { statusEl.textContent = NO_MAP_TEXT; return; }
+      statusEl.textContent = '';
+      fn();
+    };
+    s.addEventListener('load', go);
+    s.addEventListener('error', go);
+  }
+
   function openPinPicker() {
+    withLeaflet($('#pinStatus'), showPinPicker);
+  }
+
+  function showPinPicker() {
     var picker = $('#pinPicker');
-    if (typeof L === 'undefined') { $('#pinStatus').textContent = NO_MAP_TEXT; return; }
     picker.classList.remove('hidden');
     if (state.pinPicker) { state.pinPicker.invalidateSize(); return; }
 
@@ -410,8 +430,11 @@
   // ---------- map view ----------
 
   function renderMap() {
-    // The map library comes from the web, so on weak signal it may not have loaded.
-    if (typeof L === 'undefined') { $('#map').textContent = NO_MAP_TEXT; return; }
+    // The map library comes from the web, so on weak signal it may not have loaded yet.
+    withLeaflet($('#map'), drawMap);
+  }
+
+  function drawMap() {
     if (!state.map) {
       state.map = L.map('map').setView([42.6757, -71.7323], 14);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
