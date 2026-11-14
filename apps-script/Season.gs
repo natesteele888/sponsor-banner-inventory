@@ -16,9 +16,16 @@
  *     which the app's 2027 tab shows (assign a banner from stock, or mark one
  *     to order)
  *   - is listed in one summary email to Nate
- *   - gets the "send us your banner and sponsor info" email, as a Gmail
- *     draft or sent straight away (REQUEST_MODE below), with a personal link
- *     to intake.html, the reply form with the drop-downs and file uploads.
+ *   - once their payment is in, gets the "send us your banner and sponsor
+ *     info" email as a Gmail DRAFT, with a personal link to intake.html (the
+ *     reply form with the drop-downs and file uploads). Nate checks it's a
+ *     real signup with a real payment, then presses Send himself. This code
+ *     never sends a sponsor email on its own.
+ *
+ * Payment is the gate, Nate's rule: no payment, no banner. A sponsor counts
+ * as paid when the sponsorship sheet's "Paid?" column says yes, when a
+ * website payment notice matches them, or when Nate ticks "Paid" in the app
+ * (a check in the mail). Until then the row shows "Waiting on payment".
  *
  * When a sponsor sends that form, their files land in a Drive folder, their
  * answers land on their row, and Nate gets an email saying so.
@@ -48,16 +55,6 @@ var LEAGUE_CC = 'info@lunenburgybs.com';
 var SIGNATURE_NAME = 'Nate Steele';
 var SIGNATURE_TITLE = 'Director & IT/Social Media Coordinator';
 
-// 'draft' (default): the sponsor email waits in Gmail Drafts for Nate to press Send.
-// 'send': it goes out on its own. Change with setRequestMode('send') in the editor.
-function requestMode_() {
-  return PropertiesService.getScriptProperties().getProperty('REQUEST_MODE') || 'draft';
-}
-function setRequestMode(mode) {
-  if (['draft', 'send'].indexOf(mode) < 0) throw new Error('Use draft or send.');
-  PropertiesService.getScriptProperties().setProperty('REQUEST_MODE', mode);
-  console.log('Sponsor emails will now be: ' + mode);
-}
 
 // Gmail label put on donation notices once they have been read.
 var SEEN_LABEL = 'LYBS banner intake seen';
@@ -65,7 +62,7 @@ var SEEN_LABEL_SEARCH = 'lybs-banner-intake-seen';
 // Website payments from before the 2027 drive started don't count.
 var DONATIONS_SINCE = '2026/10/01';
 
-var SEASON_COLUMNS = ['key', 'company', 'tier', 'amount', 'source',
+var SEASON_COLUMNS = ['key', 'company', 'tier', 'amount', 'source', 'paid', 'paidVia',
   'contactName', 'contactEmail', 'contactPhone',
   'requestStatus', 'requestAt', 'token', 'submittedAt',
   'website', 'jerseyName', 'writeup', 'bannerChoice', 'bannerText', 'fileLink', 'fileFolderId',
@@ -82,7 +79,7 @@ function installSeasonTrigger() {
     if (t.getHandlerFunction() === 'scanForNewSponsors') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('scanForNewSponsors').timeBased().everyHours(1).create();
-  console.log('Hourly sponsor scan is on. Sponsor emails are: ' + requestMode_());
+  console.log('Hourly sponsor scan is on. Sponsor emails are made as Gmail drafts for you to send.');
 }
 
 function removeSeasonTrigger() {
@@ -102,6 +99,12 @@ function seasonSheet_() {
     sh = ss.insertSheet(SEASON_SHEET_NAME);
     sh.getRange(1, 1, 1, SEASON_COLUMNS.length).setValues([SEASON_COLUMNS]).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else {
+    // A column added in a later version goes on the end of an existing tab.
+    var have = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0];
+    SEASON_COLUMNS.forEach(function (c) {
+      if (have.indexOf(c) < 0) { have.push(c); sh.getRange(1, have.length).setValue(c); }
+    });
   }
   return sh;
 }
@@ -140,6 +143,8 @@ function companyKey_(s) {
 function nameKey_(s) {
   return String(s || '').toLowerCase().replace(/[^a-z]+/g, ' ').trim();
 }
+
+function isPaid_(r) { return String(r.paid).toUpperCase() === 'TRUE'; }
 
 function parseAmount_(v) {
   if (typeof v === 'number') return v;
@@ -188,12 +193,17 @@ function upsertSponsor_(season, cand) {
     ['tier', 'amount', 'contactName', 'contactEmail', 'contactPhone'].forEach(function (k) {
       if (!hit[k] && cand[k]) { fill[k] = clean(cand[k], 300); hit[k] = fill[k]; }
     });
+    // Paid only ever goes from no to yes here; Nate can untick it in the app.
+    if (cand.paid && !isPaid_(hit)) {
+      fill.paid = 'TRUE'; hit.paid = 'TRUE';
+      fill.paidVia = clean(cand.paidVia, 200); hit.paidVia = fill.paidVia;
+    }
     if (cand.source && String(hit.source).indexOf(cand.source) < 0) {
       fill.source = hit.source ? hit.source + ' + ' + cand.source : cand.source;
       hit.source = fill.source;
     }
     if (Object.keys(fill).length) writeFields_(season.sheet, season.header, hit._row, fill);
-    return { rec: hit, isNew: false };
+    return { rec: hit, isNew: false, newlyPaid: !!fill.paid };
   }
   var rec = {};
   SEASON_COLUMNS.forEach(function (c) { rec[c] = ''; });
@@ -202,6 +212,8 @@ function upsertSponsor_(season, cand) {
   rec.tier = clean(cand.tier, 50);
   rec.amount = clean(cand.amount, 50);
   rec.source = clean(cand.source, 100);
+  rec.paid = cand.paid ? 'TRUE' : 'FALSE';
+  rec.paidVia = cand.paid ? clean(cand.paidVia, 200) : '';
   rec.contactName = clean(cand.contactName, 300);
   rec.contactEmail = clean(cand.contactEmail, 300);
   rec.contactPhone = clean(cand.contactPhone, 100);
@@ -247,7 +259,9 @@ function fromSponsorSheet_(ss) {
       contactName: String(r['Contact'] || '').trim(),
       contactEmail: firstEmail_(r['Email']),
       contactPhone: String(r['Phone'] || '').trim(),
-      source: 'Sponsorship sheet'
+      source: 'Sponsorship sheet',
+      paid: /^\s*(y|true|x|paid)/i.test(String(r['Paid?'] || '')),
+      paidVia: 'Marked paid on the sponsorship sheet'
     };
   }).filter(Boolean);
 }
@@ -279,7 +293,7 @@ function fromOnlineLogs_(ss) {
  * the row is marked "Needs a match" and gets no sponsor email until Nate
  * fills in who it is (a $500 gift could be a family's donation, not a sponsor).
  */
-function fromDonationEmails_(ss) {
+function fromDonationEmails_(ss, season) {
   var label = GmailApp.getUserLabelByName(SEEN_LABEL) || GmailApp.createLabel(SEEN_LABEL);
   var threads = GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' +
     DONATIONS_SINCE + ' -label:' + SEEN_LABEL_SEARCH, 0, 50);
@@ -294,9 +308,15 @@ function fromDonationEmails_(ss) {
       var donor = hit[2].trim();
       if (amount < BANNER_MIN_AMOUNT) return;
       var match = null;
+      // A website-form signup that's now paying: match its contact name first.
+      season.rows.forEach(function (r) {
+        if (!match && r.contactName && nameKey_(r.contactName) === nameKey_(donor) && String(r.company).indexOf('Needs a match') !== 0) {
+          match = { 'Company': r.company, 'Email': r.contactEmail, 'Phone': r.contactPhone };
+        }
+      });
       people.forEach(function (p) {
         var c = nameKey_(p['Contact']);
-        if (c && (c === nameKey_(donor) || (c.length > 4 && nameKey_(donor).indexOf(c) >= 0))) match = p;
+        if (!match && c && (c === nameKey_(donor) || (c.length > 4 && nameKey_(donor).indexOf(c) >= 0))) match = p;
       });
       // Same last name and the same amount as a logged sponsor: one family, one
       // sponsorship (a spouse often pays for the business).
@@ -316,7 +336,9 @@ function fromDonationEmails_(ss) {
           contactName: donor,
           contactEmail: firstEmail_(match['Email']),
           contactPhone: String(match['Phone'] || '').trim(),
-          source: 'Website payment'
+          source: 'Website payment',
+          paid: true,
+          paidVia: 'Website payment ' + when + ' (approve it in the Crossbar dashboard)'
         });
       } else {
         out.push({
@@ -325,6 +347,8 @@ function fromDonationEmails_(ss) {
           amount: money_(amount),
           contactName: donor,
           source: 'Website payment',
+          paid: true,
+          paidVia: 'Website payment ' + when + ' (approve it in the Crossbar dashboard)',
           notes: 'Paid ' + money_(amount) + ' on the website on ' + when +
             ' with no sponsorship form. Not matched to a company on the sponsorship sheet. ' +
             'Fill in the company and email, then make the sponsor email.'
@@ -349,24 +373,26 @@ function scanForNewSponsors() {
     var cands = [];
     try { cands = cands.concat(fromSponsorSheet_(ss)); } catch (e) { console.log('sponsor tab: ' + e); }
     try { cands = cands.concat(fromOnlineLogs_(ss)); } catch (e) { console.log('online logs: ' + e); }
-    try { cands = cands.concat(fromDonationEmails_(ss)); } catch (e) { console.log('donations: ' + e); }
+    try { cands = cands.concat(fromDonationEmails_(ss, season)); } catch (e) { console.log('donations: ' + e); }
 
-    var added = [];
+    var added = [], paidNow = [];
     cands.forEach(function (c) {
       var res = upsertSponsor_(season, c);
       if (res && res.isNew) added.push(res.rec);
+      else if (res && res.newlyPaid && added.indexOf(res.rec) < 0) paidNow.push(res.rec);
     });
 
-    // A sponsor with an email and no request yet gets one.
-    var requested = [];
+    // Paid, with an email, and not asked yet: make the info email as a draft.
+    // No payment, no email (and no banner).
+    var drafted = [];
     season.rows.forEach(function (r) {
-      if (!r.requestStatus && r.contactEmail && String(r.company).indexOf('Needs a match') !== 0) {
-        try { prepareRequest_(season, r, requestMode_()); requested.push(r); }
+      if (!r.requestStatus && isPaid_(r) && r.contactEmail && String(r.company).indexOf('Needs a match') !== 0) {
+        try { prepareRequest_(season, r); drafted.push(r); }
         catch (e) { console.log('request email for row ' + r._row + ': ' + e); }
       }
     });
 
-    if (added.length) notifyNewSponsors_(added, requested);
+    if (added.length || paidNow.length) notifyNewSponsors_(added, paidNow, drafted);
     return added.length;
   } finally {
     lock.releaseLock();
@@ -445,8 +471,9 @@ function buildRequestEmail_(rec) {
   return { subject: subject, text: text, html: html };
 }
 
-// mode 'draft' leaves it in Gmail Drafts; 'send' sends it.
-function prepareRequest_(season, rec, mode) {
+// Always a draft in Nate's Gmail. He checks the signup and the payment, then
+// presses Send. There is deliberately no way here to send it automatically.
+function prepareRequest_(season, rec) {
   var to = firstEmail_(rec.contactEmail);
   if (!to) throw new Error('No email address on this sponsor yet.');
   if (!rec.token) {
@@ -455,13 +482,8 @@ function prepareRequest_(season, rec, mode) {
   }
   var mail = buildRequestEmail_(rec);
   var opts = { htmlBody: mail.html, name: SIGNATURE_NAME, cc: LEAGUE_CC };
-  if (mode === 'send') {
-    GmailApp.sendEmail(to, mail.subject, mail.text, opts);
-    rec.requestStatus = 'Sent';
-  } else {
-    GmailApp.createDraft(to, mail.subject, mail.text, opts);
-    rec.requestStatus = 'Draft in Gmail';
-  }
+  GmailApp.createDraft(to, mail.subject, mail.text, opts);
+  rec.requestStatus = 'Draft in Gmail';
   rec.requestAt = todayStamp();
   writeFields_(season.sheet, season.header, rec._row, { requestStatus: rec.requestStatus, requestAt: rec.requestAt });
 }
@@ -470,18 +492,24 @@ function myEmail_() {
   return Session.getEffectiveUser().getEmail();
 }
 
-function notifyNewSponsors_(added, requested) {
-  var lines = added.map(function (r) {
-    var what = String(r.company).indexOf('Needs a match') === 0
-      ? ' (website payment, not matched to a company yet)'
-      : (requested.indexOf(r) >= 0
-          ? (r.requestStatus === 'Sent' ? ', info email sent' : ', info email waiting in Drafts')
-          : (r.contactEmail ? '' : ', no email on file yet'));
-    return '- ' + r.company + ': ' + (r.tier || '?') + ' ' + (r.amount || '') + ' via ' + r.source + what;
-  });
-  var body = 'New ' + SEASON + ' banner sponsors:\n\n' + lines.join('\n') +
-    '\n\nThey are on the ' + SEASON + ' tab of Sponsor Banners, where you can assign a banner from stock or mark one to order:\n' + APP_URL;
-  GmailApp.sendEmail(myEmail_(), 'New ' + SEASON + ' banner sponsor' + (added.length > 1 ? 's' : '') + ' (' + added.length + ')', body,
+function notifyNewSponsors_(added, paidNow, drafted) {
+  var line = function (r) {
+    var what;
+    if (String(r.company).indexOf('Needs a match') === 0) what = 'paid on the website, not matched to a company yet';
+    else if (!isPaid_(r)) what = 'signed up, waiting on payment (no email or banner yet)';
+    else if (drafted.indexOf(r) >= 0) what = 'paid, info email is in your Drafts for you to check and send';
+    else if (!r.contactEmail) what = 'paid, no email on file yet';
+    else what = 'paid';
+    return '- ' + r.company + ': ' + (r.tier || '?') + ' ' + (r.amount || '') + ' via ' + r.source + ': ' + what;
+  };
+  var parts = [];
+  if (added.length) parts.push('New ' + SEASON + ' banner sponsors:\n' + added.map(line).join('\n'));
+  if (paidNow.length) parts.push('Payment now in:\n' + paidNow.map(line).join('\n'));
+  var body = parts.join('\n\n') +
+    '\n\nNothing has been sent to any sponsor. Open the ' + SEASON + ' tab of Sponsor Banners to check them, ' +
+    'assign a banner from stock or mark one to order:\n' + APP_URL;
+  var n = added.length + paidNow.length;
+  GmailApp.sendEmail(myEmail_(), SEASON + ' banner sponsors: ' + n + ' update' + (n > 1 ? 's' : ''), body,
     { name: 'LYBS Sponsor Banners' });
 }
 
@@ -498,7 +526,7 @@ function seasonList() {
     delete o.token;
     return o;
   });
-  return { season: SEASON, rows: rows, statuses: BANNER_STATUSES, requestMode: requestMode_() };
+  return { season: SEASON, rows: rows, statuses: BANNER_STATUSES };
 }
 
 // Rows are found by their company key, not their row number, so a row
@@ -520,6 +548,11 @@ function seasonUpdate(data) {
   editable.forEach(function (k) {
     if (k in data) fields[k] = clean(data[k], k === 'notes' ? 2000 : 300);
   });
+  if ('paid' in data) {
+    fields.paid = data.paid ? 'TRUE' : 'FALSE';
+    if (data.paid && !isPaid_(rec)) fields.paidVia = 'Marked paid in the app ' + todayStamp();
+    if (!data.paid) fields.paidVia = '';
+  }
   if (fields.company) {
     fields.key = companyKey_(fields.company);
     var clash = findSeasonRow_(season, fields.key);
@@ -539,22 +572,24 @@ function seasonAdd(data) {
   var res = upsertSponsor_(season, {
     company: company, tier: tier, amount: data.amount ? money_(parseAmount_(data.amount)) : money_(TIER_AMOUNTS[tier]),
     contactName: data.contactName, contactEmail: firstEmail_(data.contactEmail), contactPhone: data.contactPhone,
-    source: clean(data.source, 50) || 'Email', notes: data.notes
+    source: clean(data.source, 50) || 'Email', notes: data.notes,
+    paid: !!data.paid, paidVia: 'Marked paid in the app ' + todayStamp()
   });
   if (!res) return fail('Company name is required.');
   if (!res.isNew) return fail(res.rec.company + ' is already on the ' + SEASON + ' list.');
   return ok({ message: 'Added.' });
 }
 
-// The app's "Make email draft" / "Send email" button.
+// The app's "Make email draft" button. Always a draft.
 function seasonRequest(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var season = readSeason_();
   var rec = findSeasonRow_(season, data.key);
   if (!rec) return fail('That sponsor is no longer on the list.');
   if (!firstEmail_(rec.contactEmail)) return fail('Add an email address for this sponsor first, and save.');
-  prepareRequest_(season, rec, data.mode === 'send' ? 'send' : 'draft');
-  return ok({ message: rec.requestStatus === 'Sent' ? 'Sent.' : 'Draft is in your Gmail.', requestStatus: rec.requestStatus });
+  if (!isPaid_(rec)) return fail('Their payment is not in yet. Tick Paid and save once it is.');
+  prepareRequest_(season, rec);
+  return ok({ message: 'Draft is in your Gmail. Check it, then press Send.', requestStatus: rec.requestStatus });
 }
 
 

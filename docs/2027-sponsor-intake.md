@@ -1,8 +1,18 @@
 # 2027 sponsor banner intake
 
 Every sponsor at $500 and up (MVP, Championship, Championship+) gets a 3x5
-banner. This is how each one gets caught, asked for their info, and matched
-to a banner, however they signed up.
+banner, once their payment is in. This is how each one gets caught, asked for
+their info, and matched to a banner, however they signed up.
+
+Two rules hold throughout:
+
+- **No payment, no banner.** A sponsor counts as paid when the sponsorship
+  sheet's "Paid?" column says yes, when a website payment notice matches
+  them, or when Nate ticks Paid in the app (a check in the mail). Until then
+  they show as "Waiting on payment" and get no email.
+- **Nate sends every sponsor email himself.** The code only ever makes a
+  Gmail draft. He checks it's a real signup with a real payment, then
+  presses Send. There is no setting that sends them on its own.
 
 ## The path, start to finish
 
@@ -19,9 +29,9 @@ to a banner, however they signed up.
                                               │
               ┌───────────────────────────────┼───────────────────────────────┐
               ▼                               ▼                               ▼
-   Email to Nate: "New 2027           Info email to the sponsor        2027 tab in the app:
-   banner sponsors (n)"               (Gmail draft, or sent)           assign a banner from
-                                      with their own form link         stock, or mark "Order new"
+   Email to Nate: "2027 banner        Once PAID: info email as a       2027 tab in the app:
+   sponsors" (new signups and         Gmail DRAFT, with their own      assign a banner from
+   payments now in)                   form link. Nate checks, sends.   stock, or mark "Order new"
                                               │
                                               ▼
                                   intake.html (the reply form)
@@ -42,8 +52,10 @@ uploads would have required.
 **Website payments with no form** only tell us a person's name and the
 amount. The scan matches the name to a contact on the sponsorship sheet
 (or the same last name and the same amount). With no match the row is
-called "Needs a match: <name>", Nate gets told, and no sponsor email goes out
-until he fills in the company and email.
+called "Needs a match: <name>", Nate gets told, and no sponsor email is made
+until he fills in the company and email. A website payment that matches
+someone already on the 2027 tab (say they filled in the form first) marks
+them paid, and their draft gets made on the next check.
 
 ## The sponsor email
 
@@ -78,7 +90,8 @@ Variables in braces. Same asks as the 2026 "Sponsorship Info Request" email.
 > Director & IT/Social Media Coordinator
 > Lunenburg Youth Baseball & Softball
 
-It goes from Nate's Gmail with info@lunenburgybs.com copied, like last year.
+It's made as a draft in Nate's Gmail with info@lunenburgybs.com copied, like
+last year, and goes out only when he presses Send.
 Wording, deadline, CC and signature are constants at the top of `Season.gs`.
 
 ## The reply form (intake.html)
@@ -109,9 +122,8 @@ TIFF are recognized by their contents, not their names.
 5. Deploy → Manage deployments → pencil → Version: New version → Deploy.
    The `/exec` URL stays the same.
 
-Sponsor emails start as **drafts** in Gmail. To have them send on their own,
-run `setRequestMode('send')` once (or set Script property `REQUEST_MODE` to
-`send`). `removeSeasonTrigger` turns the hourly check off.
+Sponsor emails are always **drafts** in Gmail for Nate to send.
+`removeSeasonTrigger` turns the hourly check off.
 
 ## For next season
 

@@ -131,7 +131,7 @@ main { position: relative; z-index: 1; padding: 12px 16px 32px; max-width: 720px
 }
 .field-grid label.row, .form label.row { min-height: 36px; cursor: pointer; }
 label.row input[type=checkbox] { width: 20px; height: 20px; flex: none; margin: 0; }
-.field-grid label.full { grid-column: 1 / -1; }
+.field-grid label.full, .field-grid .full { grid-column: 1 / -1; }
 input[type=text], input[type=tel], input[type=email], input[type=search], input[type=file], textarea {
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--navy3); color: var(--text); font-size: 14px; width: 100%; font-family: 'DM Sans', sans-serif;

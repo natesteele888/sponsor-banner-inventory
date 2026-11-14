@@ -15,16 +15,20 @@
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
-  var S = { rows: [], statuses: [], loaded: false, loading: null, filter: 'all', current: null, entry: false, skipPop: false, mode: 'draft' };
+  var S = { rows: [], statuses: [], loaded: false, loading: null, filter: 'all', current: null, entry: false, skipPop: false };
 
   function isMatchNeeded(r) { return String(r.company).indexOf('Needs a match') === 0; }
-  function isWaiting(r) { return !isMatchNeeded(r) && r.requestStatus !== 'Info received'; }
+  // No payment, no email and no banner (Nate's rule).
+  function isPaid(r) { return String(r.paid).toUpperCase() === 'TRUE'; }
+  function isUnpaid(r) { return !isMatchNeeded(r) && !isPaid(r); }
+  function isWaiting(r) { return !isMatchNeeded(r) && isPaid(r) && r.requestStatus !== 'Info received'; }
   function isOrder(r) { return r.bannerStatus === 'Order new' || r.bannerStatus === 'Reprint needed'; }
   function isStock(r) { return r.bannerStatus === 'Use banner from stock' || !!r.assignedBannerId; }
 
   function matches(r) {
     if (S.filter === 'order') return isOrder(r);
     if (S.filter === 'stock') return isStock(r);
+    if (S.filter === 'unpaid') return isUnpaid(r);
     if (S.filter === 'waiting') return isWaiting(r);
     if (S.filter === 'received') return r.requestStatus === 'Info received';
     if (S.filter === 'match') return isMatchNeeded(r);
@@ -39,7 +43,6 @@
       if (!res.ok) throw A().backendError(res.error || 'Could not load the 2027 list.');
       S.rows = res.rows;
       S.statuses = res.statuses;
-      S.mode = res.requestMode;
       S.loaded = true;
       $('#seasonStatus').textContent = '';
       render();
@@ -56,6 +59,7 @@
     var esc = A().esc, pill = A().pill;
     $('#seasonSummary').innerHTML =
       stat(S.rows.length, 'banner sponsors') +
+      stat(count(isUnpaid), 'waiting on payment') +
       stat(count(isOrder), 'to order') +
       stat(count(isStock), 'from stock') +
       stat(count(isWaiting), 'waiting on info');
@@ -68,7 +72,8 @@
           '<div class="name">' + esc(r.company) + '</div>' +
           '<div class="meta">' +
             (r.tier ? pill(r.tier + (r.amount ? ' ' + r.amount : ''), '') : '') +
-            pill(requestLabel(r), r.requestStatus === 'Info received' ? 'on-list' : (isMatchNeeded(r) ? 'legacy' : 'not-hung')) +
+            (isUnpaid(r) ? pill('Waiting on payment', 'legacy') :
+              pill(requestLabel(r), r.requestStatus === 'Info received' ? 'on-list' : (isMatchNeeded(r) ? 'legacy' : 'not-hung'))) +
             pill(r.bannerStatus || 'Not decided', isOrder(r) ? 'legacy' : (isStock(r) ? 'on-list' : '')) +
           '</div>' +
           (banner ? '<div class="hint season-sub">Banner: ' + esc(banner) + '</div>' : '') +
@@ -93,7 +98,7 @@
     if (isMatchNeeded(r)) return 'Needs a match';
     if (r.requestStatus === 'Info received') return 'Info received';
     if (r.requestStatus) return 'Email: ' + r.requestStatus.replace('Draft in Gmail', 'draft');
-    return r.contactEmail ? 'Email not made yet' : 'No email on file';
+    return r.contactEmail ? 'Paid, email not made yet' : 'Paid, no email on file';
   }
 
   function bannerName(id) {
@@ -126,6 +131,8 @@
     $('#ssSource').textContent = 'Came in by: ' + (r.source || 'unknown') + (r.addedAt ? ' · added ' + r.addedAt : '');
     ['company', 'amount', 'contactName', 'contactEmail', 'contactPhone', 'notes'].forEach(function (k) { $('#s_' + k).value = r[k] || ''; });
     $('#s_tier').value = r.tier || '';
+    $('#s_paid').checked = isPaid(r);
+    $('#ssPaidVia').textContent = isPaid(r) ? (r.paidVia || '') : 'Not paid yet. Tick this once their payment is in, then Save.';
 
     $('#s_bannerStatus').innerHTML = S.statuses.map(function (s) {
       return '<option' + (s === (r.bannerStatus || 'Not decided') ? ' selected' : '') + '>' + esc(s) + '</option>';
@@ -148,10 +155,11 @@
 
     $('#ssRequest').textContent = isMatchNeeded(r)
       ? 'This was a website payment with no form. Put in the company and email, save, then make the email.'
-      : (r.requestStatus ? r.requestStatus + (r.requestAt ? ' (' + r.requestAt + ')' : '') :
-          (r.contactEmail ? 'Not made yet. The next hourly check makes it' + (S.mode === 'send' ? ' and sends it.' : ' as a draft in your Gmail.') : 'Add their email to make it.'));
-    $('#ssDraftBtn').disabled = !r.contactEmail || isMatchNeeded(r);
-    $('#ssCopyBtn').disabled = !r.intakeLink;
+      : (r.requestStatus ? r.requestStatus + (r.requestAt ? ' (' + r.requestAt + ')' : '') + (r.requestStatus === 'Draft in Gmail' ? '. Check it, then press Send in Gmail.' : '') :
+          (!isPaid(r) ? 'Waiting on their payment. No email goes to them until it is in.' :
+            (r.contactEmail ? 'Not made yet. The next hourly check puts it in your Gmail Drafts for you to check and send.' : 'Add their email to make it.')));
+    $('#ssDraftBtn').disabled = !r.contactEmail || isMatchNeeded(r) || !isPaid(r);
+    $('#ssCopyBtn').disabled = !r.intakeLink || !isPaid(r);
 
     var got = $('#ssReceived');
     if (r.submittedAt) {
@@ -196,6 +204,7 @@
     ['company', 'tier', 'amount', 'contactName', 'contactEmail', 'contactPhone', 'bannerStatus', 'assignedBannerId', 'notes'].forEach(function (k) {
       payload[k] = $('#s_' + k).value;
     });
+    payload.paid = $('#s_paid').checked;
     // Picking a banner from stock with no plan yet means the plan is "use it".
     if (payload.assignedBannerId && payload.bannerStatus === 'Not decided') payload.bannerStatus = 'Use banner from stock';
     var taken = payload.assignedBannerId && takenBy(payload.assignedBannerId, r.key);
@@ -224,7 +233,7 @@
     var r = S.current;
     if (!r) return;
     $('#ssStatus').textContent = 'Making the draft…';
-    A().apiPost({ action: 'seasonRequest', key: r.key, mode: 'draft' }).then(function (res) {
+    A().apiPost({ action: 'seasonRequest', key: r.key }).then(function (res) {
       if (!res.ok) throw A().backendError(res.error || 'Could not make the email.');
       $('#ssStatus').textContent = res.message;
       return reload();
@@ -267,6 +276,7 @@
     ['company', 'tier', 'amount', 'source', 'contactName', 'contactEmail', 'contactPhone', 'notes'].forEach(function (k) {
       payload[k] = $('#sa_' + k).value;
     });
+    payload.paid = $('#sa_paid').checked;
     $('#sa_status').textContent = 'Adding…';
     A().apiPost(payload).then(function (res) {
       if (!res.ok) throw A().backendError(res.error || 'Could not add.');
