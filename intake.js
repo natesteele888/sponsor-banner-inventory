@@ -64,6 +64,10 @@
     for (var i = 0; i < need.length; i++) {
       if (!$(need[i][0]).value.trim()) { msg.textContent = 'Please add ' + need[i][1] + '.'; $(need[i][0]).focus(); return; }
     }
+    // novalidate skips the browser's own check, so a typo like "bob.gmail" would be saved.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($('contactEmail').value.trim())) {
+      msg.textContent = 'Please check your email address.'; $('contactEmail').focus(); return;
+    }
     if (!$('logoFile').files.length && !$('fileLink').value.trim()) {
       msg.textContent = 'Please attach your logo, or paste a link to it.'; return;
     }
