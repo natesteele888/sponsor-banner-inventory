@@ -71,6 +71,19 @@ function doPost(e) {
     return fail('Malformed request.');
   }
 
+  // The sponsor reply page (intake.html) is the one public door: no sign-in,
+  // but every call needs the long random token from that sponsor's own email,
+  // and it can only see or fill in that one sponsor's row. See intake section.
+  var publicAction = String(data.action || '');
+  if (publicAction === 'intakeGet' || publicAction === 'intakeSubmit') {
+    try {
+      return publicAction === 'intakeGet' ? intakeGet(data) : intakeSubmit(data);
+    } catch (err) {
+      console.log('intake failed: ' + err);
+      return fail('Something went wrong on our end. Please try again, or just reply to the email.');
+    }
+  }
+
   var who;
   try {
     who = authorize(String(data.idToken || ''));
@@ -86,6 +99,11 @@ function doPost(e) {
     if (action === 'image') return ok(getImage(data.id, data.size));
     if (action === 'update') return update(data);
     if (action === 'upload') return upload(data);
+    if (action === 'seasonList') return ok(seasonList());
+    if (action === 'seasonUpdate') return seasonUpdate(data);
+    if (action === 'seasonAdd') return seasonAdd(data);
+    if (action === 'seasonRequest') return seasonRequest(data);
+    if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
     return fail('Unknown action.');
   } catch (err) {
     console.log('doPost failed: ' + err);

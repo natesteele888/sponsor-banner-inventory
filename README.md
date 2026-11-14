@@ -12,6 +12,15 @@ emails, phones for local business owners), which lybs-reporting's own
 CLAUDE.md explicitly says must never live in that repo — so this lives here
 instead, in its own repo, same reasoning as the Contacts Carve-Out there.
 
+## 2027 sponsor intake
+
+The **2027** tab lists every banner-level sponsor ($500+) for the season,
+whether they used the website form, just paid online, or emailed. An hourly
+check finds them, emails Nate, and sends each one a link to `intake.html`
+(the reply form with drop-downs and logo/banner uploads). See
+[docs/2027-sponsor-intake.md](docs/2027-sponsor-intake.md) for the diagram,
+the email, and the one-time setup.
+
 ## How it works
 
 ```
