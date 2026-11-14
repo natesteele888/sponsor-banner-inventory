@@ -38,6 +38,7 @@
   </div>
   <nav class="tabs">
     <button class="tab-btn" data-view="list">List</button>
+    <button class="tab-btn" data-view="season">2027</button>
     <button class="tab-btn" data-view="map">Map</button>
     <button class="tab-btn" data-view="add">＋ Add</button>
     <button class="tab-btn" id="signOutBtn" type="button">Sign out</button>
@@ -62,6 +63,51 @@
     <button class="btn primary hidden" id="loadRetry" type="button">Try again</button>
     <ul id="bannerList" class="banner-list"></ul>
     <p class="report-wrap"><button type="button" class="btn" onclick="window.nateHealth&&nateHealth.report()">Something wrong? Send a report</button></p>
+  </section>
+
+  <!-- 2027 VIEW: every banner-level sponsor for the season -->
+  <section id="view-season" class="view hidden">
+    <div id="seasonSummary" class="season-summary"></div>
+    <div class="season-acts">
+      <button class="btn small" id="seasonScanBtn" type="button">Check for new sponsors</button>
+      <button class="btn small" id="seasonAddBtn" type="button">＋ Add sponsor</button>
+    </div>
+    <div class="chips" id="seasonChips">
+      <button class="chip active" data-sfilter="all">All</button>
+      <button class="chip" data-sfilter="order">To order</button>
+      <button class="chip" data-sfilter="stock">From stock</button>
+      <button class="chip" data-sfilter="unpaid">Waiting on payment</button>
+      <button class="chip" data-sfilter="waiting">Waiting on sponsor</button>
+      <button class="chip" data-sfilter="received">Info received</button>
+      <button class="chip" data-sfilter="match">Needs a match</button>
+    </div>
+    <div id="seasonStatus" class="status"></div>
+    <ul id="seasonList" class="banner-list"></ul>
+
+    <form id="seasonAddForm" class="form hidden">
+      <h2>Add a 2027 sponsor</h2>
+      <p class="hint">For a sponsor who emailed you or mailed a check. Once they're marked paid, their info email goes to your Gmail Drafts for you to check and send.</p>
+      <label>Company <input id="sa_company" type="text" required></label>
+      <label>Level
+        <select id="sa_tier">
+          <option>MVP</option><option>Championship</option><option>Championship+</option>
+        </select>
+      </label>
+      <label>Amount <input id="sa_amount" type="text" placeholder="$500.00"></label>
+      <label>How they came in
+        <select id="sa_source"><option>Email</option><option>Check</option><option>Website payment</option><option>In person</option></select>
+      </label>
+      <label>Contact name <input id="sa_contactName" type="text"></label>
+      <label>Contact email <input id="sa_contactEmail" type="email"></label>
+      <label>Contact phone <input id="sa_contactPhone" type="tel"></label>
+      <label class="row"><input id="sa_paid" type="checkbox"> Payment is in</label>
+      <label>Notes <textarea id="sa_notes" rows="2"></textarea></label>
+      <div class="sheet-acts">
+        <button type="submit" class="btn primary">Add sponsor</button>
+        <button type="button" class="btn" id="sa_cancel">Cancel</button>
+        <span id="sa_status" class="status"></span>
+      </div>
+    </form>
   </section>
 
   <!-- MAP VIEW -->
@@ -155,11 +201,60 @@
   </div>
 </section>
 
+<!-- 2027 SPONSOR SHEET -->
+<section id="seasonSheet" class="sheet hidden" role="dialog" aria-label="2027 sponsor">
+  <div class="sheet-top">
+    <button class="btn small" id="ssClose">Close</button>
+    <span id="ssBadge" class="pill"></span>
+  </div>
+  <div class="sheet-body">
+    <h2 id="ssTitle" class="ss-title"></h2>
+    <div id="ssSource" class="hint"></div>
+    <div class="field-grid">
+      <label>Company <input id="s_company" type="text"></label>
+      <label>Level
+        <select id="s_tier"><option></option><option>MVP</option><option>Championship</option><option>Championship+</option></select>
+      </label>
+      <label>Amount <input id="s_amount" type="text"></label>
+      <label>Contact name <input id="s_contactName" type="text"></label>
+      <label>Contact email <input id="s_contactEmail" type="email"></label>
+      <label>Contact phone <input id="s_contactPhone" type="tel"></label>
+      <label class="row full"><input id="s_paid" type="checkbox"> Paid</label>
+      <div id="ssPaidVia" class="hint full"></div>
+    </div>
+
+    <h3 class="ss-h">Banner</h3>
+    <div class="field-grid">
+      <label>Banner plan <select id="s_bannerStatus"></select></label>
+      <label>Banner from stock <select id="s_assignedBannerId"></select></label>
+      <div id="ssSuggest" class="hint"></div>
+    </div>
+
+    <h3 class="ss-h">Info email</h3>
+    <div id="ssRequest" class="hint"></div>
+    <div class="season-acts">
+      <button class="btn small" id="ssDraftBtn" type="button">Make email draft</button>
+      <button class="btn small" id="ssCopyBtn" type="button">Copy form link</button>
+    </div>
+
+    <div id="ssReceived" class="ss-received hidden"></div>
+
+    <div class="field-grid">
+      <label class="full">Notes <textarea id="s_notes" rows="3"></textarea></label>
+    </div>
+    <div class="sheet-acts">
+      <button class="btn primary" id="ssSave" type="button">Save</button>
+      <span id="ssStatus" class="status"></span>
+    </div>
+  </div>
+</section>
+
 <!-- async: only the Map tab and Drop pin need it, so it must not hold up the list. -->
 <script id="leafletJs" async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.leafletDone=1" onerror="window.leafletDone=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="season.js"></script>
 </body>
 </html>

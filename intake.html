@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>LYBS Sponsor Info</title>
+<meta name="theme-color" content="#0a1628">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="intake">
+<!-- Public page for sponsors. It needs the personal link from their email
+     (?t=...), and it can only see and fill in that one sponsor's info. -->
+<main class="intake-main">
+  <header class="intake-head">
+    <img src="logo.svg" alt="Lunenburg Youth Baseball & Softball" class="signin-logo">
+    <h1>Sponsor <span class="accent">Info</span></h1>
+    <p id="greet" class="hint">Loading your sponsorship…</p>
+  </header>
+
+  <form id="intakeForm" class="form hidden" novalidate>
+    <fieldset>
+      <legend>Your contact</legend>
+      <label>Your name <span class="req">*</span>
+        <input id="contactName" type="text" autocomplete="name" required maxlength="200">
+      </label>
+      <label>Email <span class="req">*</span>
+        <input id="contactEmail" type="email" autocomplete="email" required maxlength="200">
+      </label>
+      <label>Phone
+        <input id="contactPhone" type="tel" autocomplete="tel" maxlength="60">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Your sponsor listing</legend>
+      <label>Website or social link
+        <input id="website" type="url" inputmode="url" placeholder="https://" maxlength="300">
+        <small>We link to it from your listing on lunenburgybs.com.</small>
+      </label>
+      <label>Business name for the team jersey <span class="req">*</span>
+        <input id="jerseyName" type="text" required maxlength="120">
+      </label>
+      <label>Sponsor write-up
+        <textarea id="writeup" rows="3" maxlength="200" placeholder="A short description of your business for our website."></textarea>
+        <small><span id="writeupCount">0</span> / 200 characters</small>
+      </label>
+      <label>Logo <span class="req">*</span>
+        <input id="logoFile" type="file" accept=".png,.jpg,.jpeg,.svg,.ai,.eps,.pdf,.psd,.tif,.tiff,image/*,application/pdf">
+        <small>High resolution: PNG, SVG, AI, EPS, PDF or JPG. Up to 15 MB.</small>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Your 3x5 vinyl banner</legend>
+      <p class="hint">It hangs along the fence at Marshall Park all season.</p>
+      <label>What should we do for your banner? <span class="req">*</span>
+        <select id="bannerChoice" required>
+          <option value="">Choose one…</option>
+          <option>Reuse our banner from last season</option>
+          <option>I'm attaching a new print-ready design</option>
+          <option>Please design one using our logo</option>
+        </select>
+      </label>
+      <label id="designWrap" class="hidden">Banner design file
+        <input id="designFile" type="file" accept=".png,.jpg,.jpeg,.svg,.ai,.eps,.pdf,.psd,.tif,.tiff,image/*,application/pdf">
+        <small>3 ft x 5 ft. PDF, AI or EPS print best. Up to 15 MB.</small>
+      </label>
+      <label id="bannerTextWrap" class="hidden">Wording, colors or anything we should know
+        <textarea id="bannerText" rows="3" maxlength="600" placeholder="e.g. phone number and website under the logo, white background"></textarea>
+      </label>
+      <label>Files too big? Paste a share link
+        <input id="fileLink" type="url" inputmode="url" placeholder="Google Drive, Dropbox or WeTransfer link" maxlength="500">
+      </label>
+    </fieldset>
+
+    <button type="submit" class="btn primary" id="sendBtn">Send to LYBS</button>
+    <p id="formMsg" class="status" role="alert"></p>
+  </form>
+
+  <section id="done" class="form hidden">
+    <h2>Thank you!</h2>
+    <p>We have your info. If we need anything else for your banner, we'll reach out by email.</p>
+  </section>
+</main>
+<script src="config.js"></script>
+<script src="intake.js"></script>
+</body>
+</html>

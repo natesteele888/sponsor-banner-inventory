@@ -131,7 +131,7 @@ main { position: relative; z-index: 1; padding: 12px 16px 32px; max-width: 720px
 }
 .field-grid label.row, .form label.row { min-height: 36px; cursor: pointer; }
 label.row input[type=checkbox] { width: 20px; height: 20px; flex: none; margin: 0; }
-.field-grid label.full { grid-column: 1 / -1; }
+.field-grid label.full, .field-grid .full { grid-column: 1 / -1; }
 input[type=text], input[type=tel], input[type=email], input[type=search], input[type=file], textarea {
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--navy3); color: var(--text); font-size: 14px; width: 100%; font-family: 'DM Sans', sans-serif;
@@ -181,3 +181,40 @@ input::placeholder, textarea::placeholder { color: var(--text2); }
 .signin-msg { color: var(--red) !important; min-height: 20px; }
 .report-wrap { text-align: center; margin: 24px 0 8px; }
 .report-wrap .btn { min-height: 44px; }
+
+/* 2027 tab */
+select, input[type=url] {
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--navy3); color: var(--text); font-size: 14px; width: 100%; font-family: 'DM Sans', sans-serif;
+  min-height: 38px;
+}
+.season-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+.season-summary .stat {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 6px; text-align: center;
+}
+.season-summary .stat b { display: block; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 26px; color: var(--gold); letter-spacing: 1px; }
+.season-summary .stat span { font-size: 11px; color: var(--text2); }
+.season-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 10px; }
+#seasonChips { margin-bottom: 10px; }
+#seasonAddForm { margin-top: 14px; }
+.season-card { padding-top: 12px; padding-bottom: 12px; }
+.season-sub { margin: 6px 0 0; }
+.ss-title { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 24px; letter-spacing: 1px; color: #fff; margin: 0; }
+.ss-h { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--gold); margin: 18px 0 4px; }
+.ss-received { margin-top: 6px; }
+.ss-row { margin: 6px 0; font-size: 14px; overflow-wrap: anywhere; }
+.ss-row span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); }
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* Sponsor reply form (intake.html) */
+.intake-main { max-width: 560px; }
+.intake-head { text-align: center; padding: 24px 0 8px; }
+.intake-head h1 { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 30px; letter-spacing: 1.5px; color: #fff; margin: 10px 0 6px; }
+.intake-head h1 .accent { color: var(--gold); }
+.intake-head .hint { font-size: 15px; color: var(--text); }
+.intake fieldset { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.intake legend { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 19px; letter-spacing: 1px; color: var(--gold); padding: 6px 0; }
+.intake small { text-transform: none; letter-spacing: normal; font-size: 12px; color: var(--text2); font-weight: 400; }
+.intake .req { color: var(--gold); }
+.intake input, .intake select, .intake textarea { font-size: 16px; }
+.intake #sendBtn { justify-content: center; min-height: 48px; font-size: 15px; }

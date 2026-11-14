@@ -106,6 +106,7 @@
         state.imageCache = {};
         state.loaded = false;
         $('#bannerList').innerHTML = '';
+        if (window.Season) window.Season.reset();
         return;
       }
       if (!state.loaded) loadBanners();
@@ -521,6 +522,7 @@
     $('#view-' + name).classList.remove('hidden');
     $$('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.view === name); });
     if (name === 'map') renderMap();
+    if (name === 'season' && window.Season) window.Season.show();
   }
 
   // ---------- wire up ----------
@@ -572,6 +574,18 @@
     showView('list');
     wireSignIn();
   }
+
+  // The 2027 tab (season.js) shares the sign-in, backend and banner list.
+  window.BannerApp = {
+    apiPost: apiPost,
+    esc: esc,
+    pill: pill,
+    backendError: backendError,
+    noteProblem: noteProblem,
+    sendErrorText: sendErrorText,
+    banners: function () { return state.banners; },
+    whenBannersLoaded: function () { return state.loaded ? Promise.resolve() : loadBanners(); }
+  };
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
   document.addEventListener('DOMContentLoaded', init);
