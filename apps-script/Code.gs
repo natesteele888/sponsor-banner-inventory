@@ -1,5 +1,5 @@
 /**
- * Sponsor Banner Inventory — Google Apps Script backend.
+ * LYBS Sponsors (was Sponsor Banner Inventory) — Google Apps Script backend.
  *
  * WHY THIS EXISTS
  *
@@ -104,6 +104,11 @@ function doPost(e) {
     if (action === 'seasonAdd') return seasonAdd(data);
     if (action === 'seasonRequest') return seasonRequest(data);
     if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
+    // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
+    if (action === 'sponsorBook') return ok(sponsorBook());
+    if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
+    // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.
+    if (action === 'sponsorSheet') return ok(sponsorSheet());
     return fail('Unknown action.');
   } catch (err) {
     console.log('doPost failed: ' + err);
@@ -125,7 +130,7 @@ function accessCheck() {
 // role, so there is one list of who is on the board. An answer is remembered
 // for five minutes, because each banner photo is its own request.
 function authorize(idToken) {
-  var denied = { ok: false, error: 'This account does not have board access to Sponsor Banners.' };
+  var denied = { ok: false, error: 'This account does not have board access to LYBS Sponsors.' };
   if (!idToken) return { ok: false, error: 'Please sign in.' };
 
   var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken);

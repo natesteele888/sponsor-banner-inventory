@@ -222,3 +222,20 @@ select, input[type=url] {
 .intake .req { color: var(--gold); }
 .intake input, .intake select, .intake textarea { font-size: 16px; }
 .intake #sendBtn { justify-content: center; min-height: 48px; font-size: 15px; }
+
+/* ---------- Sponsors tab ---------- */
+.tabs { flex-wrap: wrap; }
+.tab-btn { flex: 1 1 auto; padding: 8px 8px; }
+.sp-owner { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); }
+.sp-owner select, #spSearch, #sp_division, #sp_team, #sp_note {
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-family: inherit; font-size: 14px;
+}
+#spSearch { width: 100%; }
+#spFields { margin-top: 6px; }
+#spFields a, .sp-other a, #spSource a { color: var(--gold); }
+.sp-other { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.sp-tab { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.sp-tab summary { cursor: pointer; font-weight: 700; min-height: 28px; }
+.sp-rec { border-top: 1px solid var(--border); padding: 6px 0; }
+.sp-owner select { width: auto; }

@@ -1,4 +1,12 @@
-# Sponsor Banner Inventory
+# LYBS Sponsors (was Sponsor Banner Inventory)
+
+The league's sponsor app. **Sponsors** shows the season's sponsorship sheet
+live, with each sponsor's team; **Banners** is the banner inventory below;
+**2027 banners** is the banner intake. See
+[docs/sponsors-tab.md](docs/sponsors-tab.md) for the Sponsors tab, where
+every piece of sponsor data lives, and how other apps read it.
+
+## Banner inventory
 
 A small app replacing the one-time "35 photos vs. the 2026 sponsor list"
 Claude artifact with something Nate can actually use from his phone: a
