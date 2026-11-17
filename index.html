@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="192x192" href="https://natesteele888.github.io/apps/icons/sponsor-banners-192.png">
 <link rel="apple-touch-icon" href="https://natesteele888.github.io/apps/icons/sponsor-banners-512.png">
-<title>Sponsor Banners</title>
+<title>LYBS Sponsors</title>
 <meta name="theme-color" content="#0a1628">
 <link rel="manifest" href="manifest.json">
 <script src="https://natesteele888.github.io/apps/install.js" defer></script>
@@ -21,7 +21,7 @@
 
 <section id="signin" class="signin hidden" aria-label="Sign in">
   <img src="logo.svg" alt="LYBS logo" class="signin-logo">
-  <h1>Sponsor <span class="accent">Banners</span></h1>
+  <h1>LYBS <span class="accent">Sponsors</span></h1>
   <p>For LYBS board members. Use your LYBS Dashboard account.</p>
   <button class="btn primary" id="googleBtn" type="button">Sign in with Google</button>
   <form id="emailForm">
@@ -36,11 +36,12 @@
 <header class="topbar hidden">
   <div class="header-left" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
     <img src="logo.svg" alt="LYBS logo" style="height:36px;width:auto;flex-shrink:0;" loading="lazy">
-    <h1 style="margin:0;">Sponsor <span class="accent">Banners</span></h1>
+    <h1 style="margin:0;">LYBS <span class="accent">Sponsors</span></h1>
   </div>
   <nav class="tabs">
-    <button class="tab-btn" data-view="list">List</button>
-    <button class="tab-btn" data-view="season">2027</button>
+    <button class="tab-btn" data-view="sponsors">Sponsors</button>
+    <button class="tab-btn" data-view="list">Banners</button>
+    <button class="tab-btn" data-view="season">2027 banners</button>
     <button class="tab-btn" data-view="map">Map</button>
     <button class="tab-btn" data-view="add">＋ Add</button>
     <button class="tab-btn" id="signOutBtn" type="button">Sign out</button>
@@ -48,6 +49,31 @@
 </header>
 
 <main id="app" class="hidden">
+
+  <!-- SPONSORS VIEW: the season's sponsorship sheet, read live (sponsors.js) -->
+  <section id="view-sponsors" class="view hidden">
+    <div id="spSummary" class="season-summary"></div>
+    <div class="toolbar">
+      <input id="spSearch" type="search" placeholder="Search sponsor, contact, owner, team…">
+      <div class="season-acts">
+        <label class="sp-owner">Owner <select id="spOwner"><option value="">Everyone</option></select></label>
+        <button class="btn small" id="spRefresh" type="button">Refresh</button>
+      </div>
+      <div class="chips" id="spChips">
+        <button class="chip active" data-spfilter="all">All</button>
+        <button class="chip" data-spfilter="signed">Signed up</button>
+        <button class="chip" data-spfilter="paid">Paid</button>
+        <button class="chip" data-spfilter="unpaid">Not paid yet</button>
+        <button class="chip" data-spfilter="notContacted">Not contacted</button>
+        <button class="chip" data-spfilter="lapsed">Past sponsors, not back yet</button>
+        <button class="chip" data-spfilter="noTeam">Signed up, no team</button>
+      </div>
+    </div>
+    <div id="spStatus" class="status"></div>
+    <p id="spSource" class="hint"></p>
+    <ul id="spList" class="banner-list"></ul>
+    <div id="spOther" class="sp-other"></div>
+  </section>
 
   <!-- LIST VIEW -->
   <section id="view-list" class="view">
@@ -251,6 +277,33 @@
   </div>
 </section>
 
+<!-- SPONSOR DETAIL: one row of the sponsorship sheet, plus their team -->
+<section id="sponsorSheet" class="sheet hidden" role="dialog" aria-label="Sponsor">
+  <div class="sheet-top">
+    <button class="btn small" id="spClose">Close</button>
+    <span id="spBadge" class="pill"></span>
+  </div>
+  <div class="sheet-body">
+    <h2 id="spTitle" class="ss-title"></h2>
+    <div id="spFields"></div>
+
+    <h3 class="ss-h">Team</h3>
+    <div class="field-grid">
+      <label>Division <input id="sp_division" type="text" list="spDivisions" placeholder="Baseball Majors"></label>
+      <label>Team <input id="sp_team" type="text" list="spTeams" placeholder="Team name"></label>
+      <label class="full">Note <input id="sp_note" type="text" placeholder="Asked for their kid's team, etc."></label>
+      <datalist id="spDivisions"></datalist>
+      <datalist id="spTeams"></datalist>
+      <div id="spTeamHint" class="hint full"></div>
+      <div id="spTeamsFrom" class="hint full"></div>
+    </div>
+    <div class="sheet-acts">
+      <button class="btn primary" id="spSave" type="button">Save team</button>
+      <span id="spSaveStatus" class="status"></span>
+    </div>
+  </div>
+</section>
+
 <!-- async: only the Map tab and Drop pin need it, so it must not hold up the list. -->
 <script id="leafletJs" async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.leafletDone=1" onerror="window.leafletDone=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -258,5 +311,6 @@
 <script src="config.js"></script>
 <script src="app.js"></script>
 <script src="season.js"></script>
+<script src="sponsors.js"></script>
 </body>
 </html>

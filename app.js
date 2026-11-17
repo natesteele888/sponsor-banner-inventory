@@ -107,9 +107,11 @@
         state.loaded = false;
         $('#bannerList').innerHTML = '';
         if (window.Season) window.Season.reset();
+        if (window.Sponsors) window.Sponsors.reset();
         return;
       }
       if (!state.loaded) loadBanners();
+      if (window.Sponsors && !$('#view-sponsors').classList.contains('hidden')) window.Sponsors.show();
     });
   }
 
@@ -523,6 +525,7 @@
     $$('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.view === name); });
     if (name === 'map') renderMap();
     if (name === 'season' && window.Season) window.Season.show();
+    if (name === 'sponsors' && window.Sponsors) window.Sponsors.show();
   }
 
   // ---------- wire up ----------
@@ -539,10 +542,10 @@
       state.search = e.target.value;
       renderList();
     });
-    $$('.chip').forEach(function (chip) {
+    $$('#filterChips .chip').forEach(function (chip) {
       chip.addEventListener('click', function () {
         state.filter = chip.dataset.filter;
-        $$('.chip').forEach(function (c) { c.classList.remove('active'); });
+        $$('#filterChips .chip').forEach(function (c) { c.classList.remove('active'); });
         chip.classList.add('active');
         renderList();
       });
@@ -571,7 +574,7 @@
       reader.readAsDataURL(file);
     });
 
-    showView('list');
+    showView('sponsors');
     wireSignIn();
   }
 

@@ -1,4 +1,4 @@
-# Sponsor Banner Inventory — notes for Claude sessions
+# LYBS Sponsors (repo: sponsor-banner-inventory) — notes for Claude sessions
 
 Standalone app replacing the one-time "35 banner photos vs. the 2026 sponsor
 list" Claude artifact. Architecture, setup steps and the Apps Script
@@ -35,6 +35,10 @@ This app is one of several that share parts and lessons through the private
 In a Claude session, attach the repo with "add natesteele888/nate-brain" so it can be read and updated.
 
 ## Privacy
+This repo is public. Never write the sponsorship sheet's address, a sponsor's
+name, contact, amount or any other sheet data into it, not even as test data;
+the sheet is found by name at run time (docs/sponsors-tab.md).
+
 Sponsor business-contact info (names, emails, phones for local business
 owners) lives in this app's own Sheet — that's its whole purpose. It must
 never flow into `lybs-reporting` (see that repo's CLAUDE.md, Contacts

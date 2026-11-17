@@ -39,8 +39,11 @@ var SEASON = '2027';
 var SEASON_SHEET_NAME = SEASON + ' Banners';
 
 // The 2027 sponsorship sheet the sponsorship lead keeps (read only from here).
-var SPONSOR_SHEET_ID = '1LeyNi8HffeWdC2j6ayEyHjFQMa5JKDmUGh9-FuPiEIg';
-var SPONSOR_TAB = '2027 sponsors';
+// It's found by its name in Drive, not by an address written here: this file
+// is public on GitHub, and the sheet holds sponsors' contact details. Once
+// found, its address is remembered in this script's private Script Properties.
+var SPONSOR_SHEET_NAME = SEASON + '_Sponsorship Sheet';
+var SPONSOR_TAB = SEASON + ' sponsors';
 var ONLINE_TAB = 'OnlineLogs';
 
 // Same rule as that sheet's own "Owed a Banner" column (=Amount>=500).
@@ -232,12 +235,24 @@ function upsertSponsor_(season, cand) {
 
 // ---------- finding sponsors ----------
 
+// The header is the first row with at least three filled cells, so a title or
+// blank row added above it (as on the 2027 sheet) doesn't break the readers.
+function headerRow_(v) {
+  for (var r = 0; r < Math.min(v.length, 10); r++) {
+    var n = v[r].filter(function (c) { return String(c).trim(); }).length;
+    if (n >= 3) return r;
+  }
+  return 0;
+}
+
 function readTab_(ss, name) {
   var sh = ss.getSheetByName(name);
   if (!sh) return [];
   var v = sh.getDataRange().getValues();
-  var header = v[0].map(function (h) { return String(h).trim(); });
-  return v.slice(1).map(function (row) {
+  if (!v.length) return [];
+  var h0 = headerRow_(v);
+  var header = v[h0].map(function (h) { return String(h).trim(); });
+  return v.slice(h0 + 1).map(function (row) {
     var o = {};
     header.forEach(function (h, i) { o[h] = row[i]; });
     return o;
@@ -368,7 +383,7 @@ function scanForNewSponsors() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return 0;
   try {
-    var ss = SpreadsheetApp.openById(SPONSOR_SHEET_ID);
+    var ss = sponsorSpreadsheet_();
     var season = readSeason_();
     var cands = [];
     try { cands = cands.concat(fromSponsorSheet_(ss)); } catch (e) { console.log('sponsor tab: ' + e); }
@@ -729,4 +744,231 @@ function intakeSubmit(data) {
   GmailApp.sendEmail(myEmail_(), SEASON + ' sponsor info received: ' + rec.company, body, { name: 'LYBS Sponsor Banners' });
 
   return ok({ message: 'Thank you! We have your info.' });
+}
+
+
+// ---------- the sponsorship sheet, read live (the app's Sponsors tab) ----------
+//
+// Everything on the sponsorship lead's sheet, shown in the app behind the
+// Dashboard sign-in: who owns each sponsor, who has contacted them, contacts,
+// last year's and this year's level, amount, paid, banner and plaque flags.
+// Read only: this code never changes a cell on that sheet. Nothing is copied
+// anywhere either: each open of the tab reads the sheet as it is right then.
+//
+// The one thing the app writes is which team a sponsor is lined up with. That
+// goes on the "<season> Sponsor Teams" tab of this app's own private data
+// Sheet (owner-only), never onto the sponsorship sheet, and it rides along in
+// sponsorSheet() so the Dashboard's Uniforms and Jersey Order pages see it too.
+
+var SPONSOR_TEAMS_SHEET_NAME = SEASON + ' Sponsor Teams';
+var SPONSOR_TEAM_COLUMNS = ['key', 'company', 'division', 'team', 'note', 'updatedAt'];
+// The sheet tabs the Sponsors tab shows, in this order. A tab that isn't there is skipped.
+var SPONSOR_BOOK_TABS = [SPONSOR_TAB, ONLINE_TAB, 'Jerseys', 'Plaques'];
+var SPONSOR_PROP = 'SPONSOR_SHEET_ID_' + SEASON;
+
+// The sponsorship sheet, found by name the first time and remembered after.
+function sponsorSpreadsheet_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty(SPONSOR_PROP);
+  if (id) {
+    try { return SpreadsheetApp.openById(id); }
+    catch (e) { props.deleteProperty(SPONSOR_PROP); }
+  }
+  var it = DriveApp.getFilesByName(SPONSOR_SHEET_NAME);
+  var best = null, bestAt = 0;
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed() || f.getMimeType() !== MimeType.GOOGLE_SHEETS) continue;
+    var at = f.getLastUpdated().getTime();
+    if (at <= bestAt) continue;
+    // Only a sheet that has the season's sponsor tab counts.
+    var ss;
+    try { ss = SpreadsheetApp.openById(f.getId()); } catch (e) { continue; }
+    if (!ss.getSheetByName(SPONSOR_TAB)) continue;
+    best = ss; bestAt = at;
+  }
+  if (!best) throw new Error('Could not find the "' + SPONSOR_SHEET_NAME + '" sheet in Drive.');
+  props.setProperty(SPONSOR_PROP, best.getId());
+  return best;
+}
+
+// Run once from the editor if the sheet is ever renamed or replaced: it forgets
+// the remembered sheet so the next read finds it by name again.
+function forgetSponsorSheet() {
+  PropertiesService.getScriptProperties().deleteProperty(SPONSOR_PROP);
+  console.log('Forgot the sponsorship sheet. The next read looks for "' + SPONSOR_SHEET_NAME + '" again.');
+}
+
+// A tab as its header row plus every row, as the text a person sees in each
+// cell. Blank rows are dropped; nothing is reordered.
+function bookTab_(ss, name) {
+  var sh = ss.getSheetByName(name);
+  if (!sh) return null;
+  var v = sh.getDataRange().getDisplayValues();
+  if (!v.length) return { name: name, headers: [], rows: [] };
+  var h0 = headerRow_(v);
+  var width = 0;
+  v[h0].forEach(function (h, i) { if (String(h).trim()) width = i + 1; });
+  var headers = v[h0].slice(0, width).map(function (h) { return String(h).replace(/\s+/g, ' ').trim(); });
+  var rows = [];
+  for (var r = h0 + 1; r < v.length; r++) {
+    var cells = [];
+    for (var i = 0; i < width; i++) cells.push(String(v[r][i] == null ? '' : v[r][i]).trim().slice(0, 500));
+    if (cells.some(function (c) { return c; })) rows.push({ row: r + 1, cells: cells });
+  }
+  return { name: name, headers: headers, rows: rows };
+}
+
+function sponsorBook() {
+  var ss = sponsorSpreadsheet_();
+  var tabs = SPONSOR_BOOK_TABS.map(function (n) { return bookTab_(ss, n); }).filter(Boolean);
+  return {
+    season: SEASON,
+    sheetName: ss.getName(),
+    sheetUrl: ss.getUrl(),
+    readAt: new Date().toISOString(),
+    tabs: tabs,
+    teams: sponsorTeams_().rows.map(function (t) {
+      return { key: String(t.key), company: String(t.company), division: String(t.division || ''),
+               team: String(t.team || ''), note: String(t.note || ''), updatedAt: String(t.updatedAt || '') };
+    })
+  };
+}
+
+
+// ---------- sponsor to team ----------
+
+function sponsorTeamsSheet_() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sh = ss.getSheetByName(SPONSOR_TEAMS_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(SPONSOR_TEAMS_SHEET_NAME);
+    sh.getRange(1, 1, 1, SPONSOR_TEAM_COLUMNS.length).setValues([SPONSOR_TEAM_COLUMNS]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function sponsorTeams_() {
+  var sh = sponsorTeamsSheet_();
+  var v = sh.getDataRange().getValues();
+  var header = v[0];
+  var rows = [];
+  for (var r = 1; r < v.length; r++) {
+    var o = { _row: r + 1 };
+    header.forEach(function (h, i) { o[h] = v[r][i]; });
+    if (o.key) rows.push(o);
+  }
+  return { sheet: sh, header: header, rows: rows };
+}
+
+// One sponsor's team. An empty division and team clears it.
+function sponsorTeamSave(data) {
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var company = clean(data.company, 120);
+  var key = companyKey_(company);
+  if (!key) return fail('No sponsor given.');
+  var fields = { key: key, company: company, division: clean(data.division, 60), team: clean(data.team, 80),
+                 note: clean(data.note, 300), updatedAt: todayStamp() };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return fail('Someone else is saving right now. Try again in a moment.');
+  try {
+    var t = sponsorTeams_();
+    var hit = null;
+    t.rows.forEach(function (r) { if (String(r.key) === key) hit = r; });
+    if (!fields.division && !fields.team && !fields.note) {
+      if (hit) t.sheet.deleteRow(hit._row);
+      return ok({ message: 'Team cleared.' });
+    }
+    if (hit) writeFields_(t.sheet, t.header, hit._row, fields);
+    else t.sheet.appendRow(t.header.map(function (h) { return fields[h] === undefined ? '' : fields[h]; }));
+    return ok({ message: 'Saved.' });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ---------- for the LYBS Dashboard (Uniforms and Jersey Order pages) ----------
+//
+// The same sheet without the contact columns: the Dashboard pages only need
+// who's sponsoring at what level, paid, and which team. A team set in this
+// app wins over the sheet's own "Associated Team" cell.
+
+function sponsorSheet() {
+  var ss = sponsorSpreadsheet_();
+  var season = Number(SEASON);
+  var main = sheetRows_(ss, SPONSOR_TAB, {
+    owner: /^lybs owner/,
+    contacted: /^contacted/,
+    company: /^(company|business)/,
+    pastSponsor: /sponsored in past/,
+    tierPrev: new RegExp('^tier selected ' + (season - 1)),
+    tier: new RegExp('^tier selected ' + season),
+    amount: /^amount/,
+    paid: /^paid/,
+    owedBanner: /^owed a banner/,
+    bannerNeed: /^banner/,
+    team: /^(associated team|team)/,
+    owedPlaque: /^owed a plaque/
+  });
+  var jerseys = sheetRows_(ss, 'Jerseys', {
+    company: /^(business|company|sponsor)/,
+    team: /team/
+  });
+  var online = sheetRows_(ss, ONLINE_TAB, {
+    company: /^business name/,
+    level: /^sponsorship level/,
+    returning: /^been a sponsor/,
+    requests: /^sponsor requests/,
+    submitted: /^submitted/
+  });
+  var picked = {};
+  sponsorTeams_().rows.forEach(function (t) {
+    picked[String(t.key)] = [t.division, t.team].filter(function (x) { return String(x || '').trim(); }).join(' ');
+  });
+  var sponsors = main.rows.filter(function (r) { return r.company; }).map(function (r) {
+    var p = picked[companyKey_(r.company)];
+    if (p) r.team = p.slice(0, 160);
+    return r;
+  });
+  return {
+    season: SEASON,
+    sheetName: ss.getName(),
+    sheetUrl: ss.getUrl(),
+    readAt: new Date().toISOString(),
+    sponsors: sponsors,
+    jerseys: jerseys.rows.filter(function (r) { return r.company; }),
+    online: online.rows.filter(function (r) { return r.company; }),
+    missing: main.missing.concat(jerseys.missing, online.missing)
+  };
+}
+
+// One tab as a list of plain objects with only the wanted fields, every value
+// as display text, found by header text so a moved or added column doesn't
+// break it. A header it can't find comes back empty and is listed in missing.
+function sheetRows_(ss, tabName, wanted) {
+  var sh = ss.getSheetByName(tabName);
+  var keys = Object.keys(wanted);
+  if (!sh) return { rows: [], missing: [tabName + ' (tab)'] };
+  var v = sh.getDataRange().getDisplayValues();
+  if (!v.length) return { rows: [], missing: [] };
+  var h0 = headerRow_(v);
+  var header = v[h0].map(function (h) {
+    return String(h).toLowerCase().replace(/[^a-z0-9+ ]/g, ' ').replace(/\s+/g, ' ').trim();
+  });
+  var col = {}, missing = [];
+  keys.forEach(function (k) {
+    col[k] = -1;
+    for (var i = 0; i < header.length; i++) {
+      if (header[i] && wanted[k].test(header[i])) { col[k] = i; break; }
+    }
+    if (col[k] < 0) missing.push(tabName + ': ' + k);
+  });
+  var rows = v.slice(h0 + 1).map(function (row) {
+    var o = {};
+    keys.forEach(function (k) { o[k] = col[k] < 0 ? '' : String(row[col[k]] || '').trim().slice(0, 160); });
+    return o;
+  });
+  return { rows: rows, missing: missing };
 }
