@@ -129,5 +129,5 @@ Sponsor emails are always **drafts** in Gmail for Nate to send.
 
 Change `SEASON`, `INFO_DEADLINE` and `DONATIONS_SINCE` at the top of
 `Season.gs`. The new season's sponsorship sheet is found by its name
-(`<year>_Sponsorship Sheet`), and new "<year> Banners" and
-"<year> Sponsor Teams" tabs are made on their own.
+(`<year>_Sponsorship Sheet`), a new "<year> Banners" tab is made on its own,
+and team picks start empty under the new year's `SPONSOR_TEAM_<year>_` names.

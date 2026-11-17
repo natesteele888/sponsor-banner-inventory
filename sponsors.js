@@ -8,10 +8,10 @@
  *        ▼
  *   this tab: who owns each sponsor, who contacted them, contacts, level,
  *             amount, paid, banner/plaque flags, every other column as it is
- *        │  sponsorTeamSave (the one write, to this app's private data Sheet)
+ *        │  sponsorTeamSave (the one write, to the backend's private Script Properties)
  *        ▼
- *   "<season> Sponsor Teams" tab  →  also read by the Dashboard's Uniforms and
- *                                    Jersey Order pages (sponsorSheet)
+ *   SPONSOR_TEAM_<season>_* entries  →  also read by the Dashboard's Uniforms and
+ *                                       Jersey Order pages (sponsorSheet)
  *
  * Nothing from the sheet is stored on this phone or in this repo: the tab asks
  * again each time it opens or Refresh is pressed. Team names for the pickers

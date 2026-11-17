@@ -15,8 +15,8 @@ jerseys, plaques) are listed under the sponsors.
   sponsorship sheet in Drive (read only from here; never changed)
           │   sponsorBook, behind the Dashboard sign-in (board/director/admin)
           ▼
-  Sponsors tab ── Save team ──► "<season> Sponsor Teams" tab
-                                 of this app's private data Sheet
+  Sponsors tab ── Save team ──► Script Properties of the private
+                                 Apps Script project (SPONSOR_TEAM_<season>_*)
                                         │   sponsorSheet (no contact columns)
                                         ▼
                      LYBS Dashboard: Uniforms and Jersey Order pages
@@ -28,9 +28,11 @@ jerseys, plaques) are listed under the sponsors.
   by its name, `<season>_Sponsorship Sheet`; the backend remembers its address
   in the Apps Script project's Script Properties (`SPONSOR_SHEET_ID_<season>`).
   The address is not written in this repo on purpose.
-- **Sponsor to team:** tab `<season> Sponsor Teams` of the private
-  "Sponsor Banner Inventory (data)" Sheet. Columns: key, company, division,
-  team, note, updatedAt.
+- **Sponsor to team:** the Apps Script project's Script Properties, one entry
+  per sponsor named `SPONSOR_TEAM_<season>_<key>`, each a small JSON object:
+  key, company, division, team, note, updatedAt. (Not a Sheet tab: Google
+  refused to let the web app add one to the data Sheet.) Other apps get them
+  through `sponsorSheet`, which already folds them into each sponsor's team.
 - **Banner-level sponsors ($500+) and their banner plan:** tab
   `<season> Banners` of the same private Sheet (see 2027-sponsor-intake.md).
 - **How another app reads it:** POST to the Apps Script `/exec` address in

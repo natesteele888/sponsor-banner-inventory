@@ -756,12 +756,13 @@ function intakeSubmit(data) {
 // anywhere either: each open of the tab reads the sheet as it is right then.
 //
 // The one thing the app writes is which team a sponsor is lined up with. That
-// goes on the "<season> Sponsor Teams" tab of this app's own private data
-// Sheet (owner-only), never onto the sponsorship sheet, and it rides along in
-// sponsorSheet() so the Dashboard's Uniforms and Jersey Order pages see it too.
+// goes in this script's private Script Properties (one entry per sponsor,
+// "SPONSOR_TEAM_<season>_<key>"), never onto the sponsorship sheet, and it
+// rides along in sponsorSheet() so the Dashboard's Uniforms and Jersey Order
+// pages see it too. (A new tab on the data Sheet was the first plan, but
+// adding a tab from the web app was refused by Google, so it lives here.)
 
-var SPONSOR_TEAMS_SHEET_NAME = SEASON + ' Sponsor Teams';
-var SPONSOR_TEAM_COLUMNS = ['key', 'company', 'division', 'team', 'note', 'updatedAt'];
+var SPONSOR_TEAM_PREFIX = 'SPONSOR_TEAM_' + SEASON + '_';
 // The sheet tabs the Sponsors tab shows, in this order. A tab that isn't there is skipped.
 var SPONSOR_BOOK_TABS = [SPONSOR_TAB, ONLINE_TAB, 'Jerseys', 'Plaques'];
 var SPONSOR_PROP = 'SPONSOR_SHEET_ID_' + SEASON;
@@ -838,31 +839,21 @@ function sponsorBook() {
 
 // ---------- sponsor to team ----------
 
-function sponsorTeamsSheet_() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sh = ss.getSheetByName(SPONSOR_TEAMS_SHEET_NAME);
-  if (!sh) {
-    sh = ss.insertSheet(SPONSOR_TEAMS_SHEET_NAME);
-    sh.getRange(1, 1, 1, SPONSOR_TEAM_COLUMNS.length).setValues([SPONSOR_TEAM_COLUMNS]).setFontWeight('bold');
-    sh.setFrozenRows(1);
-  }
-  return sh;
-}
-
 function sponsorTeams_() {
-  var sh = sponsorTeamsSheet_();
-  var v = sh.getDataRange().getValues();
-  var header = v[0];
+  var all = PropertiesService.getScriptProperties().getProperties();
   var rows = [];
-  for (var r = 1; r < v.length; r++) {
-    var o = { _row: r + 1 };
-    header.forEach(function (h, i) { o[h] = v[r][i]; });
-    if (o.key) rows.push(o);
-  }
-  return { sheet: sh, header: header, rows: rows };
+  Object.keys(all).forEach(function (k) {
+    if (k.indexOf(SPONSOR_TEAM_PREFIX) !== 0) return;
+    try {
+      var o = JSON.parse(all[k]);
+      if (o && o.key) rows.push(o);
+    } catch (e) { /* a damaged entry is skipped */ }
+  });
+  rows.sort(function (a, b) { return String(a.company).localeCompare(String(b.company)); });
+  return { rows: rows };
 }
 
-// One sponsor's team. An empty division and team clears it.
+// One sponsor's team. An empty division, team and note clears it.
 function sponsorTeamSave(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var company = clean(data.company, 120);
@@ -873,15 +864,13 @@ function sponsorTeamSave(data) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return fail('Someone else is saving right now. Try again in a moment.');
   try {
-    var t = sponsorTeams_();
-    var hit = null;
-    t.rows.forEach(function (r) { if (String(r.key) === key) hit = r; });
+    var props = PropertiesService.getScriptProperties();
+    var name = SPONSOR_TEAM_PREFIX + key.slice(0, 80);
     if (!fields.division && !fields.team && !fields.note) {
-      if (hit) t.sheet.deleteRow(hit._row);
+      props.deleteProperty(name);
       return ok({ message: 'Team cleared.' });
     }
-    if (hit) writeFields_(t.sheet, t.header, hit._row, fields);
-    else t.sheet.appendRow(t.header.map(function (h) { return fields[h] === undefined ? '' : fields[h]; }));
+    props.setProperty(name, JSON.stringify(fields));
     return ok({ message: 'Saved.' });
   } finally {
     lock.releaseLock();
