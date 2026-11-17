@@ -71,7 +71,8 @@
       paid: colOf(t, /^paid/),
       owedBanner: colOf(t, /^owed a banner/),
       team: colOf(t, /^(associated team|team)/),
-      owedPlaque: colOf(t, /^owed a plaque/)
+      owedPlaque: colOf(t, /^owed a plaque/),
+      notes: colOf(t, /^notes?$/)
     };
     var picks = {};
     (S.book.teams || []).forEach(function (p) { picks[p.key] = p; });
@@ -88,7 +89,7 @@
         past: yes(get('past')), tierPrev: get('tierPrev'), tier: get('tier'),
         amount: amount, amountText: get('amount'), paid: yes(get('paid')), paidText: get('paid'),
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
-        sheetTeam: get('team'), pick: pick,
+        sheetTeam: get('team'), pick: pick, notes: get('notes'),
         team: pick ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
@@ -112,7 +113,7 @@
     if (S.owner && s.owner !== S.owner) return false;
     if (S.search) {
       var q = S.search.toLowerCase();
-      if ([s.company, s.contact, s.owner, s.contacted, s.team].join(' ').toLowerCase().indexOf(q) < 0) return false;
+      if ([s.company, s.contact, s.owner, s.contacted, s.team, s.notes].join(' ').toLowerCase().indexOf(q) < 0) return false;
     }
     return true;
   }
@@ -208,6 +209,7 @@
             (String(s.contacted).trim() ? pill('Contacted: ' + s.contacted, 'on-list') : pill('Not contacted', 'not-hung')) +
           '</div>' +
           (s.team ? '<div class="hint season-sub">Team: ' + esc(s.team) + '</div>' : '') +
+          (s.notes ? '<div class="hint season-sub sp-note">' + esc(s.notes) + '</div>' : '') +
         '</div>' +
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';

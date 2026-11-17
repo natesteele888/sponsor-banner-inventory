@@ -235,12 +235,24 @@ function upsertSponsor_(season, cand) {
 
 // ---------- finding sponsors ----------
 
+// The header is the first row with at least three filled cells, so a title or
+// blank row added above it (as on the 2027 sheet) doesn't break the readers.
+function headerRow_(v) {
+  for (var r = 0; r < Math.min(v.length, 10); r++) {
+    var n = v[r].filter(function (c) { return String(c).trim(); }).length;
+    if (n >= 3) return r;
+  }
+  return 0;
+}
+
 function readTab_(ss, name) {
   var sh = ss.getSheetByName(name);
   if (!sh) return [];
   var v = sh.getDataRange().getValues();
-  var header = v[0].map(function (h) { return String(h).trim(); });
-  return v.slice(1).map(function (row) {
+  if (!v.length) return [];
+  var h0 = headerRow_(v);
+  var header = v[h0].map(function (h) { return String(h).trim(); });
+  return v.slice(h0 + 1).map(function (row) {
     var o = {};
     header.forEach(function (h, i) { o[h] = row[i]; });
     return o;
@@ -794,12 +806,14 @@ function bookTab_(ss, name) {
   if (!sh) return null;
   var v = sh.getDataRange().getDisplayValues();
   if (!v.length) return { name: name, headers: [], rows: [] };
+  var h0 = headerRow_(v);
   var width = 0;
-  v[0].forEach(function (h, i) { if (String(h).trim()) width = i + 1; });
-  var headers = v[0].slice(0, width).map(function (h) { return String(h).replace(/\s+/g, ' ').trim(); });
+  v[h0].forEach(function (h, i) { if (String(h).trim()) width = i + 1; });
+  var headers = v[h0].slice(0, width).map(function (h) { return String(h).replace(/\s+/g, ' ').trim(); });
   var rows = [];
-  for (var r = 1; r < v.length; r++) {
-    var cells = v[r].slice(0, width).map(function (c) { return String(c).trim().slice(0, 500); });
+  for (var r = h0 + 1; r < v.length; r++) {
+    var cells = [];
+    for (var i = 0; i < width; i++) cells.push(String(v[r][i] == null ? '' : v[r][i]).trim().slice(0, 500));
     if (cells.some(function (c) { return c; })) rows.push({ row: r + 1, cells: cells });
   }
   return { name: name, headers: headers, rows: rows };
@@ -939,7 +953,8 @@ function sheetRows_(ss, tabName, wanted) {
   if (!sh) return { rows: [], missing: [tabName + ' (tab)'] };
   var v = sh.getDataRange().getDisplayValues();
   if (!v.length) return { rows: [], missing: [] };
-  var header = v[0].map(function (h) {
+  var h0 = headerRow_(v);
+  var header = v[h0].map(function (h) {
     return String(h).toLowerCase().replace(/[^a-z0-9+ ]/g, ' ').replace(/\s+/g, ' ').trim();
   });
   var col = {}, missing = [];
@@ -950,7 +965,7 @@ function sheetRows_(ss, tabName, wanted) {
     }
     if (col[k] < 0) missing.push(tabName + ': ' + k);
   });
-  var rows = v.slice(1).map(function (row) {
+  var rows = v.slice(h0 + 1).map(function (row) {
     var o = {};
     keys.forEach(function (k) { o[k] = col[k] < 0 ? '' : String(row[col[k]] || '').trim().slice(0, 160); });
     return o;

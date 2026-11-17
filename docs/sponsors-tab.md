@@ -6,8 +6,10 @@ right now: who owns each sponsor on the board, who has contacted them, the
 contact person, phone and email, last year's and this year's level, amount,
 paid, and the banner and plaque flags. Every column on the sheet shows on a
 sponsor's detail, so a column the board adds later shows up with no change
-here. The sheet's other tabs (website form log, jerseys, plaques) are listed
-under the sponsors.
+here. A Notes column also shows as a short line on the sponsor's card and is
+searched. The header is the first row with three or more filled cells, so a
+blank or title row above it is fine. The sheet's other tabs (website form log,
+jerseys, plaques) are listed under the sponsors.
 
 ```
   sponsorship sheet in Drive (read only from here; never changed)
