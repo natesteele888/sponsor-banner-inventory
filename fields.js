@@ -10,6 +10,8 @@
  *
  * The drawings are a plain diamond per field, not a survey: tell this file a
  * field's quirks (a snack shack, a short porch) under `extras` and it draws them.
+ * The Fields tab also lists banners with no spot ("Place here"), lets whoever
+ * is hanging them mark one hung from its dot, and prints a hang sheet.
  * Field names only here; never a sponsor's name or any sheet data.
  */
 (function () {
@@ -176,10 +178,17 @@
         '<span class="fstate">' + (o.b.hung ? 'Hung' : 'Not hung yet') + '</span></button></li>';
     }).join('') : '';
 
-    var loose = A().banners().filter(function (b) { return !parse(b.locationLabel); }).length;
+    var loose = A().banners().filter(function (b) { return !parse(b.locationLabel); })
+      .sort(function (a, b) { return String(a.sponsorName || '').localeCompare(String(b.sponsorName || '')); });
     $('#fieldEmpty').textContent = list.length ? '' :
-      'No banners placed on this field yet. Open a banner in Banner stock and pick "Where it hangs".';
-    $('#fieldLoose').textContent = loose ? loose + ' banner' + (loose === 1 ? ' has' : 's have') + ' no spot yet. Set one from the banner\'s page in Banner stock.' : '';
+      'No banners placed on this field yet. Tap Place next to a banner below, then tap the drawing.';
+    $('#fieldLoose').innerHTML = loose.length ?
+      '<h3 class="ss-h">Not placed yet (' + loose.length + ')</h3><ul class="flist loose">' + loose.map(function (b) {
+        return '<li class="frow static"><span class="fname">' + esc(b.sponsorName || '(unnamed)') + '</span>' +
+          '<button type="button" class="btn small" data-place="' + esc(b.id) + '">Place here</button></li>';
+      }).join('') + '</ul>' : '';
+    $('#fieldPrint').disabled = !list.length;
+    $('#fieldPrintTitle').textContent = label(f) + ': banners';
     renderCard();
   }
 
@@ -192,9 +201,31 @@
       '<div class="info"><div class="name">' + esc(b.sponsorName || '(unnamed)') + '</div>' +
       '<div class="facts">' + esc([b.tier, b.onSponsorList ? '2026 sponsor' : 'Past sponsor'].filter(Boolean).join(' · ')) + '</div></div>' +
       A().badge(b.hung ? 'Hung' : 'Not hung', b.hung ? 'ok' : 'muted') +
-      '</div><button type="button" class="btn small" id="fieldOpen">Open banner</button>';
+      '</div><div class="fcard-acts">' +
+      '<button type="button" class="btn small' + (b.hung ? '' : ' primary') + '" id="fieldHung">' + (b.hung ? 'Mark not hung' : 'Mark hung') + '</button>' +
+      '<button type="button" class="btn small" id="fieldOpen">Open banner</button>' +
+      '<span class="hint" id="fieldStatus" role="status"></span></div>';
     A().loadThumbs();
     $('#fieldOpen').addEventListener('click', function () { A().openDetail(b.id); });
+    $('#fieldHung').addEventListener('click', function () { setHung(b, !b.hung); });
+  }
+
+  // One tap at the field, for whoever is hanging them. Sends only the hung flag.
+  function setHung(b, on) {
+    var btn = $('#fieldHung');
+    btn.disabled = true;
+    $('#fieldStatus').textContent = 'Saving…';
+    A().apiPost({ action: 'update', id: b.id, hung: on }).then(function (res) {
+      if (!res.ok) throw A().backendError(res.error || 'Save failed.');
+      b.hung = on;
+      render();
+      A().refreshList();
+      $('#fieldStatus').textContent = on ? 'Marked hung.' : 'Marked not hung.';
+    }).catch(function (err) {
+      A().noteProblem('Field hung toggle failed', err);
+      btn.disabled = false;
+      $('#fieldStatus').textContent = A().sendErrorText(err, "Couldn't save. Check your signal, then tap again.");
+    });
   }
 
   function select(id) {
@@ -226,6 +257,13 @@
       var r = e.target.closest('[data-pick]');
       if (r) select(r.dataset.pick);
     });
+    $('#fieldLoose').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-place]');
+      if (!btn) return;
+      A().openDetail(btn.dataset.place);
+      pickerPreset(S.field);
+    });
+    $('#fieldPrint').addEventListener('click', function () { window.print(); });
   }
 
   // ---------- "Where it hangs" on a banner's page ----------
@@ -268,6 +306,16 @@
     $('#spotClear').classList.toggle('hidden', !here.length);
   }
 
+  // Open the picker on a field, ready for a tap (from "Place here").
+  function pickerPreset(fieldId) {
+    if (!byId(fieldId) || !P.banner) return;
+    P.field = fieldId;
+    $('#spotField').value = fieldId;
+    pickerDraw();
+    var box = $('#spotPicker');
+    if (box.scrollIntoView) box.scrollIntoView({ block: 'center' });
+  }
+
   // What Save should send: the new locationLabel, or undefined if unchanged.
   function pickerValue() {
     return P.spot === undefined ? undefined : format(P.spot);
@@ -297,7 +345,7 @@
   document.addEventListener('DOMContentLoaded', function () { wire(); wirePicker(); });
 
   window.Fields = {
-    list: FIELDS, byId: byId, label: label, parse: parse, format: format, diagram: diagram,
+    list: FIELDS, byId: byId, label: label, parse: parse, format: format, diagram: diagram, pickerPreset: pickerPreset,
     show: show, render: render,
     pickerOpen: pickerOpen, pickerValue: pickerValue
   };

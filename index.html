@@ -145,13 +145,15 @@
   <!-- FIELDS VIEW: a drawing of each field, a dot where each banner hangs (fields.js) -->
   <section id="view-fields" class="view hidden">
     <div id="fieldPick" class="segs" aria-label="Field"></div>
+    <div class="filters no-print"><button class="btn small" id="fieldPrint" type="button">Print hang sheet</button></div>
+    <h2 id="fieldPrintTitle" class="print-only"></h2>
     <div class="fwrap">
       <div id="fieldDiagram" class="fdiag"></div>
       <div class="fside">
-        <div id="fieldCard"></div>
+        <div id="fieldCard" class="no-print"></div>
         <ol id="fieldList" class="flist"></ol>
         <p id="fieldEmpty" class="hint"></p>
-        <p id="fieldLoose" class="hint"></p>
+        <div id="fieldLoose" class="no-print"></div>
       </div>
     </div>
   </section>
