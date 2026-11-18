@@ -117,3 +117,9 @@ Setup (Apps Script editor):
 3. Deploy a new version. Google asks once to allow sending email as you.
 
 Until `RECEIPTS_LIVE` is set to `on`, every Send goes only to `RECEIPTS_TEST_TO`, marked [TEST], and the row stays in the list. Set `RECEIPTS_LIVE` to `on` only once the board agrees to send to sponsors; delete it to go back to test mode.
+
+## Sponsor info packets
+
+What sponsors send on the info packet page (level, business, jersey name, write-up, socials, banner choice, logo) shows under **Sponsor info packets** on the Sponsors tab, newest first, with new ones marked. Open one to see everything they sent and the logo from its files folder. A sponsor's card says "Info packet in" when the business name matches. It's read live from the "LYBS Sponsor Info Packets" sheet (tab Packets) and never written to.
+
+Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.

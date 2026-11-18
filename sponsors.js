@@ -135,6 +135,7 @@
       render();
       loadHistory();
       loadReceipts();
+      loadPackets();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
@@ -234,6 +235,62 @@
       $('#spStatus').textContent = res.message || 'Saved.';
       loadReceipts();
     }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
+  }
+
+  // ---------- info packets ----------
+  // What sponsors sent on the info packet page, read live from its sheet.
+
+  function loadPackets() {
+    A().apiPost({ action: 'sponsorPackets' }).then(function (res) {
+      if (!res || !res.ok || !res.found) return;
+      S.packets = res;
+      var t = { headers: res.headers }, bc = colOf(t, /^business/);
+      S.packetKeys = {};
+      res.rows.forEach(function (r) { if (bc >= 0 && r.cells[bc]) S.packetKeys[nameKey(r.cells[bc])] = true; });
+      renderPackets();
+      render();
+    }).catch(function () { /* the box stays hidden */ });
+  }
+
+  function renderPackets() {
+    var box = $('#spPackets'), esc = A().esc, P = S.packets;
+    if (!P || !P.rows.length) { box.classList.add('hidden'); return; }
+    var t = { headers: P.headers };
+    var c = { when: colOf(t, /^submitted/), status: colOf(t, /^status/), level: colOf(t, /^level/), biz: colOf(t, /^business/) };
+    var skip = [colOf(t, /^files folder/), colOf(t, /^files$/)];
+    var get = function (r, k) { return c[k] < 0 ? '' : (r.cells[c[k]] || ''); };
+    var fresh = function (r) { return !get(r, 'status') || /^new/i.test(get(r, 'status')); };
+    var rows = P.rows.slice().reverse();   // newest first
+    var nNew = rows.filter(fresh).length;
+    box.innerHTML = '<h2 class="rc-h">Sponsor info packets (' + rows.length + ')' + (nNew ? ' · ' + nNew + ' new' : '') + '</h2>' +
+      '<ul class="rc-list">' + rows.map(function (r) {
+        var body = P.headers.map(function (h, i) {
+          if (skip.indexOf(i) >= 0 || !r.cells[i] || i === c.biz) return '';
+          return '<p class="ss-row"><span>' + esc(h) + '</span>' + esc(r.cells[i]) + '</p>';
+        }).join('');
+        return '<li class="pk-item"><details data-row="' + r.row + '"><summary><b>' + esc(get(r, 'biz') || 'No business name') + '</b>' +
+          '<span>' + esc([get(r, 'level'), get(r, 'when')].filter(Boolean).join(' · ')) + '</span>' +
+          A().badge(fresh(r) ? 'New' : get(r, 'status'), fresh(r) ? 'warn' : 'muted') + '</summary>' +
+          '<div class="pk-logo" aria-live="polite"></div>' + body + '</details></li>';
+      }).join('') + '</ul>';
+    box.classList.remove('hidden');
+    $$('#spPackets details').forEach(function (d) {
+      d.addEventListener('toggle', function () {
+        var spot = d.querySelector('.pk-logo');
+        if (!d.open || spot.dataset.done) return;
+        spot.dataset.done = '1';
+        spot.textContent = 'Loading logo…';
+        A().apiPost({ action: 'packetLogo', row: Number(d.dataset.row) }).then(function (res) {
+          spot.textContent = '';
+          if (!res.ok) { spot.textContent = res.error || 'Could not load the logo.'; return; }
+          if (!res.logo) { spot.textContent = 'No logo image in the files yet.'; return; }
+          var img = document.createElement('img');
+          img.className = 'sp-logo'; img.alt = 'Logo they sent';
+          img.src = 'data:' + res.logo.mime + ';base64,' + res.logo.base64;
+          spot.appendChild(img);
+        }).catch(function () { spot.textContent = 'Could not load the logo. Try again.'; spot.dataset.done = ''; });
+      });
+    });
   }
 
   // ---------- year over year ----------
@@ -393,7 +450,8 @@
             s.tier ? s.tier + (s.amountText ? ' ' + s.amountText : '') : (s.tierPrev ? 'Last year: ' + s.tierPrev : ''),
             s.owner ? 'Owner: ' + s.owner : '',
             String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
-            s.team ? 'Team: ' + s.team : ''
+            s.team ? 'Team: ' + s.team : '',
+            S.packetKeys && S.packetKeys[s.key] ? 'Info packet in' : ''
           ]) +
           (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
         '</div>' +
