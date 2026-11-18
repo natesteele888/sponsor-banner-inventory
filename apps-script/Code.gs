@@ -84,15 +84,15 @@ function doPost(e) {
     }
   }
 
-  // Ballclub (the team app) is the second door: a coach signed in there can
-  // ask for the names of their own team's sponsors and nothing else. It has
-  // its own sign-in check (authorizeCoach_ in Season.gs), never the board's.
-  if (publicAction === 'teamSponsors') {
+  // Ballclub team pages are the second door: someone signed in to a team
+  // there gets that team's "Sponsored by" names and logos, nothing else. It
+  // has its own sign-in check (authorizeTeamViewer_ in Season.gs).
+  if (publicAction === 'teamPageSponsor') {
     try {
-      return teamSponsorsRequest_(data);
+      return teamPageSponsorRequest_(data);
     } catch (err) {
-      console.log('teamSponsors failed: ' + err);
-      return fail('Could not load sponsors right now.');
+      console.log('teamPageSponsor failed: ' + err);
+      return fail('Could not load the sponsor right now.');
     }
   }
 
@@ -119,6 +119,7 @@ function doPost(e) {
     // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
     if (action === 'sponsorBook') return ok(sponsorBook());
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
+    if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.
     if (action === 'sponsorSheet') return ok(sponsorSheet());
     return fail('Unknown action.');

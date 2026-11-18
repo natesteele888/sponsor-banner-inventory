@@ -866,7 +866,9 @@ function sponsorTeamSave(data) {
   try {
     var props = PropertiesService.getScriptProperties();
     var name = SPONSOR_TEAM_PREFIX + key.slice(0, 80);
-    if (!fields.division && !fields.team && !fields.note) {
+    var before = JSON.parse(props.getProperty(name) || 'null');
+    if (before && before.imageFileId) fields.imageFileId = before.imageFileId;
+    if (!fields.division && !fields.team && !fields.note && !fields.imageFileId) {
       props.deleteProperty(name);
       return ok({ message: 'Team cleared.' });
     }
@@ -963,36 +965,45 @@ function sheetRows_(ss, tabName, wanted) {
 }
 
 
-// ---------- for Ballclub (the coaches' team app) ----------
+// ---------- for Ballclub team pages ("Sponsored by") ----------
 //
-// Coaches thank their team's sponsor in Ballclub's Share to Social post. All
-// they need is the sponsor's name, so that is all this sends: company names
-// for one team, with no contact, level, amount, paid or notes, and nothing
-// about any other team. A coach is anyone Ballclub itself lets edit that team:
-// its coach code account, or a Google account the board gave the coach role
-// for that team in Ballclub. Board accounts keep using the Sponsors tab.
+// Sponsors are board-only. The one place one shows outside the board is the
+// team's own page in Ballclub: "Sponsored by", with that season's sponsor (or
+// sponsors) lined up with the team in the Sponsors tab, and their logo. So
+// this answers one team at a time with names and logos only: no contact,
+// level, amount, paid, owner or notes, and nothing about any other team.
+//
+// Who can ask: anyone Ballclub itself lets see that team's page (its database
+// rules, teams/<team> .read): the team's own code accounts, a Google account
+// holding a grant for that team, or a Ballclub board member. Ballclub's
+// signed-out public view gets nothing.
+//
+// The logo is the one the board sets in the Sponsors tab's team box (saved in
+// the Drive folder below), or else a PNG/JPG/GIF/WebP logo the sponsor sent
+// through their reply form. Either way it is read from Drive each time; no
+// image lives in any repo.
 
 // Ballclub's Firebase project. Both are public identifiers already shipped in
 // Ballclub's own index.html; neither can read anything by itself.
 var BALLCLUB_WEB_API_KEY = 'AIzaSyCK2-ZDnWxSs-5ghhueRIR4OaSZ-1NgHGY';
 var BALLCLUB_DB_URL = 'https://lybs-ballclub-default-rtdb.firebaseio.com';
+var TEAM_LOGO_FOLDER_NAME = 'Team Page Logos';
+var TEAM_LOGO_MAX_BYTES = 5 * 1024 * 1024;
+var TEAM_PAGE_MAX_SPONSORS = 3;
 
-function teamSponsorsRequest_(data) {
+function teamPageSponsorRequest_(data) {
   var teamId = String(data.teamId || '').toLowerCase();
   if (!/^[a-z0-9]+(-[a-z0-9]+){0,4}$/.test(teamId) || teamId.length > 40) return fail('Unknown team.');
-  var who = authorizeCoach_(String(data.idToken || ''), teamId);
+  var who = authorizeTeamViewer_(String(data.idToken || ''), teamId);
   if (!who.ok) return fail(who.error);
-  return ok(teamSponsors_(teamId));
+  return ok(teamPageSponsor_(teamId));
 }
 
-// Same check Ballclub's own database rules make before a coach can edit a
-// team (database.rules.json there): the token is a real Ballclub sign-in, and
-// it is that team's coach code account or holds access/<team>/<uid> = coach.
-function authorizeCoach_(idToken, teamId) {
-  var denied = { ok: false, error: 'Only this team’s coaches can see its sponsors.' };
+function authorizeTeamViewer_(idToken, teamId) {
+  var denied = { ok: false, error: 'Not signed in to this team.' };
   if (!idToken) return { ok: false, error: 'Please sign in.' };
   var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken + '|' + teamId);
-  var cacheKey = 'coach_' + Utilities.base64EncodeWebSafe(digest);
+  var cacheKey = 'teamview_' + Utilities.base64EncodeWebSafe(digest);
   var cache = CacheService.getScriptCache();
   if (cache.get(cacheKey) === 'yes') return { ok: true };
 
@@ -1002,51 +1013,167 @@ function authorizeCoach_(idToken, teamId) {
       payload: JSON.stringify({ idToken: idToken }), muteHttpExceptions: true });
   if (lookup.getResponseCode() !== 200) return { ok: false, error: 'Your sign-in expired. Please sign in again.' };
   var user = (JSON.parse(lookup.getContentText()).users || [])[0];
-  if (!user || !user.localId) return denied;
+  if (!user || !user.localId || !user.email) return denied;
 
-  var allowed = String(user.email || '').toLowerCase() === 'coach-' + teamId + '-gate@lybsballclub.internal';
-  if (!allowed && user.email && user.emailVerified) {
-    var grant = UrlFetchApp.fetch(
-      BALLCLUB_DB_URL + '/access/' + encodeURIComponent(teamId) + '/' + encodeURIComponent(user.localId) +
-        '.json?auth=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
-    allowed = grant.getResponseCode() === 200 && JSON.parse(grant.getContentText() || 'null') === 'coach';
+  var email = String(user.email).toLowerCase();
+  var allowed = email === 'coach-' + teamId + '-gate@lybsballclub.internal' ||
+                email === 'player-' + teamId + '-gate@lybsballclub.internal';
+  if (!allowed && user.emailVerified) {
+    var auth = '.json?auth=' + encodeURIComponent(idToken);
+    var uid = encodeURIComponent(user.localId);
+    var grant = UrlFetchApp.fetch(BALLCLUB_DB_URL + '/access/' + encodeURIComponent(teamId) + '/' + uid + auth,
+      { muteHttpExceptions: true });
+    allowed = grant.getResponseCode() === 200 && JSON.parse(grant.getContentText() || 'null') !== null;
+    if (!allowed) {
+      var board = UrlFetchApp.fetch(BALLCLUB_DB_URL + '/boardMembers/' + uid + auth, { muteHttpExceptions: true });
+      allowed = board.getResponseCode() === 200 && JSON.parse(board.getContentText() || 'null') === true;
+    }
   }
   if (!allowed) return denied;
   cache.put(cacheKey, 'yes', 300);
   return { ok: true };
 }
 
-// Every sponsor lined up with this team, by name only: a team picked in the
-// Sponsors tab wins, then the sheet's own "Associated Team" cell, then the
-// Jerseys tab. A team matches when every word of its Ballclub id shows up in
-// the label ("majors-blue" matches "Baseball Majors · Blue").
-function teamSponsors_(teamId) {
+// The sponsors lined up with this team: a team set in the Sponsors tab wins,
+// else the sheet's own "Associated Team" cell. A team matches when every word
+// of its Ballclub id is in the label ("majors-blue" matches "Majors · Blue").
+function teamPageSponsor_(teamId) {
   var ss = sponsorSpreadsheet_();
   var words = teamId.split('-');
   function matches(label) {
     var have = String(label || '').toLowerCase().split(/[^a-z0-9]+/);
     return words.every(function (w) { return have.indexOf(w) >= 0; });
   }
-  var picked = {};
-  sponsorTeams_().rows.forEach(function (t) { picked[String(t.key)] = [t.division, t.team].join(' '); });
-  var names = {}, out = [];
-  function add(company) {
-    var name = String(company || '').trim().slice(0, 120);
-    var k = companyKey_(name);
-    if (name && k && !names[k]) { names[k] = 1; out.push(name); }
-  }
+  var picks = {};
+  sponsorTeams_().rows.forEach(function (t) { picks[String(t.key)] = t; });
+  var seen = {}, list = [];
   sheetRows_(ss, SPONSOR_TAB, { company: /^(company|business)/, team: /^(associated team|team)/ }).rows
     .forEach(function (r) {
-      if (!r.company) return;
-      var k = companyKey_(r.company);
-      var label = picked[k] !== undefined ? picked[k] : r.team;
-      if (matches(label)) add(r.company);
+      var key = companyKey_(r.company);
+      if (!r.company || !key || seen[key]) return;
+      var p = picks[key];
+      var label = p && (p.division || p.team) ? [p.division, p.team].join(' ') : r.team;
+      if (!matches(label)) return;
+      seen[key] = 1;
+      list.push({ key: key, name: String(r.company).trim().slice(0, 120), imageFileId: p && p.imageFileId });
     });
-  sheetRows_(ss, 'Jerseys', { company: /^(business|company|sponsor)/, team: /team/ }).rows
-    .forEach(function (r) {
-      var k = companyKey_(r.company);
-      if (r.company && picked[k] === undefined && matches(r.team)) add(r.company);
+  list.sort(function (a, b) { return a.name.localeCompare(b.name); });
+  list = list.slice(0, TEAM_PAGE_MAX_SPONSORS);
+  var folders = null;
+  return {
+    season: SEASON,
+    teamId: teamId,
+    sponsors: list.map(function (s) {
+      var img = null;
+      try {
+        img = s.imageFileId ? teamLogoById_(s.imageFileId) : null;
+        if (!img) {
+          folders = folders || intakeFolders_();
+          img = folders[s.key] ? intakeLogo_(folders[s.key]) : null;
+        }
+      } catch (e) {
+        console.log('team page logo for ' + s.key + ': ' + e);
+      }
+      return { name: s.name, image: img };
+    })
+  };
+}
+
+// Only a file inside the Team Page Logos folder is ever served, so a damaged
+// or edited entry can't be used to read some other Drive file.
+function teamLogoById_(fileId) {
+  var file = DriveApp.getFileById(String(fileId));
+  var parents = file.getParents();
+  var inFolder = false;
+  while (parents.hasNext()) { if (parents.next().getName() === TEAM_LOGO_FOLDER_NAME) inFolder = true; }
+  if (!inFolder || file.isTrashed()) return null;
+  return logoBlob_(file);
+}
+
+// company key -> the Drive folder the sponsor's reply form saved files in.
+function intakeFolders_() {
+  var out = {};
+  try {
+    readSeason_().rows.forEach(function (r) {
+      if (r.key && r.fileFolderId) out[String(r.key)] = String(r.fileFolderId);
     });
-  out.sort(function (a, b) { return a.localeCompare(b); });
-  return { season: SEASON, teamId: teamId, sponsors: out };
+  } catch (e) {
+    console.log('intake folders: ' + e);
+  }
+  return out;
+}
+
+// The newest logo they sent that a browser can show (not AI, EPS, PDF...).
+function intakeLogo_(folderId) {
+  var it = DriveApp.getFolderById(folderId).getFiles();
+  var best = null;
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed() || f.getName().indexOf('_logo_') < 0) continue;
+    if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].indexOf(f.getMimeType()) < 0) continue;
+    if (!best || f.getLastUpdated() > best.getLastUpdated()) best = f;
+  }
+  return best ? logoBlob_(best) : null;
+}
+
+function logoBlob_(file) {
+  var blob = file.getSize() > 400 * 1024 ? (file.getThumbnail() || null) : file.getBlob();
+  if (!blob) return null;
+  var mime = blob.getContentType();
+  if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].indexOf(mime) < 0) return null;
+  return { mime: mime, base64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+// Board side: the Sponsors tab's team box sets or clears a sponsor's team page
+// logo. The file goes in the Team Page Logos folder (inside the Sponsor
+// Banners folder) and its id is kept on the sponsor's team entry.
+function sponsorTeamLogo(data) {
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var company = clean(data.company, 120);
+  var key = companyKey_(company);
+  if (!key) return fail('No sponsor given.');
+  var name = SPONSOR_TEAM_PREFIX + key.slice(0, 80);
+  var props = PropertiesService.getScriptProperties();
+  if (data.get) {
+    var cur = JSON.parse(props.getProperty(name) || 'null');
+    var img = null;
+    try {
+      img = cur && cur.imageFileId ? teamLogoById_(cur.imageFileId) : null;
+      var source = img ? 'set' : '';
+      if (!img) {
+        var folders = intakeFolders_();
+        img = folders[key] ? intakeLogo_(folders[key]) : null;
+        source = img ? 'form' : '';
+      }
+    } catch (e) { console.log('logo get: ' + e); }
+    return ok({ image: img, source: img ? source : '' });
+  }
+  var fileId = '';
+  if (data.photo) {
+    var parts = String(data.photo).split(',');
+    var bytes = Utilities.base64Decode(parts[parts.length - 1]);
+    if (bytes.length > TEAM_LOGO_MAX_BYTES) return fail('That logo is larger than 5 MB. Try a smaller PNG or JPG.');
+    var type = sniffImage(bytes);
+    if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].indexOf(type) < 0) {
+      return fail('Use a PNG, JPG, GIF or WebP logo.');
+    }
+    var parent = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    var fit = parent.getFoldersByName(TEAM_LOGO_FOLDER_NAME);
+    var folder = fit.hasNext() ? fit.next() : parent.createFolder(TEAM_LOGO_FOLDER_NAME);
+    var safe = String(company).replace(/[^A-Za-z0-9]+/g, '') + '_team-page-logo_' + todayStamp() + '.' + type.split('/')[1];
+    fileId = folder.createFile(Utilities.newBlob(bytes, type, safe)).getId();
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return fail('Someone else is saving right now. Try again in a moment.');
+  try {
+    var entry = JSON.parse(props.getProperty(name) || 'null') ||
+      { key: key, company: company, division: '', team: '', note: '' };
+    if (fileId) entry.imageFileId = fileId; else delete entry.imageFileId;
+    entry.updatedAt = todayStamp();
+    if (!entry.division && !entry.team && !entry.note && !entry.imageFileId) props.deleteProperty(name);
+    else props.setProperty(name, JSON.stringify(entry));
+  } finally {
+    lock.releaseLock();
+  }
+  return ok({ message: fileId ? 'Logo saved.' : 'Logo removed.' });
 }
