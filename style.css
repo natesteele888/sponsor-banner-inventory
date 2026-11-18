@@ -351,3 +351,10 @@ select, input[type=url] {
   .frow::after { content: '\2610  hung'; margin-left: auto; font-size: 12px; }
   .fstate { display: none; }
 }
+
+/* Not on the board: one plain screen, no tabs or empty lists. */
+.noaccess { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 8px 0 16px; }
+.noaccess h2 { margin: 0 0 6px; font: 600 20px 'DM Sans', sans-serif; color: var(--ink); }
+.noaccess p { margin: 0 0 14px; color: var(--ink2); line-height: 1.45; }
+body.locked .tabs, body.locked .view, body.locked #status, body.locked #loadRetry,
+body.locked .scrim, body.locked .sheet { display: none !important; }
