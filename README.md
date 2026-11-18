@@ -118,6 +118,11 @@ softball fields, Powell, McNally, Fitzgerald) with a dot wherever a banner
 hangs; tap a dot for that banner. To place one, open the banner in **Banner
 stock**, pick its field under **Where it hangs** and tap the drawing.
 
+Banners with no spot are listed under the drawing with **Place here**, which
+opens the banner ready to tap. Tap a dot, then **Mark hung**, to tick one off
+while you're at the field, and **Print hang sheet** prints the drawing with a
+numbered checklist for the crew.
+
 The spot is kept in the banner row's `locationLabel` column as
 `spot:<field id>@<x>,<y>` (0 to 100 across the drawing), so the Apps Script
 backend didn't change. The old `lat`/`lng` columns from the earlier street map

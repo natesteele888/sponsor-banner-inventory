@@ -331,3 +331,23 @@ select, input[type=url] {
 
 /* On the light blue of dark mode, dark text reads better than white. */
 @media (prefers-color-scheme: dark) { .tab-btn.active, .btn.primary { color: #0B1120; } }
+
+/* Fields tab extras: unplaced banners, mark hung, the printed hang sheet. */
+.fcard-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.flist.loose .frow.static { cursor: default; justify-content: space-between; }
+.print-only { display: none; }
+@media print {
+  @page { margin: 12mm; }
+  body { background: #fff; color: #000; }
+  .topbar, .foot, .no-print, #fieldPick, .scrim, .sheet, .toast { display: none !important; }
+  .print-only { display: block; font: 600 20px 'DM Sans', sans-serif; margin: 0 0 8px; color: #000; }
+  .view { display: none !important; }
+  #view-fields { display: block !important; }
+  main { padding: 0; max-width: none; }
+  .fwrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .fdiag { border: 0; padding: 0; background: none; }
+  .fd { max-height: none; }
+  .frow { border: 0; border-bottom: 1px solid #999; border-radius: 0; color: #000; background: none; }
+  .frow::after { content: '\2610  hung'; margin-left: auto; font-size: 12px; }
+  .fstate { display: none; }
+}

@@ -4,9 +4,11 @@ Standalone app replacing the one-time "35 banner photos vs. the 2026 sponsor
 list" Claude artifact. Architecture, setup steps and the Apps Script
 deployment checklist are in [README.md](README.md) — read that first.
 
-Styled to match the LYBS Dashboard's own look (navy/gold/blue, DM Sans +
-Bebas Neue) — see `nate-brain/playbooks/look.md` for the token values and
-why this isn't a Sandlot copy. Linked from the Dashboard's Board nav
+Styled to match the other Dashboard tools: the shared navy header card
+(lybs-reporting `shared/app-header.css`, copied into style.css as `.top` /
+`.hbtn`) and the tokens from lybs-reporting `shared/uniform-theme.css`, light
+by default and dark with the device. Each card has one colored status badge;
+everything else is a plain facts line. Keep it that way: no rows of pills. Linked from the Dashboard's Board nav
 (`lybs-reporting/app.js` NAV_CATEGORIES), admin-gated for now.
 
 ## Nate AI Brain (shared memory)

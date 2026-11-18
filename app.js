@@ -490,6 +490,7 @@
     facts: facts,
     setBadge: setBadge,
     openDetail: openDetail,
+    refreshList: function () { renderList(); },
     loadThumbs: lazyLoadThumbs,
     backendError: backendError,
     noteProblem: noteProblem,
