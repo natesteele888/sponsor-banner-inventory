@@ -129,6 +129,10 @@ function doPost(e) {
     if (action === 'sponsorBook') return ok(sponsorBook());
     // This season's committed total next to last season's (History.gs). Totals only.
     if (action === 'sponsorHistory') return ok(sponsorHistory());
+    if (action === 'receiptList') return ok(receiptList());
+    if (action === 'receiptPreview') return receiptPreview(data);
+    if (action === 'receiptSend') return receiptSend(data);
+    if (action === 'receiptMark') return receiptMark(data);
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.

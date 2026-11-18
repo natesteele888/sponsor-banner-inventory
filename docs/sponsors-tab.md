@@ -103,3 +103,17 @@ with Google and see every tab here; the page hides its links to the
 Dashboard. Remove the address to take access away; it ends within five
 minutes. The list stays in the private Apps Script project, never in this
 repo. Needs the Apps Script deploy for this change.
+
+## Donation receipts for paid sponsors
+
+When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Website payments are left out, because the league site already emails its own receipt: a row counts as one when a "Donation received from" notice matches its contact name and amount, when its Paid? or Notes says online or website, or when someone taps **Website sent it**.
+
+The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) plus a button to the sponsor packet page. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
+
+Setup (Apps Script editor):
+
+1. Add `apps-script/Receipts.gs` as a new script file named `Receipts`, and paste the new `Code.gs`.
+2. In **Project Settings → Script Properties**, add `RECEIPT_ORG_ADDRESS`, `RECEIPT_EIN` and `RECEIPT_ISSUER` as the old receipt shows them, `SPONSOR_PACKET_URL` (change it here when the packet page moves), and `RECEIPTS_TEST_TO` (your own address).
+3. Deploy a new version. Google asks once to allow sending email as you.
+
+Until `RECEIPTS_LIVE` is set to `on`, every Send goes only to `RECEIPTS_TEST_TO`, marked [TEST], and the row stays in the list. Set `RECEIPTS_LIVE` to `on` only once the board agrees to send to sponsors; delete it to go back to test mode.
