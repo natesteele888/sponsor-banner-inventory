@@ -1,5 +1,5 @@
-// Network first: updates show right away; the saved copy is only for opening with no signal.
-const CACHE = "banners-v17";
+// Network first: updates show right away; the saved copy is for opening with no signal or one weak bar.
+const CACHE = "banners-v18";
 // Save the page at install, or the first visit caches nothing and an offline open fails.
 // This site's own files only: sponsor data comes from the Apps Script backend and is never saved here.
 const SHELL = ["./", "index.html", "app.js", "season.js", "sponsors.js", "fields.js", "config.js", "style.css", "logo.svg", "manifest.json", "icons/sponsor-banners-192.png", "icons/sponsor-banners-512.png", "intake.html", "intake.js"];
@@ -13,8 +13,21 @@ self.addEventListener("fetch", e => {
   // Same-origin GETs inside this app's folder only: no sign-in traffic, no backend answers.
   const u = new URL(e.request.url);
   if (e.request.method !== "GET" || u.origin !== location.origin || !u.pathname.startsWith(new URL("./", location).pathname)) return;
-  e.respondWith(fetch(e.request).then(res => {
-    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
-    return res;
-  }).catch(() => caches.match(e.request, { ignoreSearch: true })));
+  const r = e.request;
+  const saved = () => caches.match(r, { ignoreSearch: true });
+  const net = fetch(r);
+  // Refresh the saved copy from the network's answer. waitUntil is called now, while the event runs: a call made
+  // later, after the saved copy has already gone out, can be refused and the copy would never refresh.
+  e.waitUntil(net.then(res => {
+    if (res.ok) { const copy = res.clone(); return caches.open(CACHE).then(c => c.put(r, copy)); }
+  }, () => {}));
+  // One weak bar of signal: a fetch can hang a long time without failing. After 3 seconds the saved copy shows
+  // instead (if there is one); with nothing saved, keep waiting for the network.
+  e.respondWith(new Promise(resolve => {
+    let done = false;
+    const give = res => { if (!done && res) { done = true; resolve(res); } };
+    const t = setTimeout(() => saved().then(give), 3000);
+    net.then(res => { clearTimeout(t); give(res); },
+      () => { clearTimeout(t); saved().then(m => { give(m); if (!done) { done = true; resolve(Response.error()); } }); });
+  }));
 });
