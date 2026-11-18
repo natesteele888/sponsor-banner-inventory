@@ -56,7 +56,7 @@
   function count(fn) { return S.rows.filter(fn).length; }
 
   function render() {
-    var esc = A().esc, pill = A().pill;
+    var esc = A().esc, badge = A().badge, facts = A().facts;
     $('#seasonSummary').innerHTML =
       stat(S.rows.length, 'banner sponsors') +
       stat(count(isUnpaid), 'waiting on payment') +
@@ -70,19 +70,20 @@
       return '<li class="banner-card season-card" role="button" tabindex="0" data-key="' + esc(r.key) + '">' +
         '<div class="info">' +
           '<div class="name">' + esc(r.company) + '</div>' +
-          '<div class="meta">' +
-            (r.tier ? pill(r.tier + (r.amount ? ' ' + r.amount : ''), '') : '') +
-            (isUnpaid(r) ? pill('Waiting on payment', 'legacy') :
-              pill(requestLabel(r), r.requestStatus === 'Info received' ? 'on-list' : (isMatchNeeded(r) ? 'legacy' : 'not-hung'))) +
-            pill(r.bannerStatus || 'Not decided', isOrder(r) ? 'legacy' : (isStock(r) ? 'on-list' : '')) +
-          '</div>' +
-          (banner ? '<div class="hint season-sub">Banner: ' + esc(banner) + '</div>' : '') +
+          facts([
+            r.tier ? r.tier + (r.amount ? ' ' + r.amount : '') : '',
+            'Banner: ' + (banner ? 'from stock (' + banner + ')' : (r.bannerStatus || 'Not decided'))
+          ]) +
         '</div>' +
+        (isUnpaid(r) ? badge('Waiting on payment', 'warn') :
+          isMatchNeeded(r) ? badge('Needs a match', 'warn') :
+          r.requestStatus === 'Info received' ? badge('Info received', 'ok') :
+          badge(requestLabel(r), 'muted')) +
       '</li>';
     }).join('') || '<p class="hint">' + (S.rows.length ? 'No sponsors match that filter.' :
       'No 2027 banner sponsors yet. They show up here as they are logged on the sponsorship sheet, sent in from the website, or paid online.') + '</p>';
 
-    $$('.season-card').forEach(function (card) {
+    $$('#seasonList .season-card').forEach(function (card) {
       card.addEventListener('click', function () { open(card.dataset.key); });
       card.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(card.dataset.key); }
@@ -126,8 +127,7 @@
     S.current = r;
     var esc = A().esc;
     $('#ssTitle').textContent = r.company;
-    $('#ssBadge').textContent = r.tier || '';
-    $('#ssBadge').className = 'pill';
+    A().setBadge($('#ssBadge'), r.tier || '', 'muted');
     $('#ssSource').textContent = 'Came in by: ' + (r.source || 'unknown') + (r.addedAt ? ' · added ' + r.addedAt : '');
     ['company', 'amount', 'contactName', 'contactEmail', 'contactPhone', 'notes'].forEach(function (k) { $('#s_' + k).value = r[k] || ''; });
     $('#s_tier').value = r.tier || '';
@@ -291,13 +291,7 @@
   }
 
   function wire() {
-    $$('[data-sfilter]').forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        S.filter = chip.dataset.sfilter;
-        $$('[data-sfilter]').forEach(function (c) { c.classList.toggle('active', c === chip); });
-        render();
-      });
-    });
+    $('#seasonFilter').addEventListener('change', function (e) { S.filter = e.target.value; render(); });
     $('#seasonScanBtn').addEventListener('click', scan);
     $('#seasonAddBtn').addEventListener('click', function () { $('#seasonAddForm').classList.toggle('hidden'); });
     $('#sa_cancel').addEventListener('click', function () { $('#seasonAddForm').classList.add('hidden'); });
