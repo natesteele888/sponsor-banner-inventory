@@ -11,15 +11,9 @@
     search: '',
     imageCache: {},   // driveFileId:size -> data URI
     currentId: null,
-    map: null,
-    mapMarkers: [],
-    pinPicker: null,
-    pendingPin: null,  // {lat,lng} chosen in the picker, not yet saved
     sheetEntry: false, // the open sheet added a history entry for the Back gesture
     skipPop: false     // the next popstate is us giving that entry back
   };
-
-  var NO_MAP_TEXT = "The map couldn't load. Check your signal, then close and reopen the app.";
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -101,6 +95,7 @@
     $('#signOutBtn').addEventListener('click', function () { auth.signOut(); });
     auth.onAuthStateChanged(function (user) {
       setSignedIn(user);
+      $('#whoAmI').textContent = user ? 'Signed in as ' + (user.email || user.displayName || '') : '';
       if (!user) {
         state.banners = [];
         state.imageCache = {};
@@ -186,16 +181,13 @@
         '<div class="thumb-placeholder" data-thumb="' + b.driveFileId + '"></div>' +
         '<div class="info">' +
           '<div class="name">' + esc(b.sponsorName || '(unnamed)') + '</div>' +
-          '<div class="meta">' +
-            pill(b.hung ? 'Hung' : 'Not hung', b.hung ? 'hung' : 'not-hung') +
-            (b.onSponsorList ? pill('2026 sponsor', 'on-list') : pill('Legacy', 'legacy')) +
-            (b.tier ? pill(b.tier, '') : '') +
-          '</div>' +
+          facts([b.tier, b.onSponsorList ? '2026 sponsor' : 'Past sponsor', spotText(b)]) +
         '</div>' +
+        badge(b.hung ? 'Hung' : 'Not hung', b.hung ? 'ok' : 'muted') +
       '</li>';
     }).join('') || '<p class="hint">No banners match that filter.</p>';
 
-    $$('.banner-card').forEach(function (card) {
+    $$('#bannerList .banner-card').forEach(function (card) {
       card.addEventListener('click', function () { openDetail(card.dataset.id); });
       // A keyboard or screen reader opens a banner the same way a tap does.
       card.addEventListener('keydown', function (e) {
@@ -206,8 +198,23 @@
     lazyLoadThumbs();
   }
 
-  function pill(text, cls) {
-    return '<span class="pill ' + cls + '">' + esc(text) + '</span>';
+  // One status per card, at its right edge; color only where it calls for
+  // action (ok = done, warn = needs doing, muted = just so you know).
+  function badge(text, tone) {
+    return text ? '<span class="badge ' + (tone || 'muted') + '">' + esc(text) + '</span>' : '';
+  }
+  // The card's other facts: plain text in one line, not a row of pills.
+  function facts(list) {
+    var t = list.filter(function (x) { return x != null && String(x).trim(); }).map(esc).join(' · ');
+    return t ? '<div class="facts">' + t + '</div>' : '';
+  }
+  function setBadge(el, text, tone) {
+    el.textContent = text || '';
+    el.className = 'badge ' + (tone || 'muted') + (text ? '' : ' hidden');
+  }
+  function spotText(b) {
+    var s = window.Fields && window.Fields.parse(b.locationLabel);
+    return s ? 'At ' + window.Fields.byId(s.field).name : '';
   }
 
   function esc(s) {
@@ -262,10 +269,8 @@
     var b = state.banners.find(function (x) { return String(x.id) === String(id); });
     if (!b) return;
     state.currentId = b.id;
-    state.pendingPin = null;
 
-    $('#detailBadge').textContent = b.hung ? 'Hung' : 'Not hung';
-    $('#detailBadge').className = 'pill ' + (b.hung ? 'hung' : 'not-hung');
+    setBadge($('#detailBadge'), b.hung ? 'Hung' : 'Not hung', b.hung ? 'ok' : 'muted');
     $('#detailImg').removeAttribute('src');
     $('#detailImgStatus').textContent = 'Loading photo…';
 
@@ -281,11 +286,7 @@
     $('#f_hung').checked = !!b.hung;
     $('#f_notes').value = b.notes || '';
 
-    updatePinStatus(b);
-    $('#pinPicker').classList.add('hidden');
-    // Leaflet refuses to start twice on one element unless the old map is removed.
-    if (state.pinPicker) { state.pinPicker.remove(); state.pinPicker = null; }
-    $('#pinPicker').innerHTML = '';
+    if (window.Fields) window.Fields.pickerOpen(b);
 
     $('#detailStatus').textContent = '';
     $('#detailScrim').classList.remove('hidden');
@@ -301,14 +302,6 @@
         $('#detailImgStatus').textContent = 'Could not load the photo.';
       }
     });
-  }
-
-  function updatePinStatus(b) {
-    var lat = state.pendingPin ? state.pendingPin.lat : b.lat;
-    var lng = state.pendingPin ? state.pendingPin.lng : b.lng;
-    $('#pinStatus').textContent = (lat != null && lng != null)
-      ? 'Pinned at ' + Number(lat).toFixed(5) + ', ' + Number(lng).toFixed(5)
-      : 'No pin dropped yet.';
   }
 
   function addSheetEntry() {
@@ -362,111 +355,21 @@
       hung: $('#f_hung').checked,
       notes: $('#f_notes').value
     };
-    if (state.pendingPin) {
-      payload.lat = state.pendingPin.lat;
-      payload.lng = state.pendingPin.lng;
-    }
+    // Where it hangs: only sent when it changed, so a Save never wipes it by accident.
+    var spot = window.Fields ? window.Fields.pickerValue() : undefined;
+    if (spot !== undefined) payload.locationLabel = spot;
     $('#detailStatus').textContent = 'Saving…';
     apiPost(payload).then(function (res) {
       if (!res.ok) throw backendError(res.error || 'Save failed.');
-      Object.assign(b, payload);
-      if (state.pendingPin) { b.lat = state.pendingPin.lat; b.lng = state.pendingPin.lng; }
+      Object.keys(payload).forEach(function (k) { if (k !== 'action') b[k] = payload[k]; });
       $('#detailStatus').textContent = 'Saved.';
       renderList();
+      if (!$('#view-fields').classList.contains('hidden') && window.Fields) window.Fields.render();
       setTimeout(function () { closeDetail(); }, 400);
     }).catch(function (err) {
       noteProblem('Banner save failed', err);
       $('#detailStatus').textContent = sendErrorText(err, "Couldn't save. Check your signal, then tap Save again.");
     });
-  }
-
-  // Leaflet loads async (index.html). If it is still on its way, say so and
-  // finish the job when it lands; only give up once it has really failed.
-  function withLeaflet(statusEl, fn) {
-    if (typeof L !== 'undefined') return fn();
-    var s = $('#leafletJs');
-    if (window.leafletDone || !s) { statusEl.textContent = NO_MAP_TEXT; return; }
-    statusEl.textContent = 'Loading the map\u2026';
-    var go = function () {
-      s.removeEventListener('load', go); s.removeEventListener('error', go);
-      if (typeof L === 'undefined') { statusEl.textContent = NO_MAP_TEXT; return; }
-      statusEl.textContent = '';
-      fn();
-    };
-    s.addEventListener('load', go);
-    s.addEventListener('error', go);
-  }
-
-  function openPinPicker() {
-    withLeaflet($('#pinStatus'), showPinPicker);
-  }
-
-  function showPinPicker() {
-    var picker = $('#pinPicker');
-    picker.classList.remove('hidden');
-    if (state.pinPicker) { state.pinPicker.invalidateSize(); return; }
-
-    var b = state.banners.find(function (x) { return String(x.id) === String(state.currentId); });
-    var start = state.pendingPin || (b.lat != null ? { lat: b.lat, lng: b.lng } : { lat: 42.6757, lng: -71.7323 }); // Lunenburg, MA
-
-    var map = L.map(picker, { attributionControl: true }).setView([start.lat, start.lng], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    var marker = L.marker([start.lat, start.lng], { draggable: true }).addTo(map);
-    marker.on('dragend', function () {
-      var p = marker.getLatLng();
-      state.pendingPin = { lat: p.lat, lng: p.lng };
-      updatePinStatus(b);
-    });
-    map.on('click', function (e) {
-      marker.setLatLng(e.latlng);
-      state.pendingPin = { lat: e.latlng.lat, lng: e.latlng.lng };
-      updatePinStatus(b);
-    });
-
-    state.pinPicker = map;
-  }
-
-  // ---------- map view ----------
-
-  function renderMap() {
-    // The map library comes from the web, so on weak signal it may not have loaded yet.
-    withLeaflet($('#map'), drawMap);
-  }
-
-  function drawMap() {
-    if (!state.map) {
-      state.map = L.map('map').setView([42.6757, -71.7323], 14);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(state.map);
-    } else {
-      state.map.invalidateSize();
-    }
-    state.mapMarkers.forEach(function (m) { state.map.removeLayer(m); });
-    state.mapMarkers = [];
-
-    var pinned = state.banners.filter(function (b) { return b.lat != null && b.lng != null; });
-    pinned.forEach(function (b) {
-      var marker = L.marker([b.lat, b.lng]).addTo(state.map);
-      marker.bindPopup(
-        '<b>' + esc(b.sponsorName) + '</b><br>' + (b.hung ? 'Hung' : 'Not hung') +
-        '<br><a href="#" data-open-id="' + b.id + '">Open</a>'
-      );
-      marker.on('popupopen', function () {
-        var link = document.querySelector('[data-open-id="' + b.id + '"]');
-        if (link) link.addEventListener('click', function (e) { e.preventDefault(); openDetail(b.id); });
-      });
-      state.mapMarkers.push(marker);
-    });
-
-    if (pinned.length) {
-      state.map.fitBounds(L.latLngBounds(pinned.map(function (b) { return [b.lat, b.lng]; })), { padding: [30, 30], maxZoom: 17 });
-    }
   }
 
   // ---------- add view ----------
@@ -522,8 +425,13 @@
   function showView(name) {
     $$('.view').forEach(function (v) { v.classList.add('hidden'); });
     $('#view-' + name).classList.remove('hidden');
-    $$('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.view === name); });
-    if (name === 'map') renderMap();
+    var tab = name === 'add' ? 'list' : name; // adding a banner is part of Banner stock
+    $$('.tab-btn').forEach(function (b) {
+      var on = b.dataset.view === tab;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    if (name === 'fields' && window.Fields) window.Fields.show();
     if (name === 'season' && window.Season) window.Season.show();
     if (name === 'sponsors' && window.Sponsors) window.Sponsors.show();
   }
@@ -533,7 +441,6 @@
   function init() {
     if (NOT_CONFIGURED) { showConfigWarning(); }
 
-    // Sign out is styled as a tab but has no view of its own.
     $$('.tab-btn[data-view]').forEach(function (btn) {
       btn.addEventListener('click', function () { showView(btn.dataset.view); });
     });
@@ -542,14 +449,12 @@
       state.search = e.target.value;
       renderList();
     });
-    $$('#filterChips .chip').forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        state.filter = chip.dataset.filter;
-        $$('#filterChips .chip').forEach(function (c) { c.classList.remove('active'); });
-        chip.classList.add('active');
-        renderList();
-      });
+    $('#bannerFilter').addEventListener('change', function (e) {
+      state.filter = e.target.value;
+      renderList();
     });
+    $('#addOpen').addEventListener('click', function () { showView('add'); });
+    $('#addBack').addEventListener('click', function () { showView('list'); });
 
     window.addEventListener('popstate', onPopState);
     $('#loadRetry').addEventListener('click', loadBanners);
@@ -557,10 +462,9 @@
     $('#detailScrim').addEventListener('click', closeDetail);
     $('#detailSave').addEventListener('click', saveDetail);
     $('#f_hung').addEventListener('change', function () {
-      $('#detailBadge').textContent = $('#f_hung').checked ? 'Hung' : 'Not hung';
-      $('#detailBadge').className = 'pill ' + ($('#f_hung').checked ? 'hung' : 'not-hung');
+      var on = $('#f_hung').checked;
+      setBadge($('#detailBadge'), on ? 'Hung' : 'Not hung', on ? 'ok' : 'muted');
     });
-    $('#dropPinBtn').addEventListener('click', openPinPicker);
 
     $('#addForm').addEventListener('submit', submitAdd);
     $('#addPhoto').addEventListener('change', function () {
@@ -582,7 +486,11 @@
   window.BannerApp = {
     apiPost: apiPost,
     esc: esc,
-    pill: pill,
+    badge: badge,
+    facts: facts,
+    setBadge: setBadge,
+    openDetail: openDetail,
+    loadThumbs: lazyLoadThumbs,
     backendError: backendError,
     noteProblem: noteProblem,
     sendErrorText: sendErrorText,

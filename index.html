@@ -13,8 +13,6 @@
 <!-- Fonts load without blocking the first paint; style.css falls back to system fonts meanwhile. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap"></noscript>
-<!-- Loaded without blocking: a slow stylesheet here would hold up every script below it. -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,18 +31,21 @@
   <p id="signinMsg" class="signin-msg" role="alert"></p>
 </section>
 
+<!-- Header in the Dashboard family's shared pattern: a navy card with the logo,
+     title and a way back to the Dashboard. Page actions sit below it, not in it. -->
 <header class="topbar hidden">
-  <div class="header-left" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-    <img src="logo.svg" alt="LYBS logo" style="height:36px;width:auto;flex-shrink:0;" loading="lazy">
-    <h1 style="margin:0;">LYBS <span class="accent">Sponsors</span></h1>
+  <div class="top">
+    <div class="brand">
+      <a href="https://lybs-dashboard.web.app/" aria-label="LYBS Dashboard"><img src="logo.svg" alt="LYBS" class="logo"></a>
+      <div><h1>Sponsors <span>&amp; banners</span></h1><div class="sub">Board only: who's in, what's paid, where each banner hangs</div></div>
+    </div>
+    <div class="bar"><a class="hbtn home" href="https://lybs-dashboard.web.app/">&larr; Dashboard</a></div>
   </div>
-  <nav class="tabs">
+  <nav class="tabs" aria-label="Sections">
     <button class="tab-btn" data-view="sponsors">Sponsors</button>
-    <button class="tab-btn" data-view="list">Banners</button>
     <button class="tab-btn" data-view="season">2027 banners</button>
-    <button class="tab-btn" data-view="map">Map</button>
-    <button class="tab-btn" data-view="add">＋ Add</button>
-    <button class="tab-btn" id="signOutBtn" type="button">Sign out</button>
+    <button class="tab-btn" data-view="list">Banner stock</button>
+    <button class="tab-btn" data-view="fields">Fields</button>
   </nav>
 </header>
 
@@ -55,18 +56,18 @@
     <div id="spSummary" class="season-summary"></div>
     <div class="toolbar">
       <input id="spSearch" type="search" placeholder="Search sponsor, contact, owner, team…">
-      <div class="season-acts">
-        <label class="sp-owner">Owner <select id="spOwner"><option value="">Everyone</option></select></label>
+      <div class="filters">
+        <label>Show <select id="spFilter">
+          <option value="all">All sponsors</option>
+          <option value="signed">Signed up</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Not paid yet</option>
+          <option value="notContacted">Not contacted</option>
+          <option value="lapsed">Past sponsors, not back yet</option>
+          <option value="noTeam">Signed up, no team</option>
+        </select></label>
+        <label>Owner <select id="spOwner"><option value="">Everyone</option></select></label>
         <button class="btn small" id="spRefresh" type="button">Refresh</button>
-      </div>
-      <div class="chips" id="spChips">
-        <button class="chip active" data-spfilter="all">All</button>
-        <button class="chip" data-spfilter="signed">Signed up</button>
-        <button class="chip" data-spfilter="paid">Paid</button>
-        <button class="chip" data-spfilter="unpaid">Not paid yet</button>
-        <button class="chip" data-spfilter="notContacted">Not contacted</button>
-        <button class="chip" data-spfilter="lapsed">Past sponsors, not back yet</button>
-        <button class="chip" data-spfilter="noTeam">Signed up, no team</button>
       </div>
     </div>
     <div id="spStatus" class="status"></div>
@@ -79,12 +80,15 @@
   <section id="view-list" class="view">
     <div class="toolbar">
       <input id="search" type="search" placeholder="Search sponsor name…">
-      <div class="chips" id="filterChips">
-        <button class="chip active" data-filter="all">All</button>
-        <button class="chip" data-filter="hung">Hung</button>
-        <button class="chip" data-filter="notHung">Not hung</button>
-        <button class="chip" data-filter="onList">2026 sponsor</button>
-        <button class="chip" data-filter="legacy">Legacy</button>
+      <div class="filters">
+        <label>Show <select id="bannerFilter">
+          <option value="all">All banners</option>
+          <option value="hung">Hung</option>
+          <option value="notHung">Not hung</option>
+          <option value="onList">2026 sponsors</option>
+          <option value="legacy">Past sponsors</option>
+        </select></label>
+        <button class="btn small primary" id="addOpen" type="button">＋ Add a banner</button>
       </div>
     </div>
     <div id="status" class="status"></div>
@@ -96,18 +100,18 @@
   <!-- 2027 VIEW: every banner-level sponsor for the season -->
   <section id="view-season" class="view hidden">
     <div id="seasonSummary" class="season-summary"></div>
-    <div class="season-acts">
+    <div class="filters">
+      <label>Show <select id="seasonFilter">
+        <option value="all">All banner sponsors</option>
+        <option value="unpaid">Waiting on payment</option>
+        <option value="waiting">Waiting on sponsor</option>
+        <option value="received">Info received</option>
+        <option value="match">Needs a match</option>
+        <option value="order">Banner to order</option>
+        <option value="stock">Banner from stock</option>
+      </select></label>
       <button class="btn small" id="seasonScanBtn" type="button">Check for new sponsors</button>
       <button class="btn small" id="seasonAddBtn" type="button">＋ Add sponsor</button>
-    </div>
-    <div class="chips" id="seasonChips">
-      <button class="chip active" data-sfilter="all">All</button>
-      <button class="chip" data-sfilter="order">To order</button>
-      <button class="chip" data-sfilter="stock">From stock</button>
-      <button class="chip" data-sfilter="unpaid">Waiting on payment</button>
-      <button class="chip" data-sfilter="waiting">Waiting on sponsor</button>
-      <button class="chip" data-sfilter="received">Info received</button>
-      <button class="chip" data-sfilter="match">Needs a match</button>
     </div>
     <div id="seasonStatus" class="status"></div>
     <ul id="seasonList" class="banner-list"></ul>
@@ -138,16 +142,24 @@
     </form>
   </section>
 
-  <!-- MAP VIEW -->
-  <section id="view-map" class="view hidden">
-    <p class="hint">Banners with a dropped pin show up here. Tap a pin for details, or drop a new one from a banner's detail view.</p>
-    <div id="map" class="map"></div>
+  <!-- FIELDS VIEW: a drawing of each field, a dot where each banner hangs (fields.js) -->
+  <section id="view-fields" class="view hidden">
+    <div id="fieldPick" class="segs" aria-label="Field"></div>
+    <div class="fwrap">
+      <div id="fieldDiagram" class="fdiag"></div>
+      <div class="fside">
+        <div id="fieldCard"></div>
+        <ol id="fieldList" class="flist"></ol>
+        <p id="fieldEmpty" class="hint"></p>
+        <p id="fieldLoose" class="hint"></p>
+      </div>
+    </div>
   </section>
 
   <!-- ADD VIEW -->
   <section id="view-add" class="view hidden">
     <form id="addForm" class="form">
-      <h2>Add a new banner</h2>
+      <div class="form-head"><h2>Add a new banner</h2><button class="btn small" id="addBack" type="button">Back to Banner stock</button></div>
       <label>Photo
         <input type="file" id="addPhoto" accept="image/*" required>
       </label>
@@ -192,6 +204,7 @@
     </form>
   </section>
 
+  <footer class="foot"><span id="whoAmI"></span><button class="link" id="signOutBtn" type="button">Sign out</button></footer>
 </main>
 
 <!-- DETAIL SHEET -->
@@ -199,7 +212,7 @@
 <section id="detailSheet" class="sheet hidden" role="dialog" aria-label="Banner detail">
   <div class="sheet-top">
     <button class="btn small" id="detailClose">Close</button>
-    <span id="detailBadge" class="pill"></span>
+    <span id="detailBadge" class="badge"></span>
   </div>
   <div class="sheet-body">
     <img id="detailImg" class="detail-img" alt="Banner photo">
@@ -217,10 +230,12 @@
       <label class="row hung-row"><input id="f_hung" type="checkbox"> Currently hung</label>
       <label class="full">Notes <textarea id="f_notes" rows="3"></textarea></label>
     </div>
-    <div class="pin-block">
-      <div id="pinStatus" class="hint"></div>
-      <button class="btn" id="dropPinBtn" type="button">📍 Drop pin on map</button>
-      <div id="pinPicker" class="pin-picker hidden"></div>
+    <h3 class="ss-h">Where it hangs</h3>
+    <div class="spot-block">
+      <label class="spot-field">Field <select id="spotField"></select></label>
+      <div id="spotPicker" class="spot-picker"></div>
+      <div class="spot-acts"><span id="spotStatus" class="hint"></span>
+        <button class="btn small hidden" id="spotClear" type="button">Remove spot</button></div>
     </div>
     <div class="sheet-acts">
       <button class="btn primary" id="detailSave" type="button">Save</button>
@@ -233,7 +248,7 @@
 <section id="seasonSheet" class="sheet hidden" role="dialog" aria-label="2027 sponsor">
   <div class="sheet-top">
     <button class="btn small" id="ssClose">Close</button>
-    <span id="ssBadge" class="pill"></span>
+    <span id="ssBadge" class="badge"></span>
   </div>
   <div class="sheet-body">
     <h2 id="ssTitle" class="ss-title"></h2>
@@ -281,7 +296,7 @@
 <section id="sponsorSheet" class="sheet hidden" role="dialog" aria-label="Sponsor">
   <div class="sheet-top">
     <button class="btn small" id="spClose">Close</button>
-    <span id="spBadge" class="pill"></span>
+    <span id="spBadge" class="badge"></span>
   </div>
   <div class="sheet-body">
     <h2 id="spTitle" class="ss-title"></h2>
@@ -315,13 +330,12 @@
   </div>
 </section>
 
-<!-- async: only the Map tab and Drop pin need it, so it must not hold up the list. -->
-<script id="leafletJs" async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.leafletDone=1" onerror="window.leafletDone=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 <script src="season.js"></script>
 <script src="sponsors.js"></script>
+<script src="fields.js"></script>
 </body>
 </html>

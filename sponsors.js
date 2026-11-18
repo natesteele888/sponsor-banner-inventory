@@ -171,11 +171,20 @@
 
   // ---------- list ----------
 
+  // The one thing to know about a sponsor, in color only when money is involved.
+  function cardBadge(s) {
+    var badge = A().badge;
+    if (isIn(s)) return s.paid ? badge('Paid', 'ok') : badge('Not paid yet', 'warn');
+    if (FILTERS.lapsed(s)) return badge('Past sponsor', 'muted');
+    if (!String(s.contacted).trim()) return badge('Not contacted', 'muted');
+    return badge('Contacted', 'muted');
+  }
+
   function stat(n, label) { return '<div class="stat"><b>' + n + '</b><span>' + label + '</span></div>'; }
 
   function render() {
     if (!S.book) return;
-    var esc = A().esc, pill = A().pill;
+    var esc = A().esc, badge = A().badge, facts = A().facts;
     var all = sponsors();
     var inn = all.filter(isIn), paid = inn.filter(function (s) { return s.paid; });
     var committed = inn.reduce(function (n, s) { return n + s.amount; }, 0);
@@ -202,15 +211,15 @@
       return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '">' +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
-          '<div class="meta">' +
-            (s.tier ? pill(s.tier + (s.amountText ? ' ' + s.amountText : ''), '') : (s.tierPrev ? pill('Last year: ' + s.tierPrev, '') : '')) +
-            (isIn(s) ? (s.paid ? pill('Paid', 'on-list') : pill('Not paid yet', 'legacy')) : '') +
-            (s.owner ? pill('Owner: ' + s.owner, '') : '') +
-            (String(s.contacted).trim() ? pill('Contacted: ' + s.contacted, 'on-list') : pill('Not contacted', 'not-hung')) +
-          '</div>' +
-          (s.team ? '<div class="hint season-sub">Team: ' + esc(s.team) + '</div>' : '') +
-          (s.notes ? '<div class="hint season-sub sp-note">' + esc(s.notes) + '</div>' : '') +
+          facts([
+            s.tier ? s.tier + (s.amountText ? ' ' + s.amountText : '') : (s.tierPrev ? 'Last year: ' + s.tierPrev : ''),
+            s.owner ? 'Owner: ' + s.owner : '',
+            String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
+            s.team ? 'Team: ' + s.team : ''
+          ]) +
+          (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
         '</div>' +
+        cardBadge(s) +
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
@@ -267,8 +276,7 @@
     S.current = s;
     var esc = A().esc, t = mainTab();
     $('#spTitle').textContent = s.company;
-    $('#spBadge').textContent = s.tier || (s.tierPrev ? 'Last year: ' + s.tierPrev : '');
-    $('#spBadge').className = 'pill';
+    A().setBadge($('#spBadge'), s.tier || (s.tierPrev ? 'Last year: ' + s.tierPrev : ''), 'muted');
     // Every column on the sheet, exactly as the sheet has it.
     $('#spFields').innerHTML = t.headers.map(function (h, i) {
       var v = s.cells[i] || '';
@@ -410,13 +418,7 @@
   // ---------- wire up ----------
 
   function wire() {
-    $$('[data-spfilter]').forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        S.filter = chip.dataset.spfilter;
-        $$('[data-spfilter]').forEach(function (c) { c.classList.toggle('active', c === chip); });
-        render();
-      });
-    });
+    $('#spFilter').addEventListener('change', function (e) { S.filter = e.target.value; render(); });
     $('#spSearch').addEventListener('input', function (e) { S.search = e.target.value; render(); });
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(); });
