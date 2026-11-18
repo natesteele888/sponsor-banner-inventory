@@ -68,8 +68,28 @@ Dashboard's Firestore: each open of the tab reads the sheet again.
 3. Replace `Season.gs` with this repo's `apps-script/Season.gs`.
    If the project has a `SponsorSheet` file from lybs-reporting, delete it:
    `Season.gs` has that code now.
-4. Deploy → Manage deployments → pencil → Version: New version → Deploy.
-   The `/exec` address stays the same.
+4. Files → + → Script, name it `History`, paste in `apps-script/History.gs`
+   (the year-over-year strip).
+5. Deploy → Manage deployments → pencil → Version: New version → Deploy.
+   The `/exec` address stays the same. Google may ask once to allow the
+   script to read the sheet's saved versions.
 
 The first time the tab opens, the backend looks the sheet up by name. If the
 sheet is ever renamed, run `forgetSponsorSheet` once from the editor.
+
+## Year over year
+
+A thin bar under the counts shows this season's committed total against last
+season's final, with a mark where last season stood on the same date. Tap it
+for month-by-month totals.
+
+- **This season:** each day the tab opens, the backend keeps that day's
+  totals (dollars committed, dollars paid, how many sponsors) in the Apps
+  Script project's Script Properties (`SPONSOR_SNAPS_<season>`). Totals only,
+  no names, behind the same sign-in.
+- **Last season:** there was no dated log, so its totals come from the saved
+  versions of last season's sponsorship sheet in Drive, read once and kept
+  (`SPONSOR_PREV_<season>`). Drive keeps older versions thinly, so a total
+  more than a week from the nearest saved version shows as "about", and dates
+  between the sheet starting and its first saved version show "no record".
+  Run `forgetSponsorHistory` from the editor to read them again.

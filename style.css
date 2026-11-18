@@ -358,3 +358,31 @@ select, input[type=url] {
 .noaccess p { margin: 0 0 14px; color: var(--ink2); line-height: 1.45; }
 body.locked .tabs, body.locked .view, body.locked #status, body.locked #loadRetry,
 body.locked .scrim, body.locked .sheet { display: none !important; }
+
+/* Sponsors tab counts: the two dollar amounts get the room (4-5 digits fit). */
+#spSummary { grid-template-columns: 1.6fr 1.6fr 1fr 1fr 1fr; }
+#spSummary .stat b { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: clamp(20px, 5vw, 28px); }
+#spSummary .stat.money b { color: var(--blue); }
+@media (max-width: 560px) {
+  #spSummary { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  #spSummary .stat { grid-column: span 2; }
+  #spSummary .stat.money { grid-column: span 3; }
+  #spSummary .stat.money b { font-size: 30px; }
+  #spSummary .stat:not(.money) b { font-size: 24px; }
+}
+
+/* Year over year: one thin bar like a usage meter, tap for the waypoints. */
+.yoy { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: -4px 0 10px; }
+.yoy summary { list-style: none; cursor: pointer; display: block; }
+.yoy summary::-webkit-details-marker { display: none; }
+.yoy-line { display: block; font-size: 12px; color: var(--ink2); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.yoy-line b { color: var(--ink); }
+.yoy-bar { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: visible; }
+.yoy-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--blue); }
+.yoy-tick { position: absolute; top: -2px; width: 1px; height: 10px; background: var(--ink2); opacity: .45; }
+.yoy-then { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--ink); }
+.yoy-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.yoy-table th, .yoy-table td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.yoy-table th:first-child, .yoy-table td:first-child { text-align: left; color: var(--ink2); }
+.yoy-final td { font-weight: 600; border-bottom: 0; }
+.yoy-note { font-size: 11px; color: var(--ink2); margin: 8px 0 0; line-height: 1.4; }

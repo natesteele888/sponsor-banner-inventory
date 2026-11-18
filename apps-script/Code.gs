@@ -118,6 +118,8 @@ function doPost(e) {
     if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
     // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
     if (action === 'sponsorBook') return ok(sponsorBook());
+    // This season's committed total next to last season's (History.gs). Totals only.
+    if (action === 'sponsorHistory') return ok(sponsorHistory());
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.

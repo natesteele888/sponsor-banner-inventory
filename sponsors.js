@@ -133,12 +133,104 @@
       S.book = res;
       $('#spStatus').textContent = '';
       render();
+      loadHistory();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
     }).finally(function () { S.loading = null; });
     loadTeams();
     return S.loading;
+  }
+
+  // This season's committed total next to last season's. Totals only; the
+  // backend also keeps today's total so next year has real dates to compare.
+  // If the backend doesn't have it yet, the strip just stays hidden.
+  function loadHistory() {
+    A().apiPost({ action: 'sponsorHistory' }).then(function (res) {
+      if (!res || !res.ok) return;
+      S.history = res;
+      renderYoY();
+    }).catch(function () { /* the strip stays hidden */ });
+  }
+
+  // ---------- year over year ----------
+
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function dayLabel(iso) { var p = iso.split('-'); return MON[Number(p[1]) - 1] + ' ' + Number(p[2]); }
+  function lastYear(iso) { return (Number(iso.slice(0, 4)) - 1) + iso.slice(4); }
+  function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / 864e5); }
+
+  // Last season's committed total on a date: the latest saved version on or
+  // before it. Before the sheet existed it was $0; between the sheet starting
+  // and its first saved version nothing is known. More than a week from the
+  // nearest saved version counts as an estimate.
+  function prevOn(iso) {
+    var prev = S.history.prev || {}, pts = (prev.points || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    if (prev.sheetCreated && iso < prev.sheetCreated) return { amount: 0, note: 'before last year\'s sheet was started' };
+    var hit = null;
+    pts.forEach(function (p) { if (p.date <= iso) hit = p; });
+    if (!hit) return null;
+    return { amount: hit.committed, est: daysBetween(hit.date, iso) > 7, from: hit.date };
+  }
+
+  // This season on a date: today's live total, or the day's kept snapshot.
+  function nowOn(iso) {
+    var h = S.history;
+    if (iso >= h.today) return S.committed;
+    var hit = null;
+    (h.snaps || []).forEach(function (s) { if (s.date <= iso) hit = s; });
+    return hit && daysBetween(hit.date, iso) <= 7 ? hit.committed : null;
+  }
+
+  function renderYoY() {
+    var box = $('#spYoY');
+    var h = S.history;
+    if (!box || !h || !S.book || S.committed == null) return;
+    var prev = h.prev || {};
+    var fin = prev.final ? prev.final.committed : null;
+    var pts = prev.points || [];
+    if (fin == null && pts.length) fin = pts.reduce(function (m, p) { return Math.max(m, p.committed); }, 0);
+    if (fin == null) { box.classList.add('hidden'); return; }
+
+    var then = prevOn(lastYear(h.today));
+    var now = S.committed;
+    var scale = Math.max(fin, now, 1);
+    var pct = function (v) { return Math.min(100, Math.round(v / scale * 1000) / 10) + '%'; };
+    var thenText = then == null ? 'no record this early' : (then.est ? 'about ' : '') + fmtMoney(then.amount);
+
+    // Last year's month-start waypoints as ticks on the bar.
+    var season = Number(h.season), ticks = '';
+    var marks = ['11-01', '12-01', '01-01', '02-01', '03-01', '04-01', '05-01'].map(function (md) {
+      var y = md >= '07' ? season - 1 : season;
+      return y + '-' + md;
+    });
+    var rows = marks.map(function (iso) {
+      var p = prevOn(lastYear(iso));
+      if (p && p.amount > 0) ticks += '<i class="yoy-tick" style="left:' + pct(p.amount) + '" title="' + dayLabel(iso) + ' last year: ' + fmtMoney(p.amount) + '"></i>';
+      var n = nowOn(iso);
+      var prevCell = p == null ? 'no record' : (p.est ? 'about ' : '') + fmtMoney(p.amount);
+      var nowCell = iso > h.today ? '' : (n == null ? 'not kept' : fmtMoney(n));
+      return '<tr><td>' + dayLabel(iso) + '</td><td>' + nowCell + '</td><td>' + prevCell + '</td></tr>';
+    }).join('');
+    if (then && then.amount > 0) ticks += '<i class="yoy-then" style="left:' + pct(then.amount) + '"></i>';
+
+    var est = [];
+    if (prev.sheetCreated) est.push('Last year\'s sheet was started ' + dayLabel(prev.sheetCreated) + '.');
+    if (pts.length) est.push('Its totals come from the sheet\'s saved versions, the first on ' + dayLabel(pts.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0].date) + ', so "about" means the nearest saved version was more than a week away.');
+    else est.push('Its saved versions couldn\'t be read, so only its final total shows.');
+    est.push('This year\'s totals are kept once a day from ' + dayLabel((h.snaps && h.snaps[0] && h.snaps[0].date) || h.today) + ' on.');
+
+    box.innerHTML =
+      '<summary>' +
+        '<span class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + prev.season + ' final ' + fmtMoney(fin) + '</span>' +
+        '<span class="yoy-bar" role="img" aria-label="' + h.season + ' committed ' + fmtMoney(now) + ' of last year\'s final ' + fmtMoney(fin) + '">' +
+          '<span class="yoy-fill" style="width:' + pct(now) + '"></span>' + ticks +
+        '</span>' +
+      '</summary>' +
+      '<table class="yoy-table"><thead><tr><th></th><th>' + h.season + '</th><th>' + prev.season + '</th></tr></thead><tbody>' + rows +
+        '<tr class="yoy-final"><td>Final</td><td></td><td>' + fmtMoney(fin) + '</td></tr></tbody></table>' +
+      '<p class="yoy-note">' + est.join(' ') + '</p>';
+    box.classList.remove('hidden');
   }
 
   // Division and team names from the Dashboard (this season's draft, or the
@@ -180,7 +272,7 @@
     return badge('Contacted', 'muted');
   }
 
-  function stat(n, label) { return '<div class="stat"><b>' + n + '</b><span>' + label + '</span></div>'; }
+  function stat(n, label, cls) { return '<div class="stat' + (cls ? ' ' + cls : '') + '"><b>' + n + '</b><span>' + label + '</span></div>'; }
 
   function render() {
     if (!S.book) return;
@@ -189,12 +281,15 @@
     var inn = all.filter(isIn), paid = inn.filter(function (s) { return s.paid; });
     var committed = inn.reduce(function (n, s) { return n + s.amount; }, 0);
     var paidAmt = paid.reduce(function (n, s) { return n + s.amount; }, 0);
+    // Dollar amounts first and wider, so five-digit totals fit as well as three.
     $('#spSummary').innerHTML =
+      stat(fmtMoney(committed), 'committed', 'money') +
+      stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money') +
       stat(inn.length, S.book.season + ' sponsors') +
-      stat(fmtMoney(committed), 'committed') +
-      stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')') +
       stat(all.filter(FILTERS.notContacted).length, 'not contacted') +
       stat(all.filter(FILTERS.lapsed).length, 'past, not back yet');
+    S.committed = committed;
+    renderYoY();
 
     // Owner picker: whoever the sheet lists, as written there.
     var owners = {};
@@ -440,7 +535,8 @@
       if (!S.book) load(); else render();
     },
     reset: function () {
-      S.book = null; S.teams = null; S.current = null;
+      S.book = null; S.teams = null; S.current = null; S.history = null; S.committed = null;
+      $('#spYoY').classList.add('hidden'); $('#spYoY').innerHTML = '';
       $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = '';
     }
   };
