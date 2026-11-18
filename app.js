@@ -37,10 +37,21 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({ idToken: idToken }, body))
       });
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res && res.ok === false && NO_ACCESS.test(String(res.error || ''))) lockOut(true);
+      return res;
+    });
   }
 
   // ---------- sign-in: the same accounts and roles as the LYBS Dashboard ----------
+
+  // The backend checks the Dashboard role (board, director or admin) on every
+  // call. When it says no, show one plain screen instead of empty tabs.
+  var NO_ACCESS = /does not have board access/i;
+  function lockOut(on) {
+    document.body.classList.toggle('locked', !!on);
+    $('#noAccess').classList.toggle('hidden', !on);
+  }
 
   function setSignedIn(user) {
     $('#signin').classList.toggle('hidden', !!user);
@@ -96,6 +107,7 @@
     auth.onAuthStateChanged(function (user) {
       setSignedIn(user);
       $('#whoAmI').textContent = user ? 'Signed in as ' + (user.email || user.displayName || '') : '';
+      lockOut(false);
       if (!user) {
         state.banners = [];
         state.imageCache = {};
@@ -130,6 +142,7 @@
       state.loaded = true;
       $('#status').textContent = '';
       renderList();
+      if (!$('#view-fields').classList.contains('hidden') && window.Fields) window.Fields.render();
     }).catch(function (err) {
       // The browser's own text ("Failed to fetch", "Unexpected token <") means
       // nothing to a person; only the backend's messages are worth showing.
@@ -478,7 +491,9 @@
       reader.readAsDataURL(file);
     });
 
-    showView('sponsors');
+    // A home-screen shortcut (manifest.json) opens a tab by its #name.
+    var start = String(location.hash || '').slice(1);
+    showView(['sponsors', 'season', 'list', 'fields'].indexOf(start) >= 0 ? start : 'sponsors');
     wireSignIn();
   }
 

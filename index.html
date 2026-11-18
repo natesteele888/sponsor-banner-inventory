@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="icon" type="image/png" sizes="192x192" href="https://natesteele888.github.io/apps/icons/sponsor-banners-192.png">
-<link rel="apple-touch-icon" href="https://natesteele888.github.io/apps/icons/sponsor-banners-512.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/sponsor-banners-192.png">
+<link rel="apple-touch-icon" href="icons/sponsor-banners-512.png">
 <title>LYBS Sponsors</title>
 <meta name="theme-color" content="#0a1628">
 <link rel="manifest" href="manifest.json">
@@ -50,6 +50,14 @@
 </header>
 
 <main id="app" class="hidden">
+
+  <!-- Shown instead of everything else when the backend says this account
+       isn't board, director or admin (the same roles the Dashboard uses). -->
+  <section id="noAccess" class="noaccess hidden" role="alert">
+    <h2>This app is for the LYBS board</h2>
+    <p>Your account doesn't have board access, so there's nothing to show here. If you're on the board, ask an admin to set your role in the Dashboard.</p>
+    <a class="btn primary" href="https://lybs-dashboard.web.app/">Back to the Dashboard</a>
+  </section>
 
   <!-- SPONSORS VIEW: the season's sponsorship sheet, read live (sponsors.js) -->
   <section id="view-sponsors" class="view hidden">

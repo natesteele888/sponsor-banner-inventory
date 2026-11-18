@@ -8,8 +8,38 @@
   "background_color": "#0a1628",
   "theme_color": "#0a1628",
   "icons": [
-    { "src": "/apps/icons/sponsor-banners-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/apps/icons/sponsor-banners-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/apps/icons/sponsor-banners-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/sponsor-banners-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/sponsor-banners-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/sponsor-banners-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "description": "LYBS board only: sponsors, 2027 banners, banner stock and where each banner hangs.",
+  "shortcuts": [
+    {
+      "name": "Sponsors",
+      "url": "./#sponsors"
+    },
+    {
+      "name": "2027 banners",
+      "url": "./#season"
+    },
+    {
+      "name": "Fields",
+      "url": "./#fields"
+    }
   ]
 }
