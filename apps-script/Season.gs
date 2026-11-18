@@ -961,3 +961,92 @@ function sheetRows_(ss, tabName, wanted) {
   });
   return { rows: rows, missing: missing };
 }
+
+
+// ---------- for Ballclub (the coaches' team app) ----------
+//
+// Coaches thank their team's sponsor in Ballclub's Share to Social post. All
+// they need is the sponsor's name, so that is all this sends: company names
+// for one team, with no contact, level, amount, paid or notes, and nothing
+// about any other team. A coach is anyone Ballclub itself lets edit that team:
+// its coach code account, or a Google account the board gave the coach role
+// for that team in Ballclub. Board accounts keep using the Sponsors tab.
+
+// Ballclub's Firebase project. Both are public identifiers already shipped in
+// Ballclub's own index.html; neither can read anything by itself.
+var BALLCLUB_WEB_API_KEY = 'AIzaSyCK2-ZDnWxSs-5ghhueRIR4OaSZ-1NgHGY';
+var BALLCLUB_DB_URL = 'https://lybs-ballclub-default-rtdb.firebaseio.com';
+
+function teamSponsorsRequest_(data) {
+  var teamId = String(data.teamId || '').toLowerCase();
+  if (!/^[a-z0-9]+(-[a-z0-9]+){0,4}$/.test(teamId) || teamId.length > 40) return fail('Unknown team.');
+  var who = authorizeCoach_(String(data.idToken || ''), teamId);
+  if (!who.ok) return fail(who.error);
+  return ok(teamSponsors_(teamId));
+}
+
+// Same check Ballclub's own database rules make before a coach can edit a
+// team (database.rules.json there): the token is a real Ballclub sign-in, and
+// it is that team's coach code account or holds access/<team>/<uid> = coach.
+function authorizeCoach_(idToken, teamId) {
+  var denied = { ok: false, error: 'Only this team’s coaches can see its sponsors.' };
+  if (!idToken) return { ok: false, error: 'Please sign in.' };
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken + '|' + teamId);
+  var cacheKey = 'coach_' + Utilities.base64EncodeWebSafe(digest);
+  var cache = CacheService.getScriptCache();
+  if (cache.get(cacheKey) === 'yes') return { ok: true };
+
+  var lookup = UrlFetchApp.fetch(
+    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + BALLCLUB_WEB_API_KEY,
+    { method: 'post', contentType: 'application/json',
+      payload: JSON.stringify({ idToken: idToken }), muteHttpExceptions: true });
+  if (lookup.getResponseCode() !== 200) return { ok: false, error: 'Your sign-in expired. Please sign in again.' };
+  var user = (JSON.parse(lookup.getContentText()).users || [])[0];
+  if (!user || !user.localId) return denied;
+
+  var allowed = String(user.email || '').toLowerCase() === 'coach-' + teamId + '-gate@lybsballclub.internal';
+  if (!allowed && user.email && user.emailVerified) {
+    var grant = UrlFetchApp.fetch(
+      BALLCLUB_DB_URL + '/access/' + encodeURIComponent(teamId) + '/' + encodeURIComponent(user.localId) +
+        '.json?auth=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+    allowed = grant.getResponseCode() === 200 && JSON.parse(grant.getContentText() || 'null') === 'coach';
+  }
+  if (!allowed) return denied;
+  cache.put(cacheKey, 'yes', 300);
+  return { ok: true };
+}
+
+// Every sponsor lined up with this team, by name only: a team picked in the
+// Sponsors tab wins, then the sheet's own "Associated Team" cell, then the
+// Jerseys tab. A team matches when every word of its Ballclub id shows up in
+// the label ("majors-blue" matches "Baseball Majors · Blue").
+function teamSponsors_(teamId) {
+  var ss = sponsorSpreadsheet_();
+  var words = teamId.split('-');
+  function matches(label) {
+    var have = String(label || '').toLowerCase().split(/[^a-z0-9]+/);
+    return words.every(function (w) { return have.indexOf(w) >= 0; });
+  }
+  var picked = {};
+  sponsorTeams_().rows.forEach(function (t) { picked[String(t.key)] = [t.division, t.team].join(' '); });
+  var names = {}, out = [];
+  function add(company) {
+    var name = String(company || '').trim().slice(0, 120);
+    var k = companyKey_(name);
+    if (name && k && !names[k]) { names[k] = 1; out.push(name); }
+  }
+  sheetRows_(ss, SPONSOR_TAB, { company: /^(company|business)/, team: /^(associated team|team)/ }).rows
+    .forEach(function (r) {
+      if (!r.company) return;
+      var k = companyKey_(r.company);
+      var label = picked[k] !== undefined ? picked[k] : r.team;
+      if (matches(label)) add(r.company);
+    });
+  sheetRows_(ss, 'Jerseys', { company: /^(business|company|sponsor)/, team: /team/ }).rows
+    .forEach(function (r) {
+      var k = companyKey_(r.company);
+      if (r.company && picked[k] === undefined && matches(r.team)) add(r.company);
+    });
+  out.sort(function (a, b) { return a.localeCompare(b); });
+  return { season: SEASON, teamId: teamId, sponsors: out };
+}

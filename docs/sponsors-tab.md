@@ -40,6 +40,14 @@ jerseys, plaques) are listed under the sponsors.
   contacts included, for this app), `sponsorSheet` (no contacts, for the
   Dashboard), `seasonList` (banner sponsors). Only the board, director and
   admin roles get an answer.
+- **Ballclub (coaches):** `teamSponsors` with `teamId` and a Ballclub sign-in
+  token, not a Dashboard one. The answer is only the company names lined up
+  with that one team (app pick first, then the sheet's Associated Team cell,
+  then the Jerseys tab). No contact, level, amount, paid or notes. Allowed for
+  the team's coach code account, or a Google account holding
+  `access/<team>/<uid> = coach` in Ballclub's database: the same people
+  Ballclub lets edit that team. Player codes and parents get nothing. Ballclub
+  uses it to fill the "Sponsor to thank" box in Share to Social.
 - **Team names for the pickers:** the Dashboard's `lybs_bins/lybs-team-assignments`
   (this season's teams once drafted, the last draft's before that). Only
   division and team names are kept from it.

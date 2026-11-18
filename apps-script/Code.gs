@@ -84,6 +84,18 @@ function doPost(e) {
     }
   }
 
+  // Ballclub (the team app) is the second door: a coach signed in there can
+  // ask for the names of their own team's sponsors and nothing else. It has
+  // its own sign-in check (authorizeCoach_ in Season.gs), never the board's.
+  if (publicAction === 'teamSponsors') {
+    try {
+      return teamSponsorsRequest_(data);
+    } catch (err) {
+      console.log('teamSponsors failed: ' + err);
+      return fail('Could not load sponsors right now.');
+    }
+  }
+
   var who;
   try {
     who = authorize(String(data.idToken || ''));
