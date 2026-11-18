@@ -30,7 +30,7 @@ jerseys, plaques) are listed under the sponsors.
   The address is not written in this repo on purpose.
 - **Sponsor to team:** the Apps Script project's Script Properties, one entry
   per sponsor named `SPONSOR_TEAM_<season>_<key>`, each a small JSON object:
-  key, company, division, team, note, updatedAt. (Not a Sheet tab: Google
+  key, company, division, team, note, imageFileId (team page logo), updatedAt. (Not a Sheet tab: Google
   refused to let the web app add one to the data Sheet.) Other apps get them
   through `sponsorSheet`, which already folds them into each sponsor's team.
 - **Banner-level sponsors ($500+) and their banner plan:** tab
@@ -40,14 +40,20 @@ jerseys, plaques) are listed under the sponsors.
   contacts included, for this app), `sponsorSheet` (no contacts, for the
   Dashboard), `seasonList` (banner sponsors). Only the board, director and
   admin roles get an answer.
-- **Ballclub (coaches):** `teamSponsors` with `teamId` and a Ballclub sign-in
-  token, not a Dashboard one. The answer is only the company names lined up
-  with that one team (app pick first, then the sheet's Associated Team cell,
-  then the Jerseys tab). No contact, level, amount, paid or notes. Allowed for
-  the team's coach code account, or a Google account holding
-  `access/<team>/<uid> = coach` in Ballclub's database: the same people
-  Ballclub lets edit that team. Player codes and parents get nothing. Ballclub
-  uses it to fill the "Sponsor to thank" box in Share to Social.
+- **Ballclub team pages ("Sponsored by"):** `teamPageSponsor` with `teamId`
+  and a Ballclub sign-in token, not a Dashboard one. The answer is the names
+  and logos of the sponsors lined up with that one team (team set in this app
+  first, then the sheet's Associated Team cell), at most three. No contact,
+  level, amount, paid, owner or notes. Allowed for whoever Ballclub lets see
+  that team: its code accounts, a Google account with a grant for the team,
+  or a Ballclub board member. Ballclub's signed-out public view gets nothing.
+  Coaches see no other sponsor information anywhere.
+- **Team page logos:** set in the sponsor's box on this tab ("Team page
+  logo"), saved in the `Team Page Logos` folder inside Sponsor Banners in
+  Drive, with the file id on the sponsor's team entry (`imageFileId`). With
+  none set, a PNG/JPG/GIF/WebP logo the sponsor sent through their reply form
+  is used. Only files in that folder, or that sponsor's own form folder, are
+  ever served.
 - **Team names for the pickers:** the Dashboard's `lybs_bins/lybs-team-assignments`
   (this season's teams once drafted, the last draft's before that). Only
   division and team names are kept from it.

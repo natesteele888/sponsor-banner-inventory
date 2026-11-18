@@ -90,7 +90,7 @@
         amount: amount, amountText: get('amount'), paid: yes(get('paid')), paidText: get('paid'),
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
         sheetTeam: get('team'), pick: pick, notes: get('notes'),
-        team: pick ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
+        team: hasTeam(pick) ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
   }
@@ -278,13 +278,14 @@
 
     var p = s.pick || {};
     $('#sp_division').value = p.division || '';
-    $('#sp_team').value = p.team || (s.pick ? '' : s.sheetTeam);
+    $('#sp_team').value = p.team || (hasTeam(s.pick) || p.note ? '' : s.sheetTeam);
     $('#sp_note').value = p.note || '';
-    $('#spTeamHint').textContent = s.pick
+    $('#spTeamHint').textContent = hasTeam(s.pick) || p.note
       ? 'Set here' + (p.updatedAt ? ' on ' + p.updatedAt : '') + '. The Dashboard’s Uniforms and Jersey Order pages see it too.'
       : (s.sheetTeam ? 'From the sheet’s team column. Save to set it here.' : 'Not lined up with a team yet.');
     fillPickers();
     $('#spSaveStatus').textContent = '';
+    loadLogo(s);
     $('#detailScrim').classList.remove('hidden');
     $('#sponsorSheet').classList.remove('hidden');
     if (!S.entry) { history.pushState({ sponsorSheet: true }, ''); S.entry = true; }
@@ -326,10 +327,12 @@
       if (!res.ok) throw A().backendError(res.error || 'Save failed.');
       $('#spSaveStatus').textContent = res.message || 'Saved.';
       // Show it right away; the next Refresh reads it back from the backend.
+      var old = (S.book.teams || []).filter(function (p) { return p.key === s.key; })[0] || {};
       S.book.teams = (S.book.teams || []).filter(function (p) { return p.key !== s.key; });
-      if (payload.division || payload.team || payload.note) {
+      if (payload.division || payload.team || payload.note || old.imageFileId) {
         S.book.teams.push({ key: s.key, company: s.company, division: payload.division, team: payload.team,
-                            note: payload.note, updatedAt: new Date().toISOString().slice(0, 10) });
+                            note: payload.note, imageFileId: old.imageFileId,
+                            updatedAt: new Date().toISOString().slice(0, 10) });
       }
       render();
       setTimeout(close, 300);
@@ -337,6 +340,71 @@
       A().noteProblem('Sponsor team save failed', err);
       $('#spSaveStatus').textContent = A().sendErrorText(err, "Couldn't save. Check your signal, then tap Save again.");
     });
+  }
+
+  // A pick can hold only a logo; then the sheet's own team still counts.
+  function hasTeam(p) { return !!(p && (p.division || p.team)); }
+
+  // ---------- team page logo ----------
+  //
+  // The logo Ballclub shows as "Sponsored by" on the team's page. One the
+  // board sets here wins; otherwise a PNG/JPG logo the sponsor sent through
+  // their reply form is used. Both stay in Drive, read through the backend.
+
+  function showLogo(img, from) {
+    var el = $('#spLogo');
+    if (img && img.base64) {
+      el.src = 'data:' + img.mime + ';base64,' + img.base64;
+      el.classList.remove('hidden');
+    } else {
+      el.removeAttribute('src');
+      el.classList.add('hidden');
+    }
+    $('#spLogoFrom').textContent = from === 'set' ? 'Set here.'
+      : from === 'form' ? 'From the logo they sent with their reply form. Choose one to use a different one.'
+      : 'No logo yet. The team page shows just the name until one is set.';
+    $('#spLogoRemove').classList.toggle('hidden', from !== 'set');
+  }
+
+  function loadLogo(s) {
+    showLogo(null, '');
+    $('#spLogoFrom').textContent = 'Loading logo…';
+    $('#spLogoStatus').textContent = '';
+    A().apiPost({ action: 'sponsorTeamLogo', company: s.company, get: true }).then(function (res) {
+      if (S.current !== s) return;
+      if (!res.ok) throw A().backendError(res.error || 'Could not load the logo.');
+      showLogo(res.image, res.source);
+    }).catch(function (err) {
+      if (S.current !== s) return;
+      $('#spLogoFrom').textContent = 'Could not load the logo.';
+      A().noteProblem('Sponsor logo load failed', err);
+    });
+  }
+
+  function saveLogo(photo) {
+    var s = S.current;
+    if (!s) return;
+    $('#spLogoStatus').textContent = photo ? 'Saving…' : 'Removing…';
+    return A().apiPost({ action: 'sponsorTeamLogo', company: s.company, photo: photo || '' }).then(function (res) {
+      if (!res.ok) throw A().backendError(res.error || 'Save failed.');
+      $('#spLogoStatus').textContent = res.message || 'Saved.';
+      if (S.current === s) loadLogo(s);
+      setTimeout(function () { $('#spLogoStatus').textContent = res.message || 'Saved.'; }, 50);
+    }).catch(function (err) {
+      A().noteProblem('Sponsor logo save failed', err);
+      $('#spLogoStatus').textContent = A().sendErrorText(err, "Couldn't save. Check your signal, then try again.");
+    });
+  }
+
+  function pickLogo(e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { $('#spLogoStatus').textContent = 'That logo is larger than 5 MB.'; return; }
+    var reader = new FileReader();
+    reader.onload = function () { saveLogo(String(reader.result)); };
+    reader.onerror = function () { $('#spLogoStatus').textContent = 'Could not read that file.'; };
+    reader.readAsDataURL(file);
   }
 
   // ---------- wire up ----------
@@ -355,6 +423,8 @@
     $('#spClose').addEventListener('click', close);
     $('#detailScrim').addEventListener('click', function () { if (S.current) close(); });
     $('#spSave').addEventListener('click', saveTeam);
+    $('#spLogoFile').addEventListener('change', pickLogo);
+    $('#spLogoRemove').addEventListener('click', function () { saveLogo(''); });
     $('#sp_division').addEventListener('input', fillPickers);
     window.addEventListener('popstate', function () {
       if (S.skipPop) { S.skipPop = false; return; }

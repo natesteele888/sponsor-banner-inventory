@@ -240,3 +240,7 @@ select, input[type=url] {
 .sp-rec { border-top: 1px solid var(--border); padding: 6px 0; }
 .sp-owner select { width: auto; }
 .sp-note { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: pre-line; }
+
+/* Team page logo preview in the sponsor sheet */
+.sp-logo { display: block; max-width: 220px; max-height: 120px; object-fit: contain; margin: 6px 0;
+  background: #fff; border-radius: 8px; padding: 6px; }
