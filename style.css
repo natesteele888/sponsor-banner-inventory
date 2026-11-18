@@ -386,3 +386,7 @@ body.locked .scrim, body.locked .sheet { display: none !important; }
 .yoy-table th:first-child, .yoy-table td:first-child { text-align: left; color: var(--ink2); }
 .yoy-final td { font-weight: 600; border-bottom: 0; }
 .yoy-note { font-size: 11px; color: var(--ink2); margin: 8px 0 0; line-height: 1.4; }
+
+/* Sponsors-only accounts have no Dashboard to go back to. */
+body.no-dash .hbtn.home { display: none !important; }
+body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; cursor: default; }
