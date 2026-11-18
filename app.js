@@ -39,6 +39,8 @@
       });
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (res && res.ok === false && NO_ACCESS.test(String(res.error || ''))) lockOut(true);
+      // Sponsors-only accounts (no Dashboard role): no links to the Dashboard.
+      if (res && res.ok) document.body.classList.toggle('no-dash', res.dashboard === false);
       return res;
     });
   }
@@ -108,6 +110,7 @@
       setSignedIn(user);
       $('#whoAmI').textContent = user ? 'Signed in as ' + (user.email || user.displayName || '') : '';
       lockOut(false);
+      document.body.classList.remove('no-dash');
       if (!user) {
         state.banners = [];
         state.imageCache = {};

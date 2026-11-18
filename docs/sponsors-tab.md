@@ -93,3 +93,13 @@ for month-by-month totals.
   more than a week from the nearest saved version shows as "about", and dates
   between the sheet starting and its first saved version show "no record".
   Run `forgetSponsorHistory` from the editor to read them again.
+
+## Letting someone in without the Dashboard
+
+For someone who should see this app but has no Dashboard role, add their
+Google address to the Script Property `SPONSORS_ONLY_EMAILS` (Project
+Settings → Script Properties; separate several with commas). They sign in
+with Google and see every tab here; the page hides its links to the
+Dashboard. Remove the address to take access away; it ends within five
+minutes. The list stays in the private Apps Script project, never in this
+repo. Needs the Apps Script deploy for this change.

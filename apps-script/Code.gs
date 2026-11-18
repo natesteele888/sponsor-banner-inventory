@@ -26,6 +26,14 @@
  *  real lock: every call must carry a Firebase sign-in token from the LYBS
  *  Dashboard, and that account must hold the board, director or admin role.
  *  To add or remove someone, change their role in Dashboard → Manage.
+ *
+ *  Sponsors-only access: someone who should see this app but not the
+ *  Dashboard (no Dashboard role) can be let in by their Google address.
+ *  Project Settings → Script Properties → SPONSORS_ONLY_EMAILS, addresses
+ *  separated by commas. They sign in with Google, see every tab of this app,
+ *  and the page hides its links to the Dashboard. Remove an address to take
+ *  access away (it ends within five minutes). The list lives only in this
+ *  private Apps Script project, never in this repo.
  */
 
 // The LYBS Dashboard's Firebase project. The web API key is a public identifier
@@ -104,6 +112,7 @@ function doPost(e) {
     return fail('Could not check your sign-in. Try again in a minute.');
   }
   if (!who.ok) return fail(who.error);
+  WHO = who;
 
   try {
     var action = String(data.action || '');
@@ -151,7 +160,9 @@ function authorize(idToken) {
   var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken);
   var cacheKey = 'auth_' + Utilities.base64EncodeWebSafe(digest);
   var cache = CacheService.getScriptCache();
-  if (cache.get(cacheKey) === 'yes') return { ok: true };
+  var hit = cache.get(cacheKey);
+  if (hit === 'yes') return { ok: true };
+  if (hit === 'sponsors') return { ok: true, sponsorsOnly: true };
 
   var lookup = UrlFetchApp.fetch(
     'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FIREBASE_WEB_API_KEY,
@@ -172,9 +183,21 @@ function authorize(idToken) {
     if (doc.getResponseCode() !== 200) return denied;
     allowed = ALLOWED_ROLES.indexOf(roleFromApproved(JSON.parse(doc.getContentText()), user.localId)) >= 0;
   }
-  if (!allowed) return denied;
-  cache.put(cacheKey, 'yes', 300);
-  return { ok: true };
+  if (allowed) {
+    cache.put(cacheKey, 'yes', 300);
+    return { ok: true };
+  }
+  if (user.emailVerified && sponsorsOnlyEmails_().indexOf(String(user.email || '').toLowerCase()) >= 0) {
+    cache.put(cacheKey, 'sponsors', 300);
+    return { ok: true, sponsorsOnly: true };
+  }
+  return denied;
+}
+
+// Google addresses let into this app without a Dashboard role (see SETUP).
+function sponsorsOnlyEmails_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('SPONSORS_ONLY_EMAILS') || '';
+  return raw.split(/[\s,;]+/).map(function (e) { return e.trim().toLowerCase(); }).filter(Boolean);
 }
 
 function emailHash_(email) {
@@ -406,8 +429,13 @@ function underRateLimit() {
   return true;
 }
 
+// Who this request is for, so every answer can tell the page to hide the
+// Dashboard links for sponsors-only accounts.
+var WHO = null;
+
 function ok(obj) {
-  return ContentService.createTextOutput(JSON.stringify(Object.assign({ ok: true }, obj)))
+  var extra = WHO && WHO.sponsorsOnly ? { dashboard: false } : {};
+  return ContentService.createTextOutput(JSON.stringify(Object.assign({ ok: true }, obj, extra)))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
