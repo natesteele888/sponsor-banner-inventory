@@ -116,6 +116,8 @@ Setup (Apps Script editor):
 2. In **Project Settings → Script Properties**, add `RECEIPT_ORG_ADDRESS`, `RECEIPT_EIN` and `RECEIPT_ISSUER` as the old receipt shows them, `SPONSOR_PACKET_URL` (change it here when the packet page moves), and `RECEIPTS_TEST_TO` (your own address).
 3. Deploy a new version. Google asks once to allow sending email as you.
 
+Heads-up: run `installReceiptPing` once from the editor. Every hour, any receipt that has just started waiting gets one short email to you (or to `RECEIPTS_PING_TO`), never to a sponsor, with a link to the Sponsors tab. Each receipt is mentioned once. `removeReceiptPing` turns it off.
+
 Until `RECEIPTS_LIVE` is set to `on`, every Send goes only to `RECEIPTS_TEST_TO`, marked [TEST], and the row stays in the list. Set `RECEIPTS_LIVE` to `on` only once the board agrees to send to sponsors; delete it to go back to test mode.
 
 ## Sponsor info packets

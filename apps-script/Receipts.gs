@@ -6,7 +6,8 @@
  *        │  read only; this file never writes to that sheet
  *        ▼
  *   Sponsors tab: "Receipts to send" lists each one, with a preview
- *        │  a board member taps Send (nothing is ever sent on its own: no trigger)
+ *        │  Nate gets one heads-up email per new one (receiptPing, hourly)
+ *        │  a board member taps Send (a receipt is never sent on its own)
  *        ▼
  *   one email to the sponsor: the donation receipt plus the sponsor packet link
  *        │
@@ -26,6 +27,8 @@
  *   SPONSOR_PACKET_URL    the sponsor info packet page (changes when it moves)
  *   RECEIPTS_TEST_TO      while testing, every receipt goes to this one address
  *   RECEIPTS_LIVE         "on" sends to sponsors; anything else is test mode
+ *   RECEIPTS_PING_TO      who gets the "receipt ready" heads-up (default: the
+ *                         account this script runs as); never a sponsor
  * Without the first three, Send refuses. Without SPONSOR_PACKET_URL the
  * receipt goes out without the packet part.
  */
@@ -234,4 +237,48 @@ function receiptMark(data) {
   } else return fail('Unknown choice.');
   saveReceiptLog_(log);
   return ok({ message: 'Saved.' });
+}
+
+// ---------- heads-up email to Nate ----------
+// Once an hour (installReceiptPing sets that up), a receipt that has just
+// started waiting gets one short email to Nate, never to a sponsor, with a
+// link to the Sponsors tab. Each receipt is mentioned once. Sending the
+// receipt itself still takes the tap in the app.
+var RECEIPTS_PINGED_PROP = 'RECEIPTS_PINGED_' + SEASON;
+
+function receiptPing() {
+  var p = PropertiesService.getScriptProperties();
+  var to = firstEmail_(p.getProperty('RECEIPTS_PING_TO') || '') || Session.getEffectiveUser().getEmail();
+  if (!to) return;
+  var pinged = {};
+  try { pinged = JSON.parse(p.getProperty(RECEIPTS_PINGED_PROP) || '{}'); } catch (e) { pinged = {}; }
+  var fresh = receiptRows_().filter(function (r) { return r.status === 'ready' && !pinged[r.key]; });
+  if (!fresh.length) return;
+  var n = fresh.length;
+  var lines = fresh.map(function (r) { return '- ' + r.company + ', ' + money_(r.amount); });
+  MailApp.sendEmail({
+    to: to,
+    subject: n + ' sponsor receipt' + (n === 1 ? '' : 's') + ' ready to send',
+    body: (n === 1 ? 'A sponsor receipt is' : n + ' sponsor receipts are') + ' waiting for your tap:\n\n' + lines.join('\n') +
+      '\n\nOpen the Sponsors tab to preview and send:\n' + APP_URL + '#sponsors\n\nNothing goes to a sponsor until someone taps Send.',
+    name: 'LYBS Sponsors app'
+  });
+  fresh.forEach(function (r) { pinged[r.key] = dayOf_(new Date()); });
+  p.setProperty(RECEIPTS_PINGED_PROP, JSON.stringify(pinged));
+}
+
+// Run once from the editor to start the hourly heads-up; run again to keep just one.
+function installReceiptPing() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'receiptPing') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('receiptPing').timeBased().everyHours(1).create();
+  console.log('Hourly receipt heads-up is on.');
+}
+
+function removeReceiptPing() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'receiptPing') ScriptApp.deleteTrigger(t);
+  });
+  console.log('Hourly receipt heads-up is off.');
 }
