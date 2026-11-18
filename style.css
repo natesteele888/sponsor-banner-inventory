@@ -45,7 +45,7 @@ body {
   border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow); }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand a { display: flex; }
-.brand .logo { height: 40px; width: auto; flex: 0 0 auto; mix-blend-mode: screen; }
+.brand .logo { height: 40px; width: auto; max-width: 98px; flex: 0 0 auto; mix-blend-mode: screen; filter: drop-shadow(0 2px 8px rgba(26,86,219,.45)); }
 .topbar h1 { font: 600 24px/1.15 'DM Sans', sans-serif; color: #fff; margin: 0; }
 .topbar h1 span { color: #9FB3E6; }
 .top .sub { font-size: 13px; color: #C9D2E8; margin-top: 2px; }
@@ -53,7 +53,18 @@ body {
 .hbtn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px;
   border-radius: 9px; font: 600 14px 'DM Sans', sans-serif; text-decoration: none;
   border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; }
+.hbtn:hover { background: rgba(255,255,255,.16); }
+.hbtn:focus-visible { outline: 2px solid #9FB3E6; outline-offset: 2px; }
 .hbtn.home { background: #fff; border-color: #fff; color: #0a1628; }
+.hbtn.home:hover { background: #E7ECF8; }
+@media (max-width: 640px) {
+  .top { padding: 12px; gap: 10px; border-radius: 12px; }
+  .topbar h1 { font-size: 20px; }
+  .top .sub { font-size: 12.5px; }
+  .brand .logo { height: 34px; max-width: 84px; }
+  .bar { width: 100%; }
+  .bar .hbtn { flex: 1 1 0; padding: 0 10px; font-size: 13.5px; }
+}
 .tabs { display: flex; gap: 6px; padding: 12px 0 2px; }
 .tab-btn {
   flex: 0 0 auto; min-height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line);
@@ -312,10 +323,6 @@ select, input[type=url] {
 
 @media (max-width: 600px) {
   .topbar { padding: 10px 10px 0; }
-  .topbar h1 { font-size: 20px; }
-  .brand .logo { height: 34px; }
-  .bar { width: 100%; }
-  .bar .hbtn { flex: 1 1 0; }
   .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -10px; padding: 10px 10px 2px; }
   .tabs::-webkit-scrollbar { display: none; }
   main { padding: 12px 10px 32px; }
