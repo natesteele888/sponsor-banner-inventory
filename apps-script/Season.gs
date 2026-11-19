@@ -770,6 +770,11 @@ var SPONSOR_PROP = 'SPONSOR_SHEET_ID_' + SEASON;
 // The sponsorship sheet, found by name the first time and remembered after.
 function sponsorSpreadsheet_() {
   var props = PropertiesService.getScriptProperties();
+  var own = props.getProperty('SPONSOR_SHEET_USE');
+  if (own) {
+    try { return SpreadsheetApp.openById(own); }
+    catch (e) { throw new Error('The board copy of the sponsorship sheet (SPONSOR_SHEET_USE) did not open.'); }
+  }
   var id = props.getProperty(SPONSOR_PROP);
   if (id) {
     try { return SpreadsheetApp.openById(id); }
