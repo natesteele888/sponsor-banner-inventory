@@ -1,6 +1,6 @@
 # 2027 sponsor banner intake
 
-Every sponsor at $500 and up (MVP, Championship, Championship+) gets a 3x5
+Every sponsor at $500 and up (MVP and Championship) gets a 3x5
 banner, once their payment is in. This is how each one gets caught, asked for
 their info, and matched to a banner, however they signed up.
 

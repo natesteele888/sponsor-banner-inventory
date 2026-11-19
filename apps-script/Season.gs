@@ -4,7 +4,7 @@
  *
  * THE PROBLEM IT SOLVES
  *
- * Banner-level sponsors ($500 and up: MVP, Championship, Championship+) reach
+ * Banner-level sponsors ($500 and up: MVP and Championship) reach
  * LYBS three ways, and only one of them used to tell anyone:
  *   1. the Crossbar sponsorship form on lunenburgybs.com
  *   2. a payment on lunenburgybs.com/donate with no form at all
@@ -60,7 +60,7 @@ function sponsorTabName_(ss) {
 
 // Same rule as that sheet's own "Owed a Banner" column (=Amount>=500).
 var BANNER_MIN_AMOUNT = 500;
-var TIER_AMOUNTS = { 'MVP': 500, 'Championship': 750, 'Championship+': 1000 };
+var TIER_AMOUNTS = { 'MVP': 500, 'Championship': 750 };
 
 // What the sponsor email says and links to.
 var INFO_DEADLINE = 'March 20';
@@ -169,7 +169,7 @@ function parseAmount_(v) {
 
 function tierFromText_(t) {
   var s = String(t || '').toLowerCase().replace(/\s+/g, '');
-  if (s.indexOf('championship+') >= 0 || s.indexOf('championshipplus') >= 0) return 'Championship+';
+  // Championship is $750 and up; an old "Championship+" reads as Championship.
   if (s.indexOf('championship') >= 0) return 'Championship';
   if (s.indexOf('mvp') >= 0) return 'MVP';
   if (s.indexOf('all-star') >= 0 || s.indexOf('allstar') >= 0) return 'All-Star';
@@ -178,7 +178,6 @@ function tierFromText_(t) {
 }
 
 function tierFromAmount_(a) {
-  if (a >= 1000) return 'Championship+';
   if (a >= 750) return 'Championship';
   if (a >= 500) return 'MVP';
   return '';

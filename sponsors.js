@@ -760,8 +760,9 @@
     }).catch(function () { $('#spaSave').disabled = false; msg.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
   }
 
-  // The levels a new sponsor can pick, with their usual price.
-  var ADD_LEVELS = [['Gameday', 0], ['All-Star', 300], ['MVP', 500], ['Championship', 750], ['Championship+', 1000]];
+  // The levels a new sponsor can pick, with their usual price: the four on
+  // the league's Become a Sponsor page (Championship is $750 and up).
+  var ADD_LEVELS = [['Gameday', 0], ['All-Star', 300], ['MVP', 500], ['Championship', 750]];
   function addLevelPicked() {
     var lv = ADD_LEVELS.filter(function (l) { return l[0] === $('#spa_tier').value; })[0];
     if (lv && lv[1] && !money($('#spa_amount').value)) $('#spa_amount').value = fmtMoney(lv[1]);
@@ -784,7 +785,8 @@
     var ph = t.match(/\(?\b\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}\b/); out.phone = ph ? ph[0].trim() : '';
     var lvTxt = line('sponsorship(?: level| tier| package)?|level|tier|package') || t;
     var hits = ADD_LEVELS.map(function (l) { return l[0]; }).filter(function (n) {
-      return new RegExp('(^|[^A-Za-z])' + n.replace(/[+]/g, '\\+').replace('-', '[- ]?') + (n === 'Championship' ? '(?!\\s*\\+|\\s*plus)' : '') + '(?![A-Za-z])', 'i').test(lvTxt);
+      // An old form that says "Championship+" reads as Championship.
+      return new RegExp('(^|[^A-Za-z])' + n.replace('-', '[- ]?') + '(?![A-Za-z])', 'i').test(lvTxt);
     });
     out.tier = hits.length ? hits[hits.length - 1] : '';
     var am = (line('amount|total|price') || lvTxt).match(/\$\s?([\d,]+(?:\.\d{2})?)/);
