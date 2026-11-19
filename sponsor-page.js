@@ -71,14 +71,16 @@
       [!!l.social, l.social > 1 ? '2 to 3 social media spotlights a year' : 'Social media spotlight']
     ];
   }
-  // One short line: what this level adds over the one below it.
-  function tagline(l, i) {
-    var prev = i > 0 ? P.levels[i - 1] : null;
-    if (!prev) return l.price ? 'Support the league' : 'Any amount helps';
-    if (l.jersey && !prev.jersey) return 'Your name on a team jersey';
-    if (l.banner && !prev.banner) return 'Adds a banner and a write-up';
-    if (l.writeup > prev.writeup) return 'Our biggest spotlight';
-    return 'More time in the spotlight';
+  // What a higher level adds over the one they paid for, in a few words each.
+  function adds(l, p) {
+    var out = [];
+    if (l.jersey && !p.jersey) out.push('Name on a team jersey');
+    if (l.logo && !p.logo) out.push('Logo and link on our sponsor page');
+    if (l.writeup > (p.writeup || 0)) out.push(l.writeup >= 800 ? 'Full-width spot, ' + l.writeup + '-character write-up' : l.writeup + '-character write-up');
+    if (l.banner && !p.banner) out.push("3' x 5' outfield banner");
+    if (l.photo && !p.photo) out.push('Framed team photo');
+    if ((l.social || 0) > (p.social || 0)) out.push(l.social > 1 ? '2 to 3 social media spotlights a year' : 'Social media spotlight');
+    return out;
   }
   function priceText(l) { return l.price ? money(l.price) + (l.plus ? '+' : '') : 'Any amount'; }
 
@@ -86,26 +88,31 @@
   // highlighted as paid, higher ones with an Upgrade button for the
   // difference, lower ones greyed with no button. On a phone they swipe.
   function renderLevels() {
+    var mineLv = level0();
     var html = P.levels.map(function (l, i) {
       var paid = l.state === 'paid', below = l.state === 'below', on = paid ? !pick : pick === l.name;
       var badge = paid ? '<span class="lv-badge">Your level · Paid</span>'
-        : on ? '<span class="lv-badge lv-badge-up">Upgrade picked</span>' : '';
+        : on ? '<span class="lv-badge lv-badge-up">Upgrade picked</span>'
+        : below ? '' : '<span class="lv-badge lv-badge-up lv-ribbon">Upgrade</span>';
       var price = paid && P.paid.amount ? money(P.paid.amount) : priceText(l);
       var sub = paid ? 'Paid for the ' + esc(P.season || '') + ' season'
         : below ? 'Included in your level' : money(l.owed) + ' more than you paid';
       var act = paid
         ? (pick ? '<button type="button" class="btn small lv-act" data-keep="1">Keep ' + esc(l.name) + '</button>'
-                : '<div class="lv-lock">Your info for this level goes below.</div>')
+                : '<div class="lv-lock">Your info goes below.</div>')
         : below ? ''
-        : on ? '<div class="lv-lock lv-lock-up">Picked. How to pay the difference is below.</div>'
-        : '<button type="button" class="btn primary lv-act" data-up="' + esc(l.name) + '">Upgrade for ' + money(l.owed) + '</button>';
+        : on ? '<div class="lv-lock lv-lock-up">Picked. How to pay is below.</div>'
+        : '<button type="button" class="btn primary small lv-act" data-up="' + esc(l.name) + '">Upgrade for ' + money(l.owed) + '</button>';
+      // An upgrade shows what it adds over their level, up front.
+      var plus = paid || below ? [] : adds(l, mineLv);
+      var addList = plus.length ? '<ul class="lv-adds">' + plus.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>' : '';
       var list = perks(l).map(function (p) {
         return '<li class="' + (p[0] ? 'lv-yes' : 'lv-no') + '">' + esc(p[1]) + '</li>';
       }).join('');
       return '<li class="lv' + (paid ? ' lv-paid' : below ? ' lv-below' : ' lv-up') + (on ? ' lv-on' : '') + '"' + (on ? ' data-mine="1"' : '') + '>' +
-        badge + '<div class="lv-name">' + esc(l.name) + '</div><div class="lv-tag">' + esc(tagline(l, i)) + '</div>' +
-        '<div class="lv-price">' + price + '</div><div class="lv-sub">' + sub + '</div>' + act +
-        '<ul class="lv-perks">' + list + '</ul></li>';
+        badge + '<div class="lv-name">' + esc(l.name) + '</div>' +
+        '<div class="lv-price">' + price + '</div><div class="lv-sub">' + sub + '</div>' + addList + act +
+        '<details class="lv-more"><summary>See what\'s included</summary><ul class="lv-perks">' + list + '</ul></details></li>';
     }).join('');
     $('levelList').innerHTML = html;
     // On a phone, bring their level (or the upgrade they picked) into view.
