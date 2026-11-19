@@ -59,22 +59,28 @@
 
   // Each level's perks, as a check-list: what it has, and (greyed) what it doesn't.
   function perks(l) {
+    var listing = l.writeup >= 800 ? 'Full-width spot on our sponsor page, ' + l.writeup + '-character write-up and link'
+      : l.writeup ? 'Half-width spot on our sponsor page, ' + l.writeup + '-character write-up and link'
+      : l.logo ? 'Logo and link on our sponsor page' : 'Name on our sponsor page';
     return [
-      [l.jersey, l.jersey ? 'Name on the jersey' : 'Business name on our sponsor list'],
-      [l.logo, 'Your logo on our website and posts'],
-      [!!l.writeup, l.writeup ? l.writeup + '-character write-up' : 'Sponsor write-up'],
-      [l.banner, '3x5 banner at the field']
+      [true, 'Logo on our homepage'],
+      [true, listing],
+      [l.jersey, 'Business name on a team jersey'],
+      [l.banner, "3' x 5' outfield banner"],
+      [l.photo, 'Framed team photo'],
+      [!!l.social, l.social > 1 ? '2 to 3 social media spotlights a year' : 'Social media spotlight']
     ];
   }
   // One short line: what this level adds over the one below it.
   function tagline(l, i) {
     var prev = i > 0 ? P.levels[i - 1] : null;
-    if (!prev) return l.jersey ? 'Your business on the jerseys' : 'Support the league';
-    if (l.banner && !prev.banner) return 'Adds a banner at the field';
-    if (l.writeup > prev.writeup) return 'A longer write-up about you';
-    if (l.logo && !prev.logo) return 'Adds your logo';
-    return 'Our biggest spotlight';
+    if (!prev) return l.price ? 'Support the league' : 'Any amount helps';
+    if (l.jersey && !prev.jersey) return 'Your name on a team jersey';
+    if (l.banner && !prev.banner) return 'Adds a banner and a write-up';
+    if (l.writeup > prev.writeup) return 'Our biggest spotlight';
+    return 'More time in the spotlight';
   }
+  function priceText(l) { return l.price ? money(l.price) + (l.plus ? '+' : '') : 'Any amount'; }
 
   // The levels side by side, low to high, like a price table: theirs
   // highlighted as paid, higher ones with an Upgrade button for the
@@ -84,7 +90,7 @@
       var paid = l.state === 'paid', below = l.state === 'below', on = paid ? !pick : pick === l.name;
       var badge = paid ? '<span class="lv-badge">Your level · Paid</span>'
         : on ? '<span class="lv-badge lv-badge-up">Upgrade picked</span>' : '';
-      var price = paid ? money(P.paid.amount) : money(l.price);
+      var price = paid && P.paid.amount ? money(P.paid.amount) : priceText(l);
       var sub = paid ? 'Paid for the ' + esc(P.season || '') + ' season'
         : below ? 'Included in your level' : money(l.owed) + ' more than you paid';
       var act = paid
@@ -257,5 +263,7 @@
   $('bannerChoice').addEventListener('change', showChoice);
   $('writeup').addEventListener('input', function () { $('writeupCount').textContent = $('writeup').value.length; });
   $('pageForm').addEventListener('submit', submit);
+  // Lets a tap show the Upgrade button's pressed glow on iPhones too.
+  document.addEventListener('touchstart', function () { }, { passive: true });
   load();
 })();

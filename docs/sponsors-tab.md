@@ -155,7 +155,7 @@ What they send goes on the **LYBS Sponsor Info Packets** sheet's Packets tab, wi
 
 An upgrade only counts once the difference is paid. Until then the sheet keeps the old level and amount, the sponsor's card says "Upgrade to ... asked, $N to pay", and **Record a payment** lists them first under "Upgrade waiting on payment". Recording a payment for them adds it to their amount. Once the whole difference is in, it sets the new level, ticks Owed a Banner when the new level has one, and marks the upgrade counted. Their next receipt is for the new money only, with the season total under it.
 
-The levels and prices are the defaults in `apps-script/SponsorPage.gs` (Gameday, All-Star $300, MVP $500, Championship $750, Championship+ $1,000). Set `SPONSOR_LEVELS` in Script Properties to change them without new code.
+The levels and prices are the defaults in `apps-script/SponsorPage.gs` (Gameday any amount, All-Star $300, MVP $500, Championship $750 and up, as on the league's Become a Sponsor page). Set `SPONSOR_LEVELS` in Script Properties to change them without new code.
 
 Setup: add `apps-script/SponsorPage.gs` as a script file named `SponsorPage` and deploy a new version.
 
