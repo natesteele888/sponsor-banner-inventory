@@ -554,3 +554,5 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
   .tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 5px; overflow: visible; margin: 0; padding: 10px 0 2px; }
   .tab-btn { padding: 4px 4px; font-size: 12.5px; line-height: 1.15; white-space: normal; min-width: 0; }
 }
+/* The narrowest phones: the Dashboard button already goes home, so the logo steps aside. */
+@media (max-width: 360px) { .brand a { display: none; } }

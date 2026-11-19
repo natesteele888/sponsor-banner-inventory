@@ -64,6 +64,11 @@
       stat(count(isStock), 'from stock') +
       stat(count(isWaiting), 'waiting on info');
 
+    // "1000" on the sheet reads as $1,000; anything else shows as written.
+    var dollars = function (v) {
+      var t = String(v).trim(), n = Number(t.replace(/[$,]/g, ''));
+      return /^\$?[\d,]+(\.\d+)?$/.test(t) && isFinite(n) ? '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : t;
+    };
     var items = S.rows.filter(matches).sort(function (a, b) { return String(a.company).localeCompare(String(b.company)); });
     $('#seasonList').innerHTML = items.map(function (r) {
       var banner = r.assignedBannerId ? bannerName(r.assignedBannerId) : '';
@@ -71,7 +76,7 @@
         '<div class="info">' +
           '<div class="name">' + esc(r.company) + '</div>' +
           facts([
-            r.tier ? r.tier + (r.amount ? ' ' + r.amount : '') : '',
+            r.tier ? r.tier + (r.amount ? ' ' + dollars(r.amount) : '') : '',
             'Banner: ' + (banner ? 'from stock (' + banner + ')' : (r.bannerStatus || 'Not decided'))
           ]) +
         '</div>' +
