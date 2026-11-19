@@ -43,6 +43,7 @@
       .replace(/\b(inc|llc|co|corp|company|pc|p\.c|the|ltd)\b\.?/g, ' ').replace(/[^a-z0-9]+/g, '');
   }
   function money(v) { return Number(String(v || '').replace(/[^0-9.]/g, '')) || 0; }
+  function ticked(v) { return /^(true|yes|y|x|✓)$/i.test(String(v || '').trim()); }
   function yes(v) { return /^\s*(y|yes|true|x|paid)/i.test(String(v || '')); }
   function fmtMoney(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
   // "Alex " and "alex" are the same board member.
@@ -228,8 +229,10 @@
     if (set.missing && set.missing.length) notes.push('Not set up yet: ' + set.missing.join(', ') + '.');
     else if (!set.live) notes.push('Test mode: receipts go to the test address, not the sponsor.');
     if (!set.packet) notes.push('No sponsor packet link set, so receipts go without it.');
+    var can = canEdit();
     var row = function (i) {
-      var acts = i.status === 'ready'
+      var acts = !can ? '<button class="btn small" data-rc="preview" type="button">' + (i.status === 'sent' ? 'Open receipt' : 'Preview') + '</button>'
+        : i.status === 'ready'
         ? '<button class="btn small" data-rc="preview" type="button">Preview</button>' +
           '<button class="btn small primary" data-rc="send" type="button">Send</button>' +
           '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
@@ -237,12 +240,12 @@
             (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
         '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
-        (i.online ? '<span class="rc-path">Paid online: send this one, not the website’s receipt</span>' : '') + '</div>' +
+        (i.online ? '<span class="rc-path">Paid online: send this one, not Crossbar’s receipt</span>' : '') + '</div>' +
         '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div></li>';
     };
     box.innerHTML =
       '<h2 class="rc-h">' + (ready.length ? ready.length + ' receipt' + (ready.length === 1 ? '' : 's') + ' to send' : 'Receipts: all caught up') + '</h2>' +
-      '<p class="hint rc-note">Sponsors get this receipt with the packet link, whether they paid by check or online. Plain donations from people who aren’t sponsors use the website’s receipt button and never show here.</p>' +
+      '<p class="hint rc-note">Sponsors get this receipt with the packet link, whether they paid by check or online. Plain donations that aren’t for a sponsorship keep Crossbar’s own receipt and never show here.</p>' +
       (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
       '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
       (web.length || sent.length ? '<details class="rc-more"><summary>Sent or not needed (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
@@ -251,26 +254,81 @@
     box.classList.remove('hidden');
   }
 
+  // One receipt, as the sponsor will get it, in a preview pane. With send on,
+  // the pane has its own Send button: a first tap asks, the second sends.
+  // Nothing goes out unless that button (or the list's own Send) is tapped.
+  function showReceipt(pv, key, msg, opts) {
+    var esc = A().esc;
+    msg.textContent = 'Building the preview…';
+    return A().apiPost({ action: 'receiptPreview', key: key }).then(function (res) {
+      msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+      if (!res.ok) return false;
+      var set = (S.receipts && S.receipts.settings) || {};
+      var item = ((S.receipts && S.receipts.items) || []).filter(function (i) { return i.key === key; })[0] || {};
+      var canSend = !!(opts && opts.send) && !res.sent && item.status === 'ready';
+      var to = res.live ? (item.email || res.to) : 'the test address (test mode)';
+      pv.innerHTML = '<div class="rc-pv-top"><b>' + esc(res.subject) + '</b>' +
+        '<span class="rc-pv-acts">' +
+        (canSend ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '') +
+        '<button class="btn small" type="button" data-pv="print">Print / Save as PDF</button>' +
+        '<button class="btn small" type="button" data-pv="close">Close</button></span></div>' +
+        (canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' from the league address, only when you tap Send.</p>' : '') +
+        '<div class="rc-pv-msg status" role="status"></div>';
+      // No scripts run inside the receipt; same origin only so this page can print it.
+      var f = document.createElement('iframe');
+      f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', 'allow-same-origin allow-modals'); f.srcdoc = res.html;
+      pv.appendChild(f); pv.classList.remove('hidden');
+      var said = pv.querySelector('.rc-pv-msg');
+      pv.querySelector('[data-pv="print"]').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { said.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
+      pv.querySelector('[data-pv="close"]').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+      var sendBtn = pv.querySelector('[data-pv="send"]');
+      if (sendBtn) sendBtn.addEventListener('click', function () {
+        if (!sendBtn.dataset.armed) {
+          sendBtn.dataset.armed = '1';
+          sendBtn.textContent = set.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
+          setTimeout(function () { if (sendBtn.isConnected && !sendBtn.disabled) { delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; } }, 6000);
+          return;
+        }
+        sendBtn.disabled = true; said.textContent = 'Sending…';
+        A().apiPost({ action: 'receiptSend', key: key }).then(function (r) {
+          if (!r.ok) { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; said.textContent = r.error || 'That did not go through.'; return; }
+          said.innerHTML = '<span class="sp-done">✓ ' + esc(r.message || 'Sent.') + '</span>';
+          if (r.status === 'sent') sendBtn.remove();
+          else { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; }
+          loadReceipts();
+        }).catch(function () { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; said.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
+      });
+      if (pv.scrollIntoView) pv.scrollIntoView({ block: 'nearest' });
+      return true;
+    }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; return false; });
+  }
+
+  // Right after Mark paid: that sponsor's receipt opens in the sponsor sheet,
+  // ready to check and Send. Nothing is sent from here on its own.
+  function receiptAfterPaid(row) {
+    var pv = $('#spReceipt');
+    doneNote('Paid. Opening the receipt…');
+    return A().apiPost({ action: 'receiptList' }).then(function (res) {
+      if (!res || !res.ok) { doneNote('Paid. The receipt is under Receipts to send.'); return; }
+      S.receipts = res; renderReceipts();
+      if (!S.current || S.current.row !== row) return;
+      var mine = res.items.filter(function (i) { return i.row === row; });
+      var ready = mine.filter(function (i) { return i.status === 'ready'; })[0];
+      if (!ready) {
+        doneNote(mine.length ? 'Paid. Its receipt was already sent or marked done.'
+          : 'Paid. No receipt yet: the row needs an email and an amount over $0.');
+        return;
+      }
+      return showReceipt(pv, ready.key, $('#spEditStatus'), { send: true }).then(function (shown) {
+        if (shown) doneNote('Paid. Check the receipt below, then tap Send.');
+      });
+    }).catch(function () { doneNote('Paid. The receipt is under Receipts to send.'); });
+  }
+
   function receiptAct(btn) {
     var li = btn.closest('.rc-item'), key = li.dataset.key, how = btn.dataset.rc, msg = li.querySelector('.rc-msg');
     var item = S.receipts.items.filter(function (i) { return i.key === key; })[0];
-    if (how === 'preview') {
-      msg.textContent = 'Building the preview…';
-      return A().apiPost({ action: 'receiptPreview', key: key }).then(function (res) {
-        msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
-        if (!res.ok) return;
-        var pv = $('#rcPreview');
-        pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b>' +
-          '<button class="btn small" type="button" id="rcPvPrint">Print / Save as PDF</button><button class="btn small" type="button" id="rcPvClose">Close</button></div>';
-        // No scripts run inside the receipt; same origin only so this page can print it.
-        var f = document.createElement('iframe');
-        f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', 'allow-same-origin allow-modals'); f.srcdoc = res.html;
-        pv.appendChild(f); pv.classList.remove('hidden');
-        $('#rcPvPrint').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { msg.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
-        $('#rcPvClose').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
-        pv.scrollIntoView({ block: 'nearest' });
-      }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
-    }
+    if (how === 'preview') return showReceipt($('#rcPreview'), key, msg, { send: false });
     // Send asks once more on the button itself; the second tap sends.
     if (how === 'send' && !btn.dataset.armed) {
       btn.dataset.armed = '1';
@@ -460,6 +518,7 @@
   function renderAddBox() {
     var box = $('#spAddBox');
     box.classList.toggle('hidden', !(S.book && S.book.writable && S.book.canAdd));
+    $('#spPayBox').classList.toggle('hidden', !canEdit());
   }
 
   function addContact(e) {
@@ -476,8 +535,126 @@
       if (!res.ok) { msg.textContent = res.error || 'That did not save.'; return; }
       msg.textContent = res.message || 'Added.';
       $('#spAddForm').reset();
-      load();
+      load().then(function () {
+        if (!res.row) return;
+        open(res.row);
+        if (canEdit()) { startEdit(); $('#spEditStatus').textContent = 'Added. Fill in anything else below, then hold Save changes.'; }
+      });
     }).catch(function () { $('#spaSave').disabled = false; msg.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+  }
+
+  // ---------- record a payment ----------
+  // A payment came in (online or a check). Find who it's from on the sheet,
+  // the likeliest first: signed up and waiting on money, then people someone
+  // reached out to, then walk-ins, then everyone else. Picking one marks them
+  // paid and opens their receipt preview; nothing is sent until Send is tapped.
+  var PAY_GROUPS = ['Signed up, waiting on payment', 'Contacted, not signed up yet', 'Walk-in', 'On the sheet', 'Already marked paid'];
+  var PAY_SKIP = /^(the|and|of|inc|llc|co|corp|company|ltd|pc|p c|dba|group)$/;
+  function payWords(v) { return norm(v).split(' ').filter(function (w) { return w.length > 1 && !PAY_SKIP.test(w); }); }
+  function payScore(s, name, email) {
+    if (email && s.email && String(s.email).toLowerCase().indexOf(email.toLowerCase()) >= 0) return 100;
+    var q = nameKey(name), k = s.key, ck = nameKey(s.contact);
+    if (!q) return 0;
+    if (q === k || (ck && q === ck)) return 90;
+    if (q.length >= 4 && (k.indexOf(q) >= 0 || q.indexOf(k) >= 0 && k.length >= 4)) return 70;
+    if (q.length >= 4 && ck && (ck.indexOf(q) >= 0 || q.indexOf(ck) >= 0 && ck.length >= 4)) return 60;
+    var mine = payWords(s.company + ' ' + s.contact), hit = 0;
+    payWords(name).forEach(function (w) { if (mine.indexOf(w) >= 0) hit++; });
+    return hit * 20;
+  }
+  function payGroup(s) {
+    if (s.paid) return 4;
+    if (isIn(s)) return 0;
+    if (contactState(s) === 'yes') return 1;
+    if (s.walkIn) return 2;
+    return 3;
+  }
+  function payMatches(name, email) {
+    return sponsors().map(function (s) { return { s: s, score: payScore(s, name, email), g: payGroup(s) }; })
+      .filter(function (m) { return m.score > 0; })
+      .sort(function (a, b) { return (a.g - b.g) || (b.score - a.score) || a.s.company.localeCompare(b.s.company); })
+      .slice(0, 8);
+  }
+  function payForm() {
+    return { name: $('#spp_name').value.trim(), amount: money($('#spp_amount').value), how: $('#spp_how').value,
+      email: $('#spp_email').value.trim() };
+  }
+  function findPayer(e) {
+    if (e) e.preventDefault();
+    var f = payForm(), msg = $('#sppStatus'), esc = A().esc, box = $('#spPayMatches');
+    box.innerHTML = '';
+    if (!f.name) { msg.textContent = 'Type who paid.'; return; }
+    if (!(f.amount > 0)) { msg.textContent = 'Type the amount they paid.'; return; }
+    if (f.email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(f.email)) { msg.textContent = 'That email doesn’t look right.'; return; }
+    var list = payMatches(f.name, f.email);
+    msg.textContent = list.length ? 'Pick who it’s from.' : 'Nobody on the sheet matches that name.';
+    var last = -1;
+    box.innerHTML = '<ul class="rc-list">' + list.map(function (m) {
+      var s = m.s, head = m.g !== last ? '<li class="pay-g">' + esc(PAY_GROUPS[m.g]) + '</li>' : '';
+      last = m.g;
+      var said = [s.contact, s.amountText ? 'sheet says ' + s.amountText : '', s.owner ? s.owner + '’s' : ''].filter(Boolean).join(' · ');
+      return head + '<li class="rc-item"><div class="rc-who"><b>' + esc(s.company) + '</b><span>' + esc(said) + '</span></div>' +
+        '<div class="rc-acts"><button class="btn small' + (m.g === 4 ? '' : ' primary') + '" type="button" data-pay="' + s.row + '">This one</button></div></li>';
+    }).join('') + '<li class="rc-item"><div class="rc-who"><b>Someone new</b><span>Adds ' + esc(f.name) + ' to the sheet as a paid sponsor</span></div>' +
+      '<div class="rc-acts"><button class="btn small" type="button" data-pay="new">Add new sponsor</button></div></li></ul>';
+  }
+  function payNote(f) {
+    var d = new Date(), when = MON[d.getMonth()] + ' ' + d.getDate();
+    return (f.how === 'check' ? 'Paid by check ' : 'Paid online ') + when + ' (' + fmtMoney(f.amount) + ')';
+  }
+  // First tap asks; the second marks them paid.
+  function pickPayer(btn) {
+    var f = payForm(), msg = $('#sppStatus');
+    if (!f.name || !(f.amount > 0)) { findPayer(); return; }
+    var isNew = btn.dataset.pay === 'new', s = isNew ? null : sponsors().find(function (x) { return x.row === Number(btn.dataset.pay); });
+    if (!isNew && !s) { msg.textContent = 'That row moved. Find them again.'; return; }
+    if (!btn.dataset.armed) {
+      $$('#spPayMatches [data-armed]').forEach(function (b) { delete b.dataset.armed; b.textContent = b.dataset.pay === 'new' ? 'Add new sponsor' : 'This one'; });
+      btn.dataset.armed = '1';
+      btn.textContent = 'Tap again: ' + fmtMoney(f.amount) + ' paid';
+      msg.textContent = isNew ? 'Adds ' + f.name + ' as a new sponsor, paid ' + fmtMoney(f.amount) + ' ' + (f.how === 'check' ? 'by check' : 'online') + '.'
+        : (s.paid ? s.company + ' is already marked paid. Tap again to record this payment too. ' : '') +
+          'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
+      setTimeout(function () { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = isNew ? 'Add new sponsor' : 'This one'; } }, 8000);
+      return;
+    }
+    delete btn.dataset.armed;
+    $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
+    msg.textContent = 'Saving…';
+    var t = mainTab(), head = function (re) { var c = colOf(t, re); return c < 0 ? '' : t.headers[c]; };
+    var hPaid = head(/^paid/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/);
+    if (!hPaid) { msg.textContent = 'The sheet has no Paid? column.'; return; }
+    var note = payNote(f);
+    var step = isNew
+      ? A().apiPost({ action: 'sponsorAdd', company: f.name, email: f.email, amount: String(f.amount), notes: note }).then(function (res) {
+          if (!res.ok) throw new Error(res.error || 'That did not save.');
+          var v = {}; v[hPaid] = 'Yes';
+          return A().apiPost({ action: 'sponsorEdit', row: res.row, company: f.name, values: v }).then(function (r2) {
+            if (!r2.ok) throw new Error(r2.error || 'Added, but not marked paid.');
+            return res.row;
+          });
+        })
+      : (function () {
+          var v = {}; v[hPaid] = 'Yes';
+          if (hAmt && f.amount !== s.amount) v[hAmt] = String(f.amount);
+          if (hNotes) v[hNotes] = s.notes ? s.notes + '; ' + note : note;
+          if (hEmail && f.email && !s.email) v[hEmail] = f.email;
+          return A().apiPost({ action: 'sponsorEdit', row: s.row, company: s.company, values: v }).then(function (res) {
+            if (!res.ok) throw new Error(res.error || 'That did not save.');
+            return s.row;
+          });
+        })();
+    step.then(function (row) {
+      return load().then(function () {
+        $('#spPayForm').reset(); $('#spPayMatches').innerHTML = '';
+        msg.textContent = 'Recorded.';
+        open(row);
+        receiptAfterPaid(row);
+      });
+    }).catch(function (err) {
+      $$('#spPayMatches button').forEach(function (b) { b.disabled = false; });
+      msg.textContent = err && err.message && !/fetch|network/i.test(err.message) ? err.message : 'Could not reach the backend. Try again.';
+    });
   }
 
   // Press and hold until the ring fills, or tap twice (the keyboard way), to
@@ -519,8 +696,10 @@
     st.innerHTML = '<span class="sp-done">✓ ' + A().esc(text) + '</span>';
   }
 
+  function canEdit() { return !!(S.book && S.book.writable && S.book.canEdit); }
+
   function showEditActs(s) {
-    var can = !!(S.book && S.book.writable && S.book.canEdit);
+    var can = canEdit();
     $('#spEditActs').classList.toggle('hidden', !can);
     $('#spPaidBtn').classList.toggle('hidden', !can || s.paid);
     var st = contactState(s);
@@ -544,13 +723,24 @@
     if (!s) return;
     if (S.editing) { open(s.row); return; }
     S.editing = true;
-    var fx = S.book.formulaCols || [];
+    var fx = S.book.formulaCols || [], rules = S.book.choices || [];
     $('#spFields').innerHTML = '<div class="field-grid">' + t.headers.map(function (h, i) {
       if (!h) return '';
-      var v = s.cells[i] || '', calc = fx.indexOf(i) >= 0;
-      return '<label' + (h.length > 22 || /^notes?$/i.test(h) ? ' class="full"' : '') + '>' + esc(h) +
+      var v = s.cells[i] || '', calc = fx.indexOf(i) >= 0, rule = rules[i];
+      var wide = h.length > 22 || /^notes?$/i.test(h);
+      if (!calc && rule && rule.check) {
+        return '<label class="sp-check"><input type="checkbox" data-col="' + i + '" data-check="1"' + (ticked(v) ? ' checked' : '') + '> ' + esc(h) + '</label>';
+      }
+      if (!calc && rule && rule.list && rule.list.length) {
+        var opts = [''].concat(rule.list);
+        if (v && opts.indexOf(v) < 0) opts.push(v);
+        return '<label' + (wide ? ' class="full"' : '') + '>' + esc(h) + '<select data-col="' + i + '">' +
+          opts.map(function (o) { return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + (o ? esc(o) : '(blank)') + '</option>'; }).join('') +
+          '</select></label>';
+      }
+      return '<label' + (wide ? ' class="full"' : '') + '>' + esc(h) +
         '<input type="text" data-col="' + i + '" value="' + esc(v) + '"' + (calc ? ' disabled title="Worked out by the sheet"' : '') + '></label>';
-    }).join('') + '</div><p class="hint">Row ' + s.row + '. Grey boxes are worked out by the sheet. Hold Save changes to confirm.</p>';
+    }).join('') + '</div><p class="hint">Row ' + s.row + '. Dropdowns and checkboxes are the sheet’s own. Grey boxes are worked out by the sheet. Hold Save changes to confirm.</p>';
     $('#spEditBtn').textContent = 'Cancel';
     $('#spSaveBtn').classList.remove('hidden');
   }
@@ -569,15 +759,19 @@
   // What the open edit form would change, column by column.
   function pendingEdits() {
     var t = mainTab(), out = [];
-    $$('#spFields input[data-col]').forEach(function (inp) {
+    $$('#spFields [data-col]').forEach(function (inp) {
       if (inp.disabled) return;
       var i = Number(inp.dataset.col), was = S.current.cells[i] || '';
+      if (inp.dataset.check) {
+        if (inp.checked !== ticked(was)) out.push({ h: t.headers[i], to: inp.checked ? 'TRUE' : 'FALSE', said: inp.checked ? 'ticked' : 'unticked' });
+        return;
+      }
       if (inp.value !== was) out.push({ h: t.headers[i], from: was, to: inp.value });
     });
     return out;
   }
   function describe(list) {
-    return list.map(function (c) { return c.h + ': ' + (c.from || 'blank') + ' → ' + (c.to || 'blank'); }).join('; ');
+    return list.map(function (c) { return c.said ? c.h + ': ' + c.said : c.h + ': ' + (c.from || 'blank') + ' → ' + (c.to || 'blank'); }).join('; ');
   }
   function askSave() {
     var list = pendingEdits();
@@ -603,16 +797,16 @@
     return !v || /^no$/i.test(v) ? 'none' : 'yes';
   }
 
-  function setColumn(re, missing, value, said) {
+  function setColumn(re, missing, value, said, after) {
     var t = mainTab(), c = colOf(t, re), row = S.current.row;
     if (c < 0) { $('#spEditStatus').textContent = missing; return; }
     var values = {}; values[t.headers[c]] = value;
-    saveRow(values, function () { open(row); doneNote(said); });
+    saveRow(values, function () { open(row); doneNote(said); if (after) after(row); });
   }
 
   function markContacted() { setColumn(/^contacted/, 'The sheet has no Contacted? column.', 'Yes', 'Contacted. Saved to the sheet.'); }
   function markNotSponsoring() { setColumn(/^contacted/, 'The sheet has no Contacted? column.', 'Not sponsoring', 'Not sponsoring. No follow-up emails go to them.'); }
-  function markPaid() { setColumn(/^paid/, 'The sheet has no Paid? column.', 'Yes', 'Paid. Its receipt is now under Receipts to send.'); }
+  function markPaid() { setColumn(/^paid/, 'The sheet has no Paid? column.', 'Yes', 'Paid.', receiptAfterPaid); }
 
   function assignTo() {
     var who = person($('#spAssignTo').value.trim()), s = S.current;
@@ -909,6 +1103,7 @@
       return '<p class="ss-row"><span>' + esc(h) + '</span>' + linkify(h, v) + '</p>';
     }).join('') + '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p>';
     showEditActs(s);
+    $('#spReceipt').classList.add('hidden'); $('#spReceipt').innerHTML = '';
     var mapUrl = s.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.address) : '';
     $('#spWalkIn').classList.toggle('hidden', !s.walkIn);
     $('#spWalkIn').innerHTML = s.walkIn ? '<b>Walk-in only.</b> Stop by in person with the printed form; they mail it back with a check or money order.' +
@@ -1055,6 +1250,8 @@
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(); });
     $('#spAddForm').addEventListener('submit', addContact);
+    $('#spPayForm').addEventListener('submit', findPayer);
+    $('#spPayMatches').addEventListener('click', function (e) { var b = e.target.closest('button[data-pay]'); if (b) pickPayer(b); });
     $('#spEditBtn').addEventListener('click', startEdit);
     holdable($('#spSaveBtn'), askSave, saveEdit);
     holdable($('#spPaidBtn'), function () { return 'mark ' + S.current.company + ' paid'; }, markPaid);

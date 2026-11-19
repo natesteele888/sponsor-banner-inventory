@@ -110,7 +110,11 @@ The list opens on this season's sponsors (anyone with an amount this season), na
 
 ## Donation receipts for paid sponsors
 
-When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Sponsors get this receipt from here whether they paid by check or online, so the league site's receipt button is not used for a sponsor (a row whose Paid? or Notes says online, website, Crossbar or card is tagged **Paid online** as a reminder). Plain donations from people who aren't on the sponsor list never show here; those keep the website's receipt button. **Not needed** takes a row off the list (and **Undo** puts it back).
+When a sponsorship editor marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. **Mark paid** on a sponsor's card opens that receipt's preview right there, with its own **Send** button (twice: the second tap sends). From the list, **Preview** shows the email and **Send** sends it the same way. Nothing is ever sent on its own; there is no trigger. Only the sponsorship editors (see Board edits) can send a receipt or mark one done; anyone else signed in sees the preview only. Sponsors get this receipt from here whether they paid by check or online, so Crossbar's receipt is not used for a sponsor (a row whose Paid? or Notes says online, website, Crossbar or card is tagged **Paid online** as a reminder). Plain donations that aren't for a sponsorship never show here; those keep Crossbar's own receipt. **Not needed** takes a row off the list (and **Undo** puts it back).
+
+**Record a payment** (editors only) is for a payment that just came in, online or by check. Type who paid, the amount, how, and their email if you have it, then **Find them**. The app lists the likeliest rows first: signed up and waiting on payment, then people someone reached out to, then walk-ins, then everyone else, and last anyone already marked paid. It matches the business name, the contact's name or the email. Pick one (**This one**, tapped twice) and it marks that row paid, sets the amount if it differs, fills a missing email, adds "Paid by check" or "Paid online" with the day to Notes, opens the sponsor and opens the receipt preview. **Add new sponsor** does the same for someone who isn't on the sheet yet. Nothing is sent until **Send** is tapped.
+
+The email is laid out like the league's Crossbar emails: a light grey page, a centered 650px column with the league logo on top, white cards with rounded corners, and a small grey footer with the league's name and address.
 
 The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) with the league letterhead. Above it, as its own card with space between, is the one step left for the sponsor: "One more step: your sponsor info packet" and a **Fill out your sponsor packet** button. The receipt card stands alone, so a screenshot of it is a clean tax copy. A PDF of the receipt alone (no packet card, no link) is attached to every receipt email. In the app, **Preview** on a waiting row and **Open receipt** on a sent one show the receipt with a **Print / Save as PDF** button, which prints the receipt without the packet card. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
 
@@ -164,7 +168,15 @@ back to read-only); delete it to turn edits back on.
   editors. Editors are the league admin account plus the Google addresses in
   the Script Property `SPONSOR_EDITORS` (comma separated). Formula columns are
   left alone. "Not sponsoring" goes in the Contacted? column and takes the row
-  off follow-up emails.
+  off follow-up emails. Adding a contact opens the new row in the edit form,
+  so an editor can fill in every other column right away.
+- **The sheet's own dropdowns and checkboxes:** the edit form reads them from
+  the sheet each time (nothing about the choices is in this repo). A dropdown
+  column is a dropdown in the app, keeping any value already there that the
+  list doesn't have. A checkbox column is a checkbox. A value that a strict
+  dropdown (like Status) refuses is turned down before anything is written,
+  with the choices it takes, and a change the sheet still refuses when it
+  lands says so rather than "Saved".
 - **Hold to confirm:** Mark paid, Mark contacted, Not sponsoring, Assign and
   Save changes are pressed and held until the ring fills. A plain tap asks
   "Tap again or hold" with what will change (for example "Amount: $500 →

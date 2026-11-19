@@ -421,7 +421,14 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .rc-preview { margin-top: 10px; }
 .rc-pv-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; min-width: 0; }
 .rc-pv-top b { min-width: 0; overflow-wrap: anywhere; }
-.rc-frame { width: 100%; height: 620px; border: 1px solid var(--line); border-radius: 10px; background: #F4F6FA; }
+.rc-frame { width: 100%; height: 620px; border: 1px solid var(--line); border-radius: 10px; background: #F7F7F7; }
+.rc-pv-acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.rc-pv-to { margin: 0 0 6px; }
+.rc-pv-msg { display: block; margin-bottom: 6px; }
+.pay-g {list-style:none;margin:10px 0 2px;font-size:12px;font-weight:bold;letter-spacing:.5px;text-transform:uppercase;color:#5B6478}
+.sp-check {display:flex;align-items:center;gap:8px}
+.sp-check input {width:auto}
+.sp-receipt { margin: 12px 0 4px; }
 
 /* Sponsor info packets: one line each, open for everything they sent. */
 .pk-item { border-top: 1px solid var(--line); padding: 8px 0; }

@@ -7,7 +7,7 @@
  *        ▼
  *   Sponsors tab: "Receipts to send" lists each one, with a preview
  *        │  Nate gets one heads-up email per new one (receiptPing, hourly)
- *        │  a board member taps Send (a receipt is never sent on its own)
+ *        │  a sponsorship editor taps Send (a receipt is never sent on its own)
  *        ▼
  *   one email to the sponsor: the donation receipt plus the sponsor packet link
  *        │
@@ -108,32 +108,35 @@ function receiptEmail_(r, s, when) {
   var thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for sponsoring ' + RECEIPT_ORG + ' this season!';
 
   var cell = 'padding:10px 0;border-bottom:1px solid #E3E6EE;font-size:15px;vertical-align:top;';
+  // Laid out like the league's Crossbar emails, so both read as coming from
+  // the same place: a light grey page, the league logo centred on it, then a
+  // white card with rounded top corners, and a small grey footer.
+  var col = 'max-width:650px;margin:0 auto;';
   var html =
-    '<div class="rc-outer" style="background:#F4F6FA;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
-    // The sponsor packet: its own card above the receipt, with clear space
-    // between, so a screenshot of the receipt stays clean. Left off the PDF.
+    '<div class="rc-outer" style="background:#F7F7F7;padding:30px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
+    // Header: the league logo, centred above everything.
+    '<div class="rc-head" style="' + col + 'text-align:center;padding:0 0 24px">' +
+      '<img src="' + e(leagueLogoUrl_()) + '" width="240" height="100" alt="' + e(RECEIPT_ORG) + '" style="display:inline-block;width:240px;height:100px;border:0">' +
+    '</div>' +
     // The opening line: a thank-you to the sponsor by name. Left off the PDF
     // and the printed copy, which are the tax receipt.
-    '<!--ty--><div class="rc-ty" style="max-width:560px;margin:0 auto 20px;font-size:20px;font-weight:bold;line-height:1.35;color:#0a1628">' + e(thanks) + '</div><!--/ty-->' +
+    '<!--ty--><div class="rc-ty" style="' + col + 'margin-bottom:20px;font-size:20px;font-weight:bold;line-height:1.35;color:#0a1628">' + e(thanks) + '</div><!--/ty-->' +
+    // The sponsor packet: its own card above the receipt, with clear space
+    // between, so a screenshot of the receipt stays clean. Left off the PDF.
     (s.packetUrl ?
-      '<!--pk--><table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto 28px;background:#EEF3FF;border:1px solid #C9D6FF;border-left:4px solid #2E52E8;border-radius:12px;border-collapse:separate">' +
-        '<tr><td style="padding:18px 20px">' +
+      '<!--pk--><table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'margin-bottom:28px;background:#EEF3FF;border:1px solid #C9D6FF;border-radius:20px;border-collapse:separate">' +
+        '<tr><td style="padding:24px 30px">' +
           '<div style="font-size:17px;font-weight:bold;margin-bottom:6px;color:#0a1628">One more step: your sponsor info packet</div>' +
           '<div style="font-size:14px;line-height:1.5;margin-bottom:14px">Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.</div>' +
           '<a href="' + e(s.packetUrl) + '" style="display:inline-block;background:#2E52E8;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 20px;border-radius:8px">Fill out your sponsor packet</a>' +
         '</td></tr></table><!--/pk-->' : '') +
-    '<table role="presentation" class="rc-card" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E3E6EE;border-radius:12px;border-collapse:separate;overflow:hidden">' +
-    // Letterhead: the league logo top left, the league's name and address beside it.
-    '<tr><td style="padding:18px 24px 16px;border-bottom:4px solid #2E52E8">' +
-      '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
-        '<td style="vertical-align:middle;padding-right:16px"><img src="' + e(leagueLogoUrl_()) + '" width="130" height="54" alt="LYBS" style="display:block;width:130px;height:54px;border:0"></td>' +
-        '<td style="vertical-align:middle">' +
-          '<div style="font-size:18px;font-weight:bold;line-height:1.25;color:#0a1628">' + e(RECEIPT_ORG) + '</div>' +
-          (s.address ? '<div style="font-size:13px;color:#5B6478;margin-top:3px">' + e(s.address) + '</div>' : '') +
-        '</td></tr></table>' +
+    '<table role="presentation" class="rc-card" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'background:#ffffff;border-radius:20px 20px 0 0;border-collapse:separate;overflow:hidden">' +
+    '<tr><td style="padding:30px 30px 4px">' +
+      '<div style="font-size:12px;letter-spacing:1.5px;color:#5B6478;font-weight:bold;margin-bottom:6px">NON-PROFIT DONATION RECEIPT</div>' +
+      '<div style="font-size:18px;font-weight:bold;line-height:1.25;color:#0a1628">' + e(RECEIPT_ORG) + '</div>' +
+      (s.address ? '<div style="font-size:13px;color:#5B6478;margin-top:3px">' + e(s.address) + '</div>' : '') +
     '</td></tr>' +
-    '<tr><td style="background:#0a1628;padding:10px 24px;font-size:12px;letter-spacing:1.5px;color:#ffffff;font-weight:bold">NON-PROFIT DONATION RECEIPT</td></tr>' +
-    '<tr><td style="padding:20px 24px 4px">' +
+    '<tr><td style="padding:16px 30px 4px">' +
       '<p style="margin:0 0 14px;font-size:15px;line-height:1.5">Thank you for supporting ' + e(RECEIPT_ORG) + '. <!--pdf-->Your receipt is attached as a PDF to print or save for your taxes.<!--/pdf--></p>' +
       '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">' +
       rows.map(function (x) {
@@ -143,16 +146,21 @@ function receiptEmail_(r, s, when) {
       }).join('') +
       '</table>' +
       '<p style="margin:16px 0 0;font-size:14px;line-height:1.5">' + e(noGoods) + '</p>' +
-      '<p style="margin:12px 0 0;font-size:14px;line-height:1.5">Issued by ' + e(s.issuer || 'NOT SET') + '</p>' +
+      '<p style="margin:16px 0 0;font-size:14px;line-height:1.5">Sincerely,<br><b>' + e(RECEIPT_ORG) + '</b><br>' + e(s.issuer || 'NOT SET') + '</p>' +
       '<p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#5B6478">' + e(taxLine) + '</p>' +
     '</td></tr>' +
-    '<tr><td style="padding:0 0 20px"></td></tr>' +
-    '</table></div>';
+    '<tr><td style="padding:0 0 30px"></td></tr>' +
+    '</table>' +
+    // Footer, small and grey like Crossbar's: the league and its address.
+    '<div class="rc-foot" style="' + col + 'padding:18px 0 0;text-align:center;font-size:11px;line-height:1.5;color:#999999">' +
+      e(RECEIPT_ORG) + (s.address ? ' · ' + e(s.address) : '') +
+    '</div>' +
+    '</div>';
 
   var text = [thanks, ''].concat(s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
     .concat([RECEIPT_ORG, s.address, '', 'NON-PROFIT DONATION RECEIPT', '', 'Thank you for supporting ' + RECEIPT_ORG + '. Your receipt is attached as a PDF to print or save for your taxes.', ''])
     .concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }))
-    .concat(['', noGoods, 'Issued by ' + (s.issuer || 'NOT SET'), '', taxLine])
+    .concat(['', noGoods, '', 'Sincerely,', RECEIPT_ORG, (s.issuer || 'NOT SET'), '', taxLine])
     .join('\n');
   return { subject: subject, html: html, text: text };
 }
@@ -175,7 +183,7 @@ function receiptPdf_(r, s, when) {
       .replace(/<!--ty-->[\s\S]*?<!--\/ty-->/, '')
       .replace(/<!--pk-->[\s\S]*?<!--\/pk-->/, '')
       .replace(/<!--pdf-->[\s\S]*?<!--\/pdf-->/, 'Please keep this receipt for your tax records.');
-    var doc = receiptDoc_(html.replace('background:#F4F6FA;padding:24px 12px', 'background:#ffffff;padding:0'), m.subject);
+    var doc = receiptDoc_(html.replace('background:#F7F7F7;padding:30px 12px', 'background:#ffffff;padding:0'), m.subject);
     var name = 'LYBS ' + SEASON + ' donation receipt - ' + String(r.company).replace(/[^\w &.'-]+/g, '').trim() + '.pdf';
     return HtmlService.createHtmlOutput(doc).getBlob().getAs(MimeType.PDF).setName(name);
   } catch (e) { console.log('receipt pdf: ' + e); return null; }
@@ -208,6 +216,7 @@ function receiptPreview(data) {
 
 // One tap from a board member sends one receipt. Never called on a schedule.
 function receiptSend(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can send receipts.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var s = receiptSettings_();
   if (s.missing.length) return fail('Receipts are not set up yet: missing ' + s.missing.join(', ') + ' (Script Properties).');
@@ -234,6 +243,7 @@ function receiptSend(data) {
 
 // "Not needed", and undo.
 function receiptMark(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can change a receipt.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var key = String(data.key || ''), how = String(data.how || '');
   var log = receiptLog_();
