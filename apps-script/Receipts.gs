@@ -105,11 +105,16 @@ function receiptEmail_(r, s, when) {
   var rows = [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation amount', amount], ['Date', date]]
     .filter(function (x) { return x[1]; });
 
+  var thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for sponsoring ' + RECEIPT_ORG + ' this season!';
+
   var cell = 'padding:10px 0;border-bottom:1px solid #E3E6EE;font-size:15px;vertical-align:top;';
   var html =
     '<div class="rc-outer" style="background:#F4F6FA;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
     // The sponsor packet: its own card above the receipt, with clear space
     // between, so a screenshot of the receipt stays clean. Left off the PDF.
+    // The opening line: a thank-you to the sponsor by name. Left off the PDF
+    // and the printed copy, which are the tax receipt.
+    '<!--ty--><div class="rc-ty" style="max-width:560px;margin:0 auto 20px;font-size:20px;font-weight:bold;line-height:1.35;color:#0a1628">' + e(thanks) + '</div><!--/ty-->' +
     (s.packetUrl ?
       '<!--pk--><table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto 28px;background:#EEF3FF;border:1px solid #C9D6FF;border-left:4px solid #2E52E8;border-radius:12px;border-collapse:separate">' +
         '<tr><td style="padding:18px 20px">' +
@@ -144,7 +149,7 @@ function receiptEmail_(r, s, when) {
     '<tr><td style="padding:0 0 20px"></td></tr>' +
     '</table></div>';
 
-  var text = (s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
+  var text = [thanks, ''].concat(s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
     .concat([RECEIPT_ORG, s.address, '', 'NON-PROFIT DONATION RECEIPT', '', 'Thank you for supporting ' + RECEIPT_ORG + '. Your receipt is attached as a PDF to print or save for your taxes.', ''])
     .concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }))
     .concat(['', noGoods, 'Issued by ' + (s.issuer || 'NOT SET'), '', taxLine])
@@ -157,7 +162,7 @@ function receiptEmail_(r, s, when) {
 function receiptDoc_(html, title) {
   return '<!doctype html><html><head><meta charset="utf-8"><title>' + String(title).replace(/[<>&]/g, '') + '</title>' +
     '<style>@page{size:letter;margin:12mm}body{margin:0;background:#fff}' +
-    '@media print{.rc-outer{background:#fff!important;padding:0!important}.rc-packet{display:none!important}}</style></head><body>' +
+    '@media print{.rc-outer{background:#fff!important;padding:0!important}.rc-packet,.rc-ty{display:none!important}}</style></head><body>' +
     html + '</body></html>';
 }
 
@@ -167,6 +172,7 @@ function receiptPdf_(r, s, when) {
   try {
     var m = receiptEmail_(r, s, when), logo = logoDataUri_();
     var html = m.html.split('src="' + leagueLogoUrl_() + '"').join(logo ? 'src="' + logo + '"' : 'src=""')
+      .replace(/<!--ty-->[\s\S]*?<!--\/ty-->/, '')
       .replace(/<!--pk-->[\s\S]*?<!--\/pk-->/, '')
       .replace(/<!--pdf-->[\s\S]*?<!--\/pdf-->/, 'Please keep this receipt for your tax records.');
     var doc = receiptDoc_(html.replace('background:#F4F6FA;padding:24px 12px', 'background:#ffffff;padding:0'), m.subject);
