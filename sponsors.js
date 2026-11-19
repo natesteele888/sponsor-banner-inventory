@@ -372,7 +372,7 @@
   }
 
   // Plain words for the settings a card says are missing.
-  var SETUP_WORDS = { NUDGE_SIGN: 'who the emails are signed from', RECEIPT_ORG_ADDRESS: 'the league’s mailing address',
+  var SETUP_WORDS = { RECEIPT_ORG_ADDRESS: 'the league’s mailing address',
     'mailing address': 'the league’s mailing address', EIN: 'the league’s tax ID', 'who issues it': 'who signs the receipts' };
   function setupWords(list) { return list.map(function (k) { return SETUP_WORDS[k] || k; }).join(', '); }
 
@@ -417,8 +417,7 @@
           '<div class="rc-msg nd-msg" role="status"></div>'; };
     var row = function (i) {
       var acts = i.status === 'ready'
-        ? '<button class="btn small" data-nd="preview" type="button">Preview</button>' +
-          '<button class="btn small primary" data-nd="send" type="button">Send</button>' +
+        ? '<button class="btn small primary" data-nd="preview" type="button">Preview and send</button>' +
           '<button class="btn small" data-nd="skip" type="button">Skip</button>'
         : '<span class="rc-state">' + (i.status === 'sent' ? 'Sent' : 'Skipped') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
           (i.status === 'sent' ? '' : '<button class="btn small" data-nd="undo" type="button">Undo</button>');
@@ -436,13 +435,90 @@
     box.classList.remove('hidden');
   }
 
-  function showNudgePreview(res, li) {
-    var pv = rowPreview(li);
-    pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b><button class="btn small" type="button" data-pv="close">Close</button></div>';
-    var f = document.createElement('iframe');
-    f.className = 'rc-frame'; f.title = 'Follow-up preview'; f.setAttribute('sandbox', ''); f.srcdoc = res.html;
-    pv.appendChild(f); pv.classList.remove('hidden');
+  // Who is signed in here, for the personal version and their own email.
+  function signedIn() {
+    try { var u = firebase.auth().currentUser; return u ? { email: u.email || '', name: u.displayName || '' } : {}; } catch (e) { return {}; }
+  }
+  function gmailLink(from, to, subject, text) {
+    var e = encodeURIComponent;
+    return 'https://mail.google.com/mail/?' + (from ? 'authuser=' + e(from) + '&' : '') + 'view=cm&fs=1&to=' + e(to || '') + '&su=' + e(subject) + '&body=' + e(text);
+  }
+  function mailtoLink(to, subject, text) {
+    var e = encodeURIComponent;
+    return 'mailto:' + e(to || '').replace(/%40/g, '@') + '?subject=' + e(subject) + '&body=' + e(text);
+  }
+
+  // The follow-up as two editable versions: the league's, sent from the
+  // league address on Send, or a personal one the board member sends from
+  // their own email. Nothing goes out from here without a tap.
+  function showNudgePreview(res, li, q) {
+    var esc = A().esc, pv = rowPreview(li), me = signedIn();
+    var item = li.dataset.key ? S.nudges.items.filter(function (i) { return i.key === li.dataset.key; })[0] : null;
+    var canSend = !!(item && item.status === 'ready' && S.nudges.started);
+    var kept = {}, voice = res.voice || 'league';
+    kept[voice] = { subject: res.subject, text: res.text, to: res.to, live: res.live };
+    pv.innerHTML = '<div class="rc-pv-top"><b>' + esc(res.round || 'Follow-up') + '</b><button class="btn small" type="button" data-pv="close">Close</button></div>' +
+      '<div class="nd-voice" role="group" aria-label="Which version">' +
+        '<button class="btn small" type="button" data-voice="league">League version<span>from info@</span></button>' +
+        '<button class="btn small" type="button" data-voice="personal">Personal<span>from your email</span></button></div>' +
+      '<label class="nd-field">Subject<input type="text" class="nd-subject" maxlength="200"></label>' +
+      '<label class="nd-field">Message<textarea class="nd-text" rows="12" maxlength="6000"></textarea></label>' +
+      '<p class="hint rc-pv-to nd-to"></p><div class="rc-pv-acts nd-acts"></div><div class="rc-pv-msg status" role="status"></div>';
+    var sub = pv.querySelector('.nd-subject'), txt = pv.querySelector('.nd-text'), to = pv.querySelector('.nd-to'),
+      acts = pv.querySelector('.nd-acts'), said = pv.querySelector('.rc-pv-msg');
+    var save = function () { if (kept[voice]) { kept[voice].subject = sub.value; kept[voice].text = txt.value; } };
+    var draw = function () {
+      var k = kept[voice], live = !!k.live;
+      pv.querySelectorAll('[data-voice]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.voice === voice)); b.classList.toggle('primary', b.dataset.voice === voice); });
+      sub.value = k.subject; txt.value = k.text; said.textContent = '';
+      var where = !item ? '' : live ? esc(item.email) : 'the test address (test mode)';
+      if (voice === 'league') {
+        to.innerHTML = item ? 'Goes to ' + where + ' from the league address, with the league logo on top, only when you tap Send.' : 'A sample. The league version goes from the league address.';
+        acts.innerHTML = canSend ? '<button class="btn small primary" type="button" data-pv="send">Send from info@</button>' : '';
+      } else {
+        to.innerHTML = item ? 'Opens in your own email, addressed to ' + where + ', so it comes from you. Send it there, then tap I sent it.' : 'A sample. The personal version is sent from the board member’s own email.';
+        acts.innerHTML = canSend ? '<a class="btn small primary" target="_blank" rel="noopener" data-pv="gmail" href="#">Open in Gmail</a>' +
+          '<a class="btn small" data-pv="mailto" href="#">Other mail app</a>' +
+          '<button class="btn small" type="button" data-pv="mine">I sent it</button>' : '';
+      }
+    };
+    var pick = function (v) {
+      save();
+      if (v === voice) return;
+      if (kept[v]) { voice = v; return draw(); }
+      said.textContent = 'Loading that version…';
+      A().apiPost(Object.assign({}, q, { voice: v, signName: me.name })).then(function (r) {
+        if (!r.ok) { said.textContent = r.error || 'Could not load that version.'; return; }
+        kept[v] = { subject: r.subject, text: r.text, to: r.to, live: r.live }; voice = v; draw();
+      }).catch(function () { said.textContent = 'Could not reach the backend. Try again.'; });
+    };
+    pv.querySelectorAll('[data-voice]').forEach(function (b) { b.addEventListener('click', function () { pick(b.dataset.voice); }); });
     pv.querySelector('[data-pv="close"]').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+    acts.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pv]'); if (!b) return;
+      save();
+      var k = kept[voice];
+      if (!k.subject.trim() || !k.text.trim()) { e.preventDefault(); said.textContent = 'The email needs a subject and a message.'; return; }
+      if (b.dataset.pv === 'gmail') { b.href = gmailLink(me.email, k.to, k.subject, k.text); return; }
+      if (b.dataset.pv === 'mailto') { b.href = mailtoLink(k.to, k.subject, k.text); return; }
+      if (!b.dataset.armed) {
+        b.dataset.armed = '1';
+        var was = b.textContent;
+        b.textContent = b.dataset.pv === 'send' ? (k.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test') : 'Tap again if you sent it';
+        setTimeout(function () { if (b.isConnected && !b.disabled) { delete b.dataset.armed; b.textContent = was; } }, 6000);
+        return;
+      }
+      b.disabled = true; said.textContent = b.dataset.pv === 'send' ? 'Sending…' : 'Saving…';
+      var req = b.dataset.pv === 'send' ? { action: 'nudgeSend', key: item.key, subject: k.subject, text: k.text } : { action: 'nudgeMark', key: item.key, how: 'personal' };
+      A().apiPost(req).then(function (r) {
+        if (!r.ok) { b.disabled = false; delete b.dataset.armed; draw(); said.textContent = r.error || 'That did not go through.'; return; }
+        said.innerHTML = '<span class="sp-done">✓ ' + esc(r.message || 'Done.') + '</span>';
+        if (r.status === 'sent') { $('#spStatus').textContent = r.message || 'Saved.'; setTimeout(loadNudges, 1200); }
+        else { b.disabled = false; delete b.dataset.armed; draw(); said.innerHTML = '<span class="sp-done">✓ ' + esc(r.message || 'Done.') + '</span>'; }
+      }).catch(function () { b.disabled = false; delete b.dataset.armed; draw(); said.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
+    });
+    draw();
+    pv.classList.remove('hidden');
     if (pv.scrollIntoView) pv.scrollIntoView({ block: 'nearest' });
   }
 
@@ -472,27 +548,19 @@
     if (how === 'preview' || how === 'sample') {
       msg.textContent = 'Building the preview…';
       var q = how === 'sample' ? { action: 'nudgePreview', round: li.dataset.round } : { action: 'nudgePreview', key: li.dataset.key };
-      return A().apiPost(q).then(function (res) {
+      return A().apiPost(Object.assign({ voice: 'league', signName: signedIn().name }, q)).then(function (res) {
         msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
-        if (res.ok) showNudgePreview(res, li);
+        if (res.ok) showNudgePreview(res, li, q);
       }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
     }
-    var item = S.nudges.items.filter(function (i) { return i.key === li.dataset.key; })[0];
-    if (how === 'send' && !btn.dataset.armed) {
-      btn.dataset.armed = '1';
-      btn.textContent = S.nudges.settings.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
-      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Send'; } }, 6000);
-      return;
-    }
+    if (how !== 'skip' && how !== 'undo') return;
     btn.disabled = true;
-    msg.textContent = how === 'send' ? 'Sending…' : 'Saving…';
-    var req = how === 'send' ? { action: 'nudgeSend', key: item.key } : { action: 'nudgeMark', key: li.dataset.key, how: how };
-    A().apiPost(req).then(function (res) {
+    msg.textContent = 'Saving…';
+    A().apiPost({ action: 'nudgeMark', key: li.dataset.key, how: how }).then(function (res) {
       if (!res.ok) { btn.disabled = false; msg.textContent = res.error || 'That did not go through.'; return; }
-      if (how === 'send' && res.status !== 'sent') { btn.disabled = false; delete btn.dataset.armed; btn.textContent = 'Send'; msg.textContent = res.message; return; }
       $('#spStatus').textContent = res.message || 'Saved.';
       loadNudges();
-    }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
+    }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
   }
 
   // ---------- info packets ----------
