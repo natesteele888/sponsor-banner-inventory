@@ -101,6 +101,19 @@
         <div class="sheet-acts full"><button class="btn primary" id="spaSave" type="submit">Add contact</button><span id="spaStatus" class="status" role="status"></span></div>
       </form>
     </details>
+    <!-- Sponsorship editors: a payment came in, find who it's from (sponsors.js). -->
+    <details id="spPayBox" class="rcpt hidden">
+      <summary class="rc-h">＄ Record a payment</summary>
+      <p class="hint">A sponsorship payment came in, online or by check. Type who paid and the app finds them on the sheet. A plain donation that isn’t for a sponsorship needs nothing here: Crossbar’s own receipt covers it.</p>
+      <form id="spPayForm" class="field-grid" autocomplete="off">
+        <label class="full">Who paid <input id="spp_name" type="text" maxlength="120" required placeholder="Business or person, as on the check or payment"></label>
+        <label>Amount <input id="spp_amount" type="text" inputmode="decimal" maxlength="20" required placeholder="$"></label>
+        <label>How <select id="spp_how"><option value="online">Online on the website</option><option value="check">Check</option></select></label>
+        <label class="full">Their email <input id="spp_email" type="email" maxlength="120" placeholder="If you have it, for the receipt"></label>
+        <div class="sheet-acts full"><button class="btn primary" id="sppFind" type="submit">Find them</button><span id="sppStatus" class="status" role="status"></span></div>
+      </form>
+      <div id="spPayMatches" aria-live="polite"></div>
+    </details>
     <div id="spStatus" class="status"></div>
     <p id="spSource" class="hint"></p>
     <ul id="spList" class="banner-list"></ul>
@@ -351,6 +364,7 @@
       </div>
       <span id="spEditStatus" class="status" role="status"></span>
     </div>
+    <div id="spReceipt" class="rc-preview sp-receipt hidden" aria-live="polite"></div>
     <p><button class="btn small hidden" id="spFormBtn" type="button">Print form</button></p>
 
     <h3 class="ss-h">Changes</h3>

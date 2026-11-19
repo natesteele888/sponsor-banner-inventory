@@ -153,9 +153,47 @@ function sponsorMe_() {
   return hit;
 }
 
+// The sheet's own dropdowns and checkboxes on one row, column by column:
+// { list: [...], strict } for a dropdown, { check: true } for a checkbox,
+// null otherwise. Read from the sheet each time, so nothing about the
+// choices is written in this public file.
+function sponsorRules_(sh, row, n) {
+  var out = [];
+  for (var i = 0; i < n; i++) out.push(null);
+  var dv;
+  try { dv = sh.getRange(row, 1, 1, n).getDataValidations()[0]; } catch (e) { return out; }
+  var C = SpreadsheetApp.DataValidationCriteria || {};
+  (dv || []).forEach(function (rule, i) {
+    if (!rule || i >= n) return;
+    try {
+      var type = rule.getCriteriaType(), vals = rule.getCriteriaValues() || [];
+      var strict = typeof rule.getAllowInvalid === 'function' ? !rule.getAllowInvalid() : false;
+      if (type === C.CHECKBOX) { out[i] = { check: true }; return; }
+      var list = null;
+      if (type === C.VALUE_IN_LIST) list = vals[0] || [];
+      else if (type === C.VALUE_IN_RANGE && vals[0] && typeof vals[0].getDisplayValues === 'function') {
+        list = [].concat.apply([], vals[0].getDisplayValues());
+      }
+      if (list) {
+        list = list.map(function (x) { return String(x == null ? '' : x).trim(); }).filter(function (x, k, a) { return x && a.indexOf(x) === k; }).slice(0, 60);
+        if (list.length) out[i] = { list: list, strict: strict };
+      }
+    } catch (e) { /* an odd rule is just a text box */ }
+  });
+  return out;
+}
+
+// A checkbox cell's new value from the edit form or a typed word.
+function checkWord_(v) {
+  v = String(v == null ? '' : v).trim();
+  if (/^(true|yes|y|x|✓|1|checked|on)$/i.test(v)) return true;
+  if (/^(false|no|n|0|unchecked|off)?$/i.test(v)) return false;
+  return null;
+}
+
 // What this person may do, and which columns are worked out by the sheet.
 function sponsorPerms_() {
-  var out = { writable: false, canAdd: false, canEdit: false, formulaCols: [], me: sponsorMe_(), former: namesProp_('SPONSOR_FORMER_OWNERS') };
+  var out = { writable: false, canAdd: false, canEdit: false, formulaCols: [], choices: [], me: sponsorMe_(), former: namesProp_('SPONSOR_FORMER_OWNERS') };
   var sh;
   try { sh = writableSponsorSheet_(); } catch (e) { console.log('board copy: ' + e); return out; }
   if (!sh) return out;
@@ -166,6 +204,7 @@ function sponsorPerms_() {
   if (v.length > h0 + 1) {
     var f = sh.getRange(h0 + 2, 1, 1, v[h0].length).getFormulas()[0];
     f.forEach(function (x, i) { if (x) out.formulaCols.push(i); });
+    out.choices = sponsorRules_(sh, h0 + 2, v[h0].length);
   }
   return out;
 }
@@ -244,17 +283,44 @@ function sponsorEdit(data) {
     var setStatus = Object.keys(values).some(function (h) { return /^status$/i.test(String(h).replace(/\s+/g, ' ').trim()); });
     if (cCo >= 0 && Object.prototype.hasOwnProperty.call(values, t.head[cCo]) && !String(values[t.head[cCo]] || '').trim()) return fail('A row needs a company name.');
     var formulas = sh.getRange(row, 1, 1, t.head.length).getFormulas()[0];
+    var rules = sponsorRules_(sh, row, t.head.length);
+    // Check every value against the sheet's own dropdowns and checkboxes
+    // first, so a refused value changes nothing and is never shown as saved.
+    var plan = [], bad = '';
     Object.keys(values).forEach(function (h) {
+      if (bad) return;
       var i = t.head.indexOf(String(h).replace(/\s+/g, ' ').trim());
       if (i < 0) return;
       if (formulas[i]) { kept.push(t.head[i]); return; }
-      var nv = clean(String(values[h] == null ? '' : values[h]).trim(), 500);
-      if (nv === String(t.v[row - 1][i])) return;
-      log.push({ company: t.v[row - 1][cCo >= 0 ? cCo : 0], what: t.head[i], from: t.v[row - 1][i], to: nv });
-      sh.getRange(row, i + 1).setValue(nv);
-      after[i] = nv;
+      var nv = clean(String(values[h] == null ? '' : values[h]).trim(), 500), put = nv, was = String(t.v[row - 1][i]);
+      var rule = rules[i];
+      if (rule && rule.check) {
+        var on = checkWord_(nv);
+        if (on === null) { bad = t.head[i] + ' is a checkbox: tick it or leave it blank.'; return; }
+        var wasOn = checkWord_(was) === true;
+        if (on === wasOn) return;
+        put = on; nv = on ? 'TRUE' : 'FALSE';
+      } else if (rule && rule.list && nv) {
+        var hit = rule.list.filter(function (x) { return x.toLowerCase() === nv.toLowerCase(); })[0];
+        if (hit) { put = nv = hit; }
+        else if (rule.strict) { bad = t.head[i] + ' has to be one of: ' + rule.list.join(', ') + '.'; return; }
+      }
+      if (nv === was) return;
+      plan.push({ i: i, put: put, nv: nv, was: was });
+    });
+    if (bad) return fail(bad + ' Nothing was saved.');
+    plan.forEach(function (p) {
+      log.push({ company: t.v[row - 1][cCo >= 0 ? cCo : 0], what: t.head[p.i], from: p.was, to: p.nv });
+      sh.getRange(row, p.i + 1).setValue(p.put);
+      after[p.i] = p.nv;
       changed++;
     });
+    // The sheet checks its own rules when the change lands. If it refuses,
+    // say so rather than "Saved".
+    if (changed) {
+      try { SpreadsheetApp.flush(); }
+      catch (e) { console.log('sponsorEdit refused: ' + e); return fail('The sheet refused that change, so it may not have saved. Refresh and check the row.'); }
+    }
     logChanges_(sh, log);
     var st = changed && !setStatus ? followStatus_(sh, t, row, before, after, t.v[row - 1][cCo >= 0 ? cCo : 0]) : '';
     return ok({ message: changed ? 'Saved.' : 'Nothing changed.', changed: changed, kept: kept, status: st });
