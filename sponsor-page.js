@@ -47,7 +47,7 @@
 
   function level() {
     var want = pick || P.paid.level;
-    return P.levels.filter(function (l) { return l.name === want; })[0] || P.levels[0];
+    return P.levels.filter(function (l) { return l.name === want; })[0] || level0();
   }
 
   // What each level gets, in plain words, from what it asks for.
@@ -57,21 +57,54 @@
       .filter(Boolean).join(', ');
   }
 
+  // Each level's perks, as a check-list: what it has, and (greyed) what it doesn't.
+  function perks(l) {
+    return [
+      [l.jersey, l.jersey ? 'Name on the jersey' : 'Business name on our sponsor list'],
+      [l.logo, 'Your logo on our website and posts'],
+      [!!l.writeup, l.writeup ? l.writeup + '-character write-up' : 'Sponsor write-up'],
+      [l.banner, '3x5 banner at the field']
+    ];
+  }
+  // One short line: what this level adds over the one below it.
+  function tagline(l, i) {
+    var prev = i > 0 ? P.levels[i - 1] : null;
+    if (!prev) return l.jersey ? 'Your business on the jerseys' : 'Support the league';
+    if (l.banner && !prev.banner) return 'Adds a banner at the field';
+    if (l.writeup > prev.writeup) return 'A longer write-up about you';
+    if (l.logo && !prev.logo) return 'Adds your logo';
+    return 'Our biggest spotlight';
+  }
+
+  // The levels side by side, low to high, like a price table: theirs
+  // highlighted as paid, higher ones with an Upgrade button for the
+  // difference, lower ones greyed with no button. On a phone they swipe.
   function renderLevels() {
-    var html = P.levels.map(function (l) {
-      if (l.state === 'paid') {
-        return '<li class="lv lv-paid' + (pick ? '' : ' lv-on') + '"><div class="lv-top"><b>' + esc(l.name) + '</b><span class="lv-badge">Paid</span></div>' +
-          '<div class="lv-price">' + money(P.paid.amount) + '</div><div class="lv-gets">' + esc(gets(l)) + '</div>' +
-          (pick ? '<button type="button" class="btn small" data-keep="1">Keep ' + esc(l.name) + '</button>'
-                : '<div class="lv-lock">This is the level you picked and paid for. Your info goes below.</div>') + '</li>';
-      }
-      var on = pick === l.name;
-      return '<li class="lv lv-up' + (on ? ' lv-on' : '') + '"><div class="lv-top"><b>' + esc(l.name) + '</b>' +
-        (on ? '<span class="lv-badge lv-badge-up">Upgrade picked</span>' : '<span class="lv-opt">Optional upgrade</span>') + '</div>' +
-        '<div class="lv-price">' + money(l.price) + ' <span>(' + money(l.owed) + ' more)</span></div><div class="lv-gets">' + esc(gets(l)) + '</div>' +
-        (on ? '' : '<button type="button" class="btn small" data-up="' + esc(l.name) + '">Upgrade for ' + money(l.owed) + ' more</button>') + '</li>';
+    var html = P.levels.map(function (l, i) {
+      var paid = l.state === 'paid', below = l.state === 'below', on = paid ? !pick : pick === l.name;
+      var badge = paid ? '<span class="lv-badge">Your level · Paid</span>'
+        : on ? '<span class="lv-badge lv-badge-up">Upgrade picked</span>' : '';
+      var price = paid ? money(P.paid.amount) : money(l.price);
+      var sub = paid ? 'Paid for the ' + esc(P.season || '') + ' season'
+        : below ? 'Included in your level' : money(l.owed) + ' more than you paid';
+      var act = paid
+        ? (pick ? '<button type="button" class="btn small lv-act" data-keep="1">Keep ' + esc(l.name) + '</button>'
+                : '<div class="lv-lock">Your info for this level goes below.</div>')
+        : below ? ''
+        : on ? '<div class="lv-lock lv-lock-up">Picked. How to pay the difference is below.</div>'
+        : '<button type="button" class="btn primary lv-act" data-up="' + esc(l.name) + '">Upgrade for ' + money(l.owed) + '</button>';
+      var list = perks(l).map(function (p) {
+        return '<li class="' + (p[0] ? 'lv-yes' : 'lv-no') + '">' + esc(p[1]) + '</li>';
+      }).join('');
+      return '<li class="lv' + (paid ? ' lv-paid' : below ? ' lv-below' : ' lv-up') + (on ? ' lv-on' : '') + '"' + (on ? ' data-mine="1"' : '') + '>' +
+        badge + '<div class="lv-name">' + esc(l.name) + '</div><div class="lv-tag">' + esc(tagline(l, i)) + '</div>' +
+        '<div class="lv-price">' + price + '</div><div class="lv-sub">' + sub + '</div>' + act +
+        '<ul class="lv-perks">' + list + '</ul></li>';
     }).join('');
     $('levelList').innerHTML = html;
+    // On a phone, bring their level (or the upgrade they picked) into view.
+    var mine = $('levelList').querySelector('[data-mine]'), list = $('levelList');
+    if (mine && list.scrollWidth > list.clientWidth + 4) list.scrollLeft = mine.offsetLeft - (list.clientWidth - mine.offsetWidth) / 2;
     var lv = level();
     $('formFor').textContent = pick
       ? 'Your info for ' + lv.name + '. It counts once the ' + money(lv.owed) + ' difference is paid; until then you stay at ' + P.paid.level + '.'
@@ -217,7 +250,7 @@
 
   $('levelList').addEventListener('click', function (e) {
     var b = e.target.closest('button');
-    if (!b) return;
+    if (!b || b.disabled) return;
     pick = b.getAttribute('data-up') || '';
     renderLevels();
   });

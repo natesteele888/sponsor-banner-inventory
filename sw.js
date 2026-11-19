@@ -1,5 +1,5 @@
 // Network first: updates show right away; the saved copy is for opening with no signal or one weak bar.
-const CACHE = "banners-v43";
+const CACHE = "banners-v44";
 // Save the page at install, or the first visit caches nothing and an offline open fails.
 // This site's own files only: sponsor data comes from the Apps Script backend and is never saved here.
 const SHELL = ["./", "index.html", "app.js", "season.js", "sponsors.js", "fields.js", "config.js", "style.css", "logo.svg", "manifest.json", "icons/sponsor-banners-192.png", "icons/sponsor-banners-512.png", "intake.html", "intake.js", "sponsor.html", "sponsor-page.js"];
@@ -15,7 +15,9 @@ self.addEventListener("fetch", e => {
   if (e.request.method !== "GET" || u.origin !== location.origin || !u.pathname.startsWith(new URL("./", location).pathname)) return;
   const r = e.request;
   const saved = () => caches.match(r, { ignoreSearch: true });
-  const net = fetch(r);
+  // no-cache: ask the site every time (a quick "not changed" when nothing is new), so the
+  // browser's own 10-minute copy never hides a new version after a deploy.
+  const net = fetch(r, { cache: "no-cache" });
   // Refresh the saved copy from the network's answer. waitUntil is called now, while the event runs: a call made
   // later, after the saved copy has already gone out, can be refused and the copy would never refresh.
   e.waitUntil(net.then(res => {

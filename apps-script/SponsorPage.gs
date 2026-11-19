@@ -235,7 +235,8 @@ function payOptions_() {
 
 function levelView_(l, amount, paid) {
   return { name: l.name, price: l.price, jersey: l.jersey, logo: l.logo, writeup: l.writeup, banner: l.banner,
-           state: l === paid ? 'paid' : 'upgrade', owed: l === paid ? 0 : Math.max(0, l.price - amount) };
+           state: l === paid ? 'paid' : (l.price > amount && l.price > paid.price ? 'upgrade' : 'below'),
+           owed: l === paid || l.price <= paid.price ? 0 : Math.max(0, l.price - amount) };
 }
 
 // Everything the page needs for one sponsor, or an error to show.
@@ -267,7 +268,11 @@ function sponsorPageGet(data) {
   return ok({
     season: SEASON, company: st.row.company, contactName: st.row.contact, deadline: INFO_DEADLINE,
     paid: { level: st.paid.name, amount: st.row.amount },
-    levels: [levelView_(st.paid, st.row.amount, st.paid)].concat(st.ups.map(function (l) { return levelView_(l, st.row.amount, st.paid); })),
+    // Every paid level, low to high: theirs marked paid, the ones above as
+    // upgrades, the ones below shown for reference only. A free level shows
+    // only when it is theirs.
+    levels: st.levels.filter(function (l) { return l === st.paid || l.price > 0; })
+      .map(function (l) { return levelView_(l, st.row.amount, st.paid); }),
     upgrade: pending, sent: !!rec.submittedAt, pay: payOptions_()
   });
 }
