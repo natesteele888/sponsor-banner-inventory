@@ -25,16 +25,16 @@
 var NUDGES_PROP = 'NUDGES_' + SEASON;
 var NUDGE_KINDS = {
   holiday: { label: 'Holiday hello', subject: 'Happy holidays from LYBS', body: [
-    'Thinking about you this holiday season and wanted to say thanks again for hearing us out about sponsoring {org}. If {company} is still interested, we would love to have you with us this spring.',
+    'Thinking about you this holiday season and wanted to say thanks again for hearing us out about sponsoring {org}. If {company} is still interested, we\'d love to have you with us this spring.',
     'Just reply to this email with any questions. Checks or money orders can go to {address}.'], close: 'Happy holidays,' },
   checkin: { label: 'New year check-in', subject: 'Checking in about sponsoring LYBS', body: [
     'Happy new year! I wanted to check in and see if {company} is still interested in sponsoring LYBS this spring. Sponsors keep our fees down and get the kids the gear they need.',
-    'If you have any questions, just reply here and I will get right back to you.'], close: 'Thanks,' },
+    'If you have any questions, just reply here and I\'ll get right back to you.'], close: 'Thanks,' },
   jersey: { label: 'Before jerseys', subject: 'Getting {company} on a jersey', body: [
-    'We are starting to plan jerseys and banners for the spring. If {company} would like to sponsor this year, the sooner we hear from you, the easier it is to get your name on a jersey.',
+    'We\'re starting to plan jerseys and banners for the spring. If {company} would like to sponsor this year, the sooner we hear from you, the easier it is to get your name on a jersey.',
     'Our last day for sponsors is {deadline}. Checks or money orders can go to {address}.'], close: 'Thanks so much,' },
   last: { label: 'Last call', subject: 'Last call for LYBS sponsors', body: [
-    'Quick heads up that our last day for sponsors is {deadline}. After that the jerseys go to print and we cannot add new names.',
+    'Quick heads up that our last day for sponsors is {deadline}. After that the jerseys go to print and we can\'t add new names.',
     'If {company} would still like to be part of the season, just reply here or mail a check to {address} by then.'], close: 'Thank you,' }
 };
 
