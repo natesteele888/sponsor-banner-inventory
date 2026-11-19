@@ -613,17 +613,19 @@
       btn.dataset.armed = '1';
       btn.textContent = 'Tap again: ' + fmtMoney(f.amount) + ' paid';
       msg.textContent = isNew ? 'Adds ' + f.name + ' as a new sponsor, paid ' + fmtMoney(f.amount) + ' ' + (f.how === 'check' ? 'by check' : 'online') + '.'
-        : (s.paid ? s.company + ' is already marked paid. Tap again to record this payment too. ' : '') +
-          'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
+        : s.paid && s.amount > 0
+          // A second payment adds a note; it never writes over the amount already on the sheet.
+          ? s.company + ' is already marked paid. Tap again to add this ' + fmtMoney(f.amount) + ' payment to its notes. The amount stays ' + s.amountText + '; change it with Edit if this adds to it.'
+          : 'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
       setTimeout(function () { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = isNew ? 'Add new sponsor' : 'This one'; } }, 8000);
       return;
     }
     delete btn.dataset.armed;
-    $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
-    msg.textContent = 'Saving…';
     var t = mainTab(), head = function (re) { var c = colOf(t, re); return c < 0 ? '' : t.headers[c]; };
     var hPaid = head(/^paid/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/);
     if (!hPaid) { msg.textContent = 'The sheet has no Paid? column.'; return; }
+    $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
+    msg.textContent = 'Saving…';
     var note = payNote(f);
     var step = isNew
       ? A().apiPost({ action: 'sponsorAdd', company: f.name, email: f.email, amount: String(f.amount), notes: note }).then(function (res) {
@@ -636,7 +638,7 @@
         })
       : (function () {
           var v = {}; v[hPaid] = 'Yes';
-          if (hAmt && f.amount !== s.amount) v[hAmt] = String(f.amount);
+          if (hAmt && !(s.paid && s.amount > 0) && f.amount !== s.amount) v[hAmt] = String(f.amount);
           if (hNotes) v[hNotes] = s.notes ? s.notes + '; ' + note : note;
           if (hEmail && f.email && !s.email) v[hEmail] = f.email;
           return A().apiPost({ action: 'sponsorEdit', row: s.row, company: s.company, values: v }).then(function (res) {
