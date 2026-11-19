@@ -30,7 +30,7 @@
 var SPOTLIGHT_FOLDER_NAME = 'Sponsor Spotlight Cards';
 // Levels that get spotlight posts. All-Star and Game Day sponsors are named
 // in the group thank-you posts instead, which the posting plan already has.
-var SPOTLIGHT_TIERS = ['Championship+', 'Championship', 'MVP'];
+var SPOTLIGHT_TIERS = ['Championship', 'MVP'];
 var SPOTLIGHT_MAX_CARD_BYTES = 3 * 1024 * 1024;
 
 function spotlightAllowed_() {
