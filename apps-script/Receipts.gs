@@ -158,6 +158,12 @@ function receiptEmail_(r, s, when) {
           '<td style="' + cell + (big ? 'font-size:20px;font-weight:bold;color:#1A56DB' : '') + '">' + e(x[1]) + '</td></tr>';
       }).join('') +
       '</table>' +
+      // Right under the amounts: how to print or save. An email can't hold a
+      // working Print button, so this points at the attached PDF by its name.
+      // Left off the PDF itself.
+      '<!--pn--><div class="rc-pn" style="margin:16px 0 0;padding:12px 14px;background:#EEF3FF;border-radius:10px;font-size:14px;line-height:1.5;color:#0a1628">' +
+        '<b>To print or save this receipt:</b> open the attached PDF, <i>' + e(receiptPdfName_(r)) + '</i>, then choose Print or Save.' +
+      '</div><!--/pn-->' +
       '<p style="margin:16px 0 0;font-size:14px;line-height:1.5">' + e(noGoods) + '</p>' +
       '<p style="margin:16px 0 0;font-size:14px;line-height:1.5">Sincerely,<br><b>' + e(RECEIPT_ORG) + '</b><br>' + e(s.issuer || 'NOT SET') + '</p>' +
       '<p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#5B6478">' + e(taxLine) + '</p>' +
@@ -173,9 +179,15 @@ function receiptEmail_(r, s, when) {
   var text = [thanks, ''].concat(s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
     .concat([RECEIPT_ORG, s.address, '', 'NON-PROFIT DONATION RECEIPT', '', 'Thank you for supporting ' + RECEIPT_ORG + '. Your receipt is attached as a PDF to print or save for your taxes.', ''])
     .concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }))
+    .concat(['', 'To print or save this receipt: open the attached PDF, ' + receiptPdfName_(r) + ', then choose Print or Save.'])
     .concat(['', noGoods, '', 'Sincerely,', RECEIPT_ORG, (s.issuer || 'NOT SET'), '', taxLine])
     .join('\n');
   return { subject: subject, html: html, text: text };
+}
+
+// The attached PDF's file name, also named in the email so it's easy to find.
+function receiptPdfName_(r) {
+  return 'LYBS ' + SEASON + ' donation receipt - ' + String(r.company || '').replace(/[^\w &.'-]+/g, '').trim() + '.pdf';
 }
 
 // The receipt as a page of its own: prints on one sheet, without the grey
@@ -195,9 +207,10 @@ function receiptPdf_(r, s, when) {
     var html = m.html.split('src="' + leagueLogoUrl_() + '"').join(logo ? 'src="' + logo + '"' : 'src=""')
       .replace(/<!--ty-->[\s\S]*?<!--\/ty-->/, '')
       .replace(/<!--pk-->[\s\S]*?<!--\/pk-->/, '')
-      .replace(/<!--pdf-->[\s\S]*?<!--\/pdf-->/, 'Please keep this receipt for your tax records.');
+      .replace(/<!--pdf-->[\s\S]*?<!--\/pdf-->/, 'Please keep this receipt for your tax records.')
+      .replace(/<!--pn-->[\s\S]*?<!--\/pn-->/, '');
     var doc = receiptDoc_(html.replace('background:#F7F7F7;padding:30px 12px', 'background:#ffffff;padding:0'), m.subject);
-    var name = 'LYBS ' + SEASON + ' donation receipt - ' + String(r.company).replace(/[^\w &.'-]+/g, '').trim() + '.pdf';
+    var name = receiptPdfName_(r);
     return HtmlService.createHtmlOutput(doc).getBlob().getAs(MimeType.PDF).setName(name);
   } catch (e) { console.log('receipt pdf: ' + e); return null; }
 }

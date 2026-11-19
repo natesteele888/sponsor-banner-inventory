@@ -154,8 +154,20 @@
     walkIn: function (s) { return s.walkIn; },
     mine: function (s) { return isMine(s); },
     needsOwner: function (s) { return needsOwner(s); },
-    noTeam: function (s) { return isIn(s) && !s.team; }
+    noTeam: function (s) { return isIn(s) && !s.team; },
+    needsReceipt: function (s) { var r = receiptState(s); return r === 'ready' || r === 'noEmail'; }
   };
+
+  // Where a paid sponsor's receipt stands, from the receipts list: 'sent',
+  // 'ready' (paid, receipt not sent yet), 'skip' (marked not needed),
+  // 'noEmail' (paid, but no email on the sheet to send one to), or '' when
+  // it doesn't apply or the list hasn't loaded.
+  function receiptState(s) {
+    if (!s || !isIn(s) || !s.paid || !S.receipts || !S.receipts.items) return '';
+    var it = S.receipts.items.filter(function (i) { return Number(i.row) === Number(s.row); })[0];
+    if (it) return it.status === 'sent' || it.status === 'skip' ? it.status : 'ready';
+    return /@/.test(String(s.email || '')) ? '' : 'noEmail';
+  }
 
   function matches(s) {
     if (!FILTERS[S.filter](s)) return false;
@@ -191,6 +203,8 @@
       loadNudges();
       loadPackets();
       loadUpgrades();
+      loadLogos();
+      loadWebsite(false);
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
@@ -219,6 +233,7 @@
       if (!res || !res.ok) return;
       S.receipts = res;
       renderReceipts();
+      render();
     }).catch(function () { /* the box stays hidden */ });
   }
 
@@ -258,6 +273,7 @@
       '</details>';
     keepOpen(box, 'rcOpen');
     box.classList.remove('hidden');
+    applyMode();
   }
 
   // One receipt, as the sponsor will get it, in a preview pane. With send on,
@@ -280,9 +296,14 @@
         '<button class="btn small" type="button" data-pv="close">Close</button></span></div>' +
         (canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' from the league address, only when you tap Send.</p>' : '') +
         '<div class="rc-pv-msg status" role="status"></div>';
-      // No scripts run inside the receipt; same origin only so this page can print it.
+      // No scripts run inside the receipt; same origin only so this page can
+      // print it. A link in it (the sponsor packet) opens in its own tab, where
+      // the page can run: opened inside this frame it would sit on "Loading".
       var f = document.createElement('iframe');
-      f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', 'allow-same-origin allow-modals'); f.srcdoc = res.html;
+      f.className = 'rc-frame'; f.title = 'Receipt preview';
+      f.setAttribute('sandbox', 'allow-same-origin allow-modals allow-popups allow-popups-to-escape-sandbox');
+      var doc = String(res.html), base = '<base target="_blank">';
+        f.srcdoc = /<head[^>]*>/i.test(doc) ? doc.replace(/<head[^>]*>/i, function (h) { return h + base; }) : base + doc;
       pv.appendChild(f); pv.classList.remove('hidden');
       var said = pv.querySelector('.rc-pv-msg');
       pv.querySelector('[data-pv="print"]').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { said.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
@@ -316,7 +337,7 @@
     doneNote('Paid. Opening the receipt…');
     return A().apiPost({ action: 'receiptList' }).then(function (res) {
       if (!res || !res.ok) { doneNote('Paid. The receipt is under Receipts to send.'); return; }
-      S.receipts = res; renderReceipts();
+      S.receipts = res; renderReceipts(); render();
       if (!S.current || S.current.row !== row) return;
       var mine = res.items.filter(function (i) { return i.row === row; });
       var ready = mine.filter(function (i) { return i.status === 'ready'; })[0];
@@ -425,6 +446,7 @@
       }).join('') + '</ul></details></details>';
     keepOpen(box, 'ndOpen');
     box.classList.remove('hidden');
+    applyMode();
   }
 
   // Who is signed in here, for the personal version and their own email.
@@ -555,6 +577,42 @@
     }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
   }
 
+  // ---------- the website ----------
+  // A fresh look at the league's website payment notices (Crossbar's
+  // "Donation received from" emails), each matched to the sheet. It says when
+  // it looked, and names any sponsor-level payment that isn't on the sheet yet
+  // or isn't marked paid there. Read only: it changes nothing.
+  function loadWebsite(fresh) {
+    var box = $('#spWeb');
+    if (fresh) box.querySelector('.sp-web-msg') && (box.querySelector('.sp-web-msg').textContent = 'Checking the website…');
+    A().apiPost({ action: 'websiteCheck', fresh: !!fresh }).then(function (res) {
+      if (!res || !res.ok) { if (fresh) webLine('Couldn’t check the website just now. Try again in a minute.'); return; }
+      S.web = res; renderWebsite();
+    }).catch(function () { if (fresh) webLine('Couldn’t reach the backend to check the website. Try again.'); });
+  }
+  function webLine(t) { var m = $('#spWeb .sp-web-msg'); if (m) m.textContent = t; }
+  function renderWebsite() {
+    var box = $('#spWeb'), esc = A().esc, R = S.web;
+    if (!R) { box.classList.add('hidden'); return; }
+    var at = R.checkedAt ? new Date(R.checkedAt) : null;
+    var when = at ? at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+    var since = R.since ? new Date(String(R.since).replace(/\//g, '-') + 'T12:00:00') : null;
+    var sinceTxt = since && !isNaN(since) ? ' since ' + since.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    var pays = R.payments || [];
+    var off = pays.filter(function (p) { return !p.company; });
+    var unpaid = pays.filter(function (p) { return p.company && !p.paid; });
+    var head = 'Website checked ' + when + ': ' + (pays.length
+      ? pays.length + ' sponsor payment' + (pays.length > 1 ? 's' : '') + sinceTxt + (off.length || unpaid.length ? '.' : ', all on the sheet and marked paid.')
+      : 'no sponsor payments' + sinceTxt + '.');
+    var list = off.map(function (p) { return '<li><b>' + esc(p.donor) + '</b> paid ' + esc(p.amount) + ' on ' + esc(p.date) + ', not on the sheet yet</li>'; })
+      .concat(unpaid.map(function (p) { return '<li><b>' + esc(p.company) + '</b> paid ' + esc(p.amount) + ' on ' + esc(p.date) + ', not marked paid on the sheet</li>'; }));
+    box.innerHTML = '<p class="hint sp-web-msg' + (list.length ? ' warn' : '') + '">' + esc(head) + '</p>' +
+      (list.length ? '<ul class="sp-web-list">' + list.join('') + '</ul>' : '') +
+      '<button class="btn small" id="spWebCheck" type="button">Check now</button>';
+    $('#spWebCheck').addEventListener('click', function () { this.disabled = true; loadWebsite(true); });
+    box.classList.remove('hidden');
+  }
+
   // ---------- info packets ----------
   // What sponsors sent on the info packet page, read live from its sheet.
 
@@ -568,9 +626,28 @@
       render();
     }).catch(function () { /* nothing waiting shows */ });
   }
+  // Logos from the league's Sponsor Logos folder in Drive, matched to the
+  // sponsors by name on the backend. A sponsor with one shows it on its card.
+  function loadLogos() {
+    A().apiPost({ action: 'sponsorLogoList' }).then(function (res) {
+      if (!res || !res.ok || !res.logos) return;
+      S.logos = res.logos;
+      render();
+    }).catch(function () { /* the cards show without logos */ });
+  }
+  function logoFor(s) {
+    var img = s && S.logos ? S.logos[s.key] : null;
+    return img && /^image\/(png|jpeg|gif|webp)$/.test(img.mime) && /^[A-Za-z0-9+\/=]+$/.test(img.base64) ? img : null;
+  }
+
   function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
   // What's still owed for an upgrade: the level's price less what the sheet shows paid.
-  function upgradeLeft(s, u) { return Math.max(0, (u.price || 0) - (s.paid ? s.amount || 0 : 0)) || u.owed || 0; }
+  // Once the sheet shows them paid, the sheet decides: a difference already
+  // paid in full (say through Edit) leaves nothing owed, not the old figure.
+  function upgradeLeft(s, u) {
+    if (s.paid && s.amount > 0 && u.price > 0) return Math.max(0, u.price - s.amount);
+    return u.owed || Math.max(0, (u.price || 0) - (s.paid ? s.amount || 0 : 0));
+  }
 
   function loadPackets() {
     A().apiPost({ action: 'sponsorPackets' }).then(function (res) {
@@ -652,6 +729,7 @@
     var box = $('#spAddBox');
     box.classList.toggle('hidden', !(S.book && S.book.writable && S.book.canAdd));
     $('#spPayBox').classList.toggle('hidden', !canEdit());
+    applyMode();
   }
 
   function addContact(e) {
@@ -1182,7 +1260,15 @@
   // The one thing to know about a sponsor, in color only when money is involved.
   function cardBadge(s) {
     var badge = A().badge;
-    if (isIn(s)) return s.paid ? badge('Paid', 'ok') : s.inKind ? badge('In kind', 'ok') : badge('Not paid yet', 'warn');
+    if (isIn(s) && s.paid) {
+      // Paid: say whether the receipt went out, so who needs an email shows at a glance.
+      var rc = receiptState(s);
+      return rc === 'sent' ? badge('Paid, receipt sent', 'ok')
+        : rc === 'ready' ? badge('Paid, needs receipt', 'warn')
+        : rc === 'noEmail' ? badge('Paid, no email', 'warn')
+        : badge('Paid', 'ok');
+    }
+    if (isIn(s)) return s.inKind ? badge('In kind', 'ok') : badge('Not paid yet', 'warn');
     if (FILTERS.lapsed(s)) return badge('Past sponsor', 'muted');
     if (!String(s.contacted).trim()) return badge('Not contacted', 'muted');
     return badge('Contacted', 'muted');
@@ -1212,6 +1298,7 @@
       stat(all.filter(needsOwner).length, 'need a new owner');
     S.committed = committed;
     renderYoY();
+    applyMode();
 
     // The default view is this season's sponsors; name it with the season.
     var yo = $('#spFilter option[value="signed"]');
@@ -1239,7 +1326,9 @@
       return (b.amount - a.amount) || a.company.localeCompare(b.company);
     });
     $('#spList').innerHTML = items.map(function (s) {
+      var logo = logoFor(s);
       return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '">' +
+        (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
           facts([
@@ -1472,7 +1561,8 @@
   //
   // The logo Ballclub shows as "Sponsored by" on the team's page. One the
   // board sets here wins; otherwise a PNG/JPG logo the sponsor sent through
-  // their reply form is used. Both stay in Drive, read through the backend.
+  // their reply form, else the one in the league's Sponsor Logos folder whose
+  // name matches. All stay in Drive, read through the backend.
 
   function showLogo(img, from) {
     var el = $('#spLogo');
@@ -1485,6 +1575,7 @@
     }
     $('#spLogoFrom').textContent = from === 'set' ? 'Set here.'
       : from === 'form' ? 'From the logo they sent with their reply form. Choose one to use a different one.'
+      : from === 'library' ? "From the league's Sponsor Logos folder in Drive. Choose one to use a different one."
       : 'No logo yet. The team page shows just the name until one is set.';
     $('#spLogoRemove').classList.toggle('hidden', from !== 'set');
   }
@@ -1566,15 +1657,50 @@
     });
   }
 
+  // ---------- the Sponsors tab's own tabs ----------
+  // Receipts, Follow-ups, Add sponsor and Record payment sit in the top bar
+  // next to Sponsors. Each shows only its own box, opened; Sponsors shows the
+  // list without them. A tab shows only when its box can be used.
+  var SP_BOX = { receipts: '#spReceipts', followups: '#spNudges', add: '#spAddBox', pay: '#spPayBox' };
+  function applyMode() {
+    var view = $('#view-sponsors'), mode = SP_BOX[S.mode] ? S.mode : '';
+    if (!view) return;
+    view.classList.toggle('sp-sub', !!mode);
+    Object.keys(SP_BOX).forEach(function (k) {
+      var box = $(SP_BOX[k]); if (!box) return;
+      box.classList.toggle('sp-on', k === mode);
+      if (k === mode) {
+        var d = box.tagName === 'DETAILS' ? box : box.querySelector('details.rc-box');
+        if (d && !d.open) d.open = true;
+      }
+    });
+    $('#spModeEmpty').classList.toggle('hidden', !mode || !$(SP_BOX[mode]).classList.contains('hidden'));
+    syncSpTabs();
+  }
+  function syncSpTabs() {
+    $$('.tab-btn[data-sp]').forEach(function (b) {
+      var box = $(SP_BOX[b.dataset.sp]);
+      var can = box && (!box.classList.contains('hidden') || b.dataset.sp === S.mode);
+      b.classList.toggle('hidden', !can);
+    });
+    var rb = document.querySelector('.tab-btn[data-sp="receipts"]');
+    if (rb) {
+      var n = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
+      rb.textContent = 'Receipts' + (n ? ' (' + n + ')' : '');
+    }
+  }
+
   window.Sponsors = {
-    show: function () {
+    show: function (sub) {
+      S.mode = SP_BOX[sub] ? sub : '';
+      applyMode();
       if (typeof firebase === 'undefined' || !firebase.apps.length || !firebase.auth().currentUser) return;
       if (!S.book) load(); else render();
     },
     reset: function () {
       S.book = null; S.teams = null; S.current = null; S.history = null; S.committed = null;
       $('#spYoY').classList.add('hidden'); $('#spYoY').innerHTML = '';
-      $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = '';
+      $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = ''; $('#spWeb').classList.add('hidden'); S.web = null;
     }
   };
 

@@ -216,7 +216,13 @@ function sponsorHead_(sh) {
 }
 
 // A new contact. Any signed-in board member.
+// Every write to the board sheet clears the sponsor pages' quick copy of it
+// (SponsorPage.gs), so a sponsor's page never shows an old amount for long.
+function boardRowsGen_() { try { return CacheService.getScriptCache().get('spBoardGen') || '0'; } catch (e) { return '0'; } }
+function forgetBoardRows_() { try { CacheService.getScriptCache().put('spBoardGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }
+
 function sponsorAdd(data) {
+  forgetBoardRows_();
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var sh = writableSponsorSheet_();
   if (!sh) return fail('Adding contacts is turned off right now.');
@@ -264,6 +270,7 @@ function sponsorAdd(data) {
 
 // Change a row. Editors only. data.values is { header text: new value }.
 function sponsorEdit(data) {
+  forgetBoardRows_();
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can change a row.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var sh = writableSponsorSheet_();
@@ -334,6 +341,7 @@ function sponsorEdit(data) {
 // "Last follow-up" column), when the sheet has that column.
 // A hiccup here never undoes or blocks the send itself.
 function noteOnBoardCopy_(company, header, value) {
+  forgetBoardRows_();
   try {
     var sh = writableSponsorSheet_();
     if (!sh) return false;
@@ -357,6 +365,7 @@ function noteOnBoardCopy_(company, header, value) {
 // gets a "Walk-in only" column at the end the first time it's used.
 var WALKIN_HEAD = 'Walk-in only';
 function sponsorWalkIn(data) {
+  forgetBoardRows_();
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can change a row.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var sh = writableSponsorSheet_();

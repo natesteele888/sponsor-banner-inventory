@@ -52,8 +52,21 @@ jerseys, plaques) are listed under the sponsors.
   logo"), saved in the `Team Page Logos` folder inside Sponsor Banners in
   Drive, with the file id on the sponsor's team entry (`imageFileId`). With
   none set, a PNG/JPG/GIF/WebP logo the sponsor sent through their reply form
-  is used. Only files in that folder, or that sponsor's own form folder, are
-  ever served.
+  is used, and with neither, the matching logo from the league's Sponsor Logos
+  folder (below). Only files in those folders, or that sponsor's own form
+  folder, are ever served.
+- **Sponsor Logos folder:** one logo per sponsor in a Drive folder named
+  `Sponsor Logos` (in the league's Assets and Logos folder), each file named
+  for its sponsor. A sponsor whose sheet name matches a file there shows that
+  logo on its card, in its team page logo box and on its team page, with no
+  one setting it. Names match exactly ("&" and "and", "LLC", "Inc", "P.C." and
+  case don't count), or closely when the two start the same for at least 9
+  letters and are each other's only close match, so a shared town name alone
+  never matches. Add a logo by dropping a PNG/JPG/GIF/WebP named for the
+  sponsor into the folder; the app sees it within ten minutes. The folder is
+  found by name and remembered in the `SPONSOR_LOGO_FOLDER_ID` Script
+  Property (run `forgetSponsorLogoFolder` if it is ever replaced). Board-only
+  action `sponsorLogoList` gives a small copy of each matched logo.
 - **Team names for the pickers:** the Dashboard's `lybs_bins/lybs-team-assignments`
   (this season's teams once drafted, the last draft's before that). Only
   division and team names are kept from it.

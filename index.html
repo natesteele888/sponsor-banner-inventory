@@ -43,6 +43,11 @@
   </div>
   <nav class="tabs" aria-label="Sections">
     <button class="tab-btn" data-view="sponsors">Sponsors</button>
+    <!-- The Sponsors tab's four jobs, each its own tab (sponsors.js shows the one box). -->
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="receipts">Receipts</button>
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="followups">Follow-ups</button>
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="add">Add sponsor</button>
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="pay">Record payment</button>
     <button class="tab-btn" data-view="season">2027 banners</button>
     <button class="tab-btn" data-view="list">Banner stock</button>
     <button class="tab-btn" data-view="fields">Fields</button>
@@ -67,6 +72,8 @@
     <!-- Paid rows with an email: a receipt to send with one tap (sponsors.js, Receipts.gs). -->
     <section id="spReceipts" class="rcpt hidden" aria-live="polite"></section>
     <section id="spNudges" class="rcpt hidden" aria-live="polite"></section>
+    <!-- When the website was last looked at for sponsor payments (sponsors.js, Season.gs websiteCheck). -->
+    <div id="spWeb" class="sp-web hidden" aria-live="polite"></div>
     <div class="toolbar">
       <input id="spSearch" type="search" placeholder="Search sponsor, contact, owner, team…">
       <div class="filters">
@@ -75,6 +82,7 @@
           <option value="all">All sponsors, every year</option>
           <option value="paid">Paid</option>
           <option value="unpaid">Not paid yet</option>
+          <option value="needsReceipt">Paid, needs a receipt</option>
           <option value="notContacted">Not contacted</option>
           <option value="lapsed">Past sponsors, not back yet</option>
           <option value="pastNotContacted">Past sponsors, nobody has reached out</option>
@@ -126,6 +134,7 @@
       </form>
       <div id="spPayMatches" aria-live="polite"></div>
     </details>
+    <p id="spModeEmpty" class="hint hidden">Nothing here right now.</p>
     <div id="spStatus" class="status"></div>
     <p id="spSource" class="hint"></p>
     <ul id="spList" class="banner-list"></ul>
