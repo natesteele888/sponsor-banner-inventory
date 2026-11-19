@@ -26,7 +26,7 @@
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
   var S = {
-    book: null, loading: null, filter: 'all', owner: '', search: '',
+    book: null, loading: null, filter: 'signed', // opens on this season's sponsors owner: '', search: '',
     current: null, entry: false, skipPop: false,
     teams: null, teamsYear: null // [{ sport, division, team }] from the Dashboard
   };
@@ -187,7 +187,7 @@
           '<button class="btn small primary" data-rc="send" type="button">Send</button>' +
           '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
         : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
-            (i.status === 'sent' ? '' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
+            (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
         '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
         (i.online ? '<span class="rc-path">Paid online: send this one, not the website’s receipt</span>' : '') + '</div>' +
@@ -213,10 +213,13 @@
         msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
         if (!res.ok) return;
         var pv = $('#rcPreview');
-        pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b><button class="btn small" type="button" id="rcPvClose">Close</button></div>';
+        pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b>' +
+          '<button class="btn small" type="button" id="rcPvPrint">Print / Save as PDF</button><button class="btn small" type="button" id="rcPvClose">Close</button></div>';
+        // No scripts run inside the receipt; same origin only so this page can print it.
         var f = document.createElement('iframe');
-        f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', ''); f.srcdoc = res.html;
+        f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', 'allow-same-origin allow-modals'); f.srcdoc = res.html;
         pv.appendChild(f); pv.classList.remove('hidden');
+        $('#rcPvPrint').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { msg.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
         $('#rcPvClose').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
         pv.scrollIntoView({ block: 'nearest' });
       }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
@@ -638,6 +641,11 @@
       stat(all.filter(FILTERS.lapsed).length, 'past, not back yet');
     S.committed = committed;
     renderYoY();
+
+    // The default view is this season's sponsors; name it with the season.
+    var yo = $('#spFilter option[value="signed"]');
+    if (yo) yo.textContent = S.book.season + ' sponsors';
+    $('#spFilter').value = S.filter;
 
     // Owner picker: whoever the sheet lists, as written there.
     var owners = {};

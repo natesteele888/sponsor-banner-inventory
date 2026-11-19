@@ -31,6 +31,14 @@ function inlineLogo_(html) {
   } catch (e) { console.log('logo: ' + e); return { html: html, images: null }; }
 }
 
+function logoDataUri_() {
+  try {
+    var res = UrlFetchApp.fetch(leagueLogoUrl_(), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return '';
+    return 'data:image/png;base64,' + Utilities.base64Encode(res.getBlob().getBytes());
+  } catch (e) { console.log('logo: ' + e); return ''; }
+}
+
 function senderSettings_() {
   var from = firstEmail_(PropertiesService.getScriptProperties().getProperty('SEND_FROM') || '');
   var connected = false;
@@ -55,11 +63,13 @@ function leagueSend_(m) {
   if (s.connected) {
     var g = { htmlBody: lg.html, name: RECEIPT_ORG, from: s.from, replyTo: s.from };
     if (lg.images) g.inlineImages = lg.images;
+    if (m.attachments) g.attachments = m.attachments;
     GmailApp.sendEmail(m.to, subject, m.text, g);
     return { ok: true, from: s.from };
   }
   var o = { to: m.to, subject: subject, body: m.text, htmlBody: lg.html, name: RECEIPT_ORG };
   if (lg.images) o.inlineImages = lg.images;
+  if (m.attachments) o.attachments = m.attachments;
   if (s.from) o.replyTo = s.from;
   MailApp.sendEmail(o);
   return { ok: true, from: '' };

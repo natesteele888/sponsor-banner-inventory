@@ -104,11 +104,15 @@ Dashboard. Remove the address to take access away; it ends within five
 minutes. The list stays in the private Apps Script project, never in this
 repo. Needs the Apps Script deploy for this change.
 
+## What the Sponsors list shows first
+
+The list opens on this season's sponsors (anyone with an amount this season), named by the season, for example "2027 sponsors". Every year's rows are one pick away under **Show → All sponsors, every year**, along with the other views.
+
 ## Donation receipts for paid sponsors
 
 When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Sponsors get this receipt from here whether they paid by check or online, so the league site's receipt button is not used for a sponsor (a row whose Paid? or Notes says online, website, Crossbar or card is tagged **Paid online** as a reminder). Plain donations from people who aren't on the sponsor list never show here; those keep the website's receipt button. **Not needed** takes a row off the list (and **Undo** puts it back).
 
-The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) plus a button to the sponsor packet page. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
+The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) with the league letterhead. Above it, as its own card with space between, is the one step left for the sponsor: "One more step: your sponsor info packet" and a **Fill out your sponsor packet** button. The receipt card stands alone, so a screenshot of it is a clean tax copy. A PDF of the receipt alone (no packet card, no link) is attached to every receipt email. In the app, **Preview** on a waiting row and **Open receipt** on a sent one show the receipt with a **Print / Save as PDF** button, which prints the receipt without the packet card. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
 
 Setup (Apps Script editor):
 
