@@ -548,6 +548,9 @@
   // the likeliest first: signed up and waiting on money, then people someone
   // reached out to, then walk-ins, then everyone else. Picking one marks them
   // paid and opens their receipt preview; nothing is sent until Send is tapped.
+  // How it was paid: the words that go in the sheet's Paid how column and on the receipt.
+  var PAY_HOW = { online: 'Crossbar (online)', check: 'Check', cash: 'Cash', venmo: 'Venmo' };
+  var PAY_SAID = { online: 'online through Crossbar', check: 'by check', cash: 'in cash', venmo: 'by Venmo' };
   var PAY_GROUPS = ['Signed up, waiting on payment', 'Contacted, not signed up yet', 'Walk-in', 'On the sheet', 'Already marked paid'];
   var PAY_SKIP = /^(the|and|of|inc|llc|co|corp|company|ltd|pc|p c|dba|group)$/;
   function payWords(v) { return norm(v).split(' ').filter(function (w) { return w.length > 1 && !PAY_SKIP.test(w); }); }
@@ -578,8 +581,9 @@
       .slice(0, 8);
   }
   function payForm() {
-    return { name: $('#spp_name').value.trim(), amount: money($('#spp_amount').value), how: $('#spp_how').value,
-      email: $('#spp_email').value.trim() };
+    var how = $('#spp_how').value;
+    return { name: $('#spp_name').value.trim(), amount: money($('#spp_amount').value), how: PAY_HOW[how] ? how : 'online',
+      ref: $('#spp_ref').value.trim(), email: $('#spp_email').value.trim() };
   }
   function findPayer(e) {
     if (e) e.preventDefault();
@@ -602,7 +606,8 @@
   }
   function payNote(f) {
     var d = new Date(), when = MON[d.getMonth()] + ' ' + d.getDate();
-    return (f.how === 'check' ? 'Paid by check ' : 'Paid online ') + when + ' (' + fmtMoney(f.amount) + ')';
+    var ref = f.ref ? (f.how === 'check' && /^\d+$/.test(f.ref) ? 'check #' + f.ref : f.ref) : '';
+    return 'Paid ' + PAY_SAID[f.how] + ' ' + when + ' (' + fmtMoney(f.amount) + (ref ? ', ' + ref : '') + ')';
   }
   // First tap asks; the second marks them paid.
   function pickPayer(btn) {
@@ -614,17 +619,17 @@
       $$('#spPayMatches [data-armed]').forEach(function (b) { delete b.dataset.armed; b.textContent = b.dataset.pay === 'new' ? 'Add new sponsor' : 'This one'; });
       btn.dataset.armed = '1';
       btn.textContent = 'Tap again: ' + fmtMoney(f.amount) + ' paid';
-      msg.textContent = isNew ? 'Adds ' + f.name + ' as a new sponsor, paid ' + fmtMoney(f.amount) + ' ' + (f.how === 'check' ? 'by check' : 'online') + '.'
+      msg.textContent = isNew ? 'Adds ' + f.name + ' as a new sponsor, paid ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + '.'
         : s.paid && s.amount > 0
           // A second payment adds a note; it never writes over the amount already on the sheet.
           ? s.company + ' is already marked paid. Tap again to add this ' + fmtMoney(f.amount) + ' payment to its notes. The amount stays ' + s.amountText + '; change it with Edit if this adds to it.'
-          : 'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
+          : 'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
       setTimeout(function () { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = isNew ? 'Add new sponsor' : 'This one'; } }, 8000);
       return;
     }
     delete btn.dataset.armed;
     var t = mainTab(), head = function (re) { var c = colOf(t, re); return c < 0 ? '' : t.headers[c]; };
-    var hPaid = head(/^paid/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/);
+    var hPaid = head(/^paid\??$/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/), hHow = head(/^(paid how|payment method|paid by)/);
     if (!hPaid) { msg.textContent = 'The sheet has no Paid? column.'; return; }
     $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
     msg.textContent = 'Saving…';
@@ -633,6 +638,7 @@
       ? A().apiPost({ action: 'sponsorAdd', company: f.name, email: f.email, amount: String(f.amount), notes: note }).then(function (res) {
           if (!res.ok) throw new Error(res.error || 'That did not save.');
           var v = {}; v[hPaid] = 'Yes';
+          if (hHow) v[hHow] = PAY_HOW[f.how];
           return A().apiPost({ action: 'sponsorEdit', row: res.row, company: f.name, values: v }).then(function (r2) {
             if (!r2.ok) throw new Error(r2.error || 'Added, but not marked paid.');
             return res.row;
@@ -640,6 +646,7 @@
         })
       : (function () {
           var v = {}; v[hPaid] = 'Yes';
+          if (hHow) v[hHow] = PAY_HOW[f.how];
           if (hAmt && !(s.paid && s.amount > 0) && f.amount !== s.amount) v[hAmt] = String(f.amount);
           if (hNotes) v[hNotes] = s.notes ? s.notes + '; ' + note : note;
           if (hEmail && f.email && !s.email) v[hEmail] = f.email;
