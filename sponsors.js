@@ -134,6 +134,7 @@
       $('#spStatus').textContent = '';
       render();
       loadHistory();
+      loadReceipts();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
@@ -151,6 +152,88 @@
       S.history = res;
       renderYoY();
     }).catch(function () { /* the strip stays hidden */ });
+  }
+
+  // ---------- receipts ----------
+  // Rows marked paid with an email get a donation receipt, sent only when a
+  // board member taps Send. Website payments get theirs from the league site.
+
+  function loadReceipts() {
+    A().apiPost({ action: 'receiptList' }).then(function (res) {
+      if (!res || !res.ok) return;
+      S.receipts = res;
+      renderReceipts();
+    }).catch(function () { /* the box stays hidden */ });
+  }
+
+  function renderReceipts() {
+    var box = $('#spReceipts'), esc = A().esc, R = S.receipts;
+    if (!R) { box.classList.add('hidden'); return; }
+    var ready = R.items.filter(function (i) { return i.status === 'ready'; });
+    var web = R.items.filter(function (i) { return i.status === 'website'; });
+    var sent = R.items.filter(function (i) { return i.status === 'sent' || i.status === 'skip'; });
+    if (!R.items.length) { box.classList.add('hidden'); return; }
+    var set = R.settings || {};
+    var notes = [];
+    if (set.missing && set.missing.length) notes.push('Not set up yet: ' + set.missing.join(', ') + '.');
+    else if (!set.live) notes.push('Test mode: receipts go to the test address, not the sponsor.');
+    if (!set.packet) notes.push('No sponsor packet link set, so receipts go without it.');
+    var row = function (i) {
+      var acts = i.status === 'ready'
+        ? '<button class="btn small" data-rc="preview" type="button">Preview</button>' +
+          '<button class="btn small primary" data-rc="send" type="button">Send</button>' +
+          '<button class="btn small" data-rc="website" type="button">Website sent it</button>'
+        : i.status === 'website'
+          ? '<span class="rc-state">Website sends its receipt</span><button class="btn small" data-rc="preview" type="button">Preview</button>'
+          : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
+            (i.status === 'sent' ? '' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
+      return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
+        '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span></div>' +
+        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div></li>';
+    };
+    box.innerHTML =
+      '<h2 class="rc-h">' + (ready.length ? ready.length + ' receipt' + (ready.length === 1 ? '' : 's') + ' to send' : 'Receipts: all caught up') + '</h2>' +
+      (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
+      '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
+      (web.length || sent.length ? '<details class="rc-more"><summary>Done or sent by the website (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
+        web.concat(sent).map(row).join('') + '</ul></details>' : '') +
+      '<div id="rcPreview" class="rc-preview hidden"></div>';
+    box.classList.remove('hidden');
+  }
+
+  function receiptAct(btn) {
+    var li = btn.closest('.rc-item'), key = li.dataset.key, how = btn.dataset.rc, msg = li.querySelector('.rc-msg');
+    var item = S.receipts.items.filter(function (i) { return i.key === key; })[0];
+    if (how === 'preview') {
+      msg.textContent = 'Building the preview…';
+      return A().apiPost({ action: 'receiptPreview', key: key }).then(function (res) {
+        msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+        if (!res.ok) return;
+        var pv = $('#rcPreview');
+        pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b><button class="btn small" type="button" id="rcPvClose">Close</button></div>';
+        var f = document.createElement('iframe');
+        f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', ''); f.srcdoc = res.html;
+        pv.appendChild(f); pv.classList.remove('hidden');
+        $('#rcPvClose').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+        pv.scrollIntoView({ block: 'nearest' });
+      }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
+    }
+    // Send asks once more on the button itself; the second tap sends.
+    if (how === 'send' && !btn.dataset.armed) {
+      btn.dataset.armed = '1';
+      btn.textContent = S.receipts.settings.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
+      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Send'; } }, 6000);
+      return;
+    }
+    btn.disabled = true;
+    msg.textContent = how === 'send' ? 'Sending…' : 'Saving…';
+    var req = how === 'send' ? { action: 'receiptSend', key: key } : { action: 'receiptMark', key: key, how: how };
+    A().apiPost(req).then(function (res) {
+      if (!res.ok) { btn.disabled = false; msg.textContent = res.error || 'That did not go through.'; return; }
+      if (how === 'send' && res.status !== 'sent') { btn.disabled = false; delete btn.dataset.armed; btn.textContent = 'Send'; msg.textContent = res.message; return; }
+      $('#spStatus').textContent = res.message || 'Saved.';
+      loadReceipts();
+    }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
   }
 
   // ---------- year over year ----------
@@ -517,6 +600,7 @@
     $('#spSearch').addEventListener('input', function (e) { S.search = e.target.value; render(); });
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(); });
+    $('#spReceipts').addEventListener('click', function (e) { var b = e.target.closest('button[data-rc]'); if (b) receiptAct(b); });
     $('#spClose').addEventListener('click', close);
     $('#detailScrim').addEventListener('click', function () { if (S.current) close(); });
     $('#spSave').addEventListener('click', saveTeam);
