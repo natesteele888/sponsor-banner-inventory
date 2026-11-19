@@ -80,7 +80,7 @@ function logSnapshot_(t) {
 }
 
 function currentTotals_() {
-  var sh = sponsorSpreadsheet_().getSheetByName(SPONSOR_TAB);
+  var ss = sponsorSpreadsheet_(), sh = ss.getSheetByName(sponsorTabName_(ss));
   return sh ? sponsorTotals_(sh.getDataRange().getDisplayValues(), SEASON) : null;
 }
 

@@ -126,17 +126,35 @@ Until `RECEIPTS_LIVE` is set to `on`, every Send goes only to `RECEIPTS_TEST_TO`
 
 ## Sponsor info packets
 
-What sponsors send on the info packet page (level, business, jersey name, write-up, socials, banner choice, logo) shows under **Sponsor info packets** on the Sponsors tab, newest first, with new ones marked. Open one to see everything they sent and the logo from its files folder. A sponsor's card says "Info packet in" when the business name matches. It's read live from the "LYBS Sponsor Info Packets" sheet (tab Packets) and never written to.
+What sponsors send on the info packet page (level, business, jersey name, write-up, socials, banner choice, logo) shows under **Sponsor info packets** on the Sponsors tab, newest first, with new ones marked. Open one to see everything they sent and the logo from its files folder. A sponsor's card says "Info packet in" when the business name matches. It's read live from the "LYBS Sponsor Info Packets" sheet (tab Packets) and never written to. A packet whose business isn't on the sponsor list yet has an **Add to sponsor list** button (any signed-in board member): it adds a row with the business, contact, email, phone, level and amount from that packet, marks it contacted and signed up, and notes the packet's date. The backend reads the packet row itself, so the page can't change what goes in. A business already on the list is refused, so nothing goes in twice.
 
 Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.
 
 ## Board edits (straight into the shared sheet)
 
-Edits made in the app go straight into the one sponsorship sheet the app reads
-(today that's the sponsorship lead's sheet, found by its name). There is no
-separate copy to keep in step. `SPONSOR_SHEET_USE` still points the app at a
-different sheet if that's ever wanted; leave it unset to keep using the lead's
-sheet. Set `SPONSOR_EDITS` to `off` to stop every edit at once (the app goes
+Edits made in the app go straight into the one sponsorship sheet the app reads.
+With `SPONSOR_SHEET_USE` unset, that's the sponsorship lead's sheet, found by
+its name. With `SPONSOR_SHEET_USE` set to the board's own sponsor sheet, it's
+that one. There is no separate copy to keep in step either way.
+
+**The board's own sheet** has a tab people type in, **Enter sponsors here**,
+and a sorted view tab (`<season> sponsors`) that is all formulas. When the
+sheet has a tab named Enter sponsors here, the app reads and writes that tab
+and never the view (the `SPONSOR_TAB_USE` Script Property can name another
+tab). Everything else that reads sponsors goes through this backend, so it all
+moves together: the Sponsors tab, receipts and follow-ups, the year-over-year
+strip, the hourly banner scan, the Dashboard (`sponsorSheet`) and Ballclub
+team pages (`teamPageSponsor`).
+
+On that sheet **Status** is a typed dropdown, not a formula, so it follows each
+change made in the app: Mark paid → Paid; Not sponsoring → Not sponsoring; a
+level or amount entered → Signed up, not paid; Mark contacted → Contacted
+(from Not contacted or Walk-in); Walk-in only → Walk-in, not visited (from Not
+contacted); a new row → Not contacted, or Contacted when added as contacted.
+A change that sets Status itself keeps it as given. Each move is in the Change
+log. A sheet whose Status is a formula, or that has no Status column, is
+never given one. Follow-up emails also skip a row whose Status is Paid or Not
+sponsoring. Set `SPONSOR_EDITS` to `off` to stop every edit at once (the app goes
 back to read-only); delete it to turn edits back on.
 
 - **Add a contact:** any signed-in board member can add a person or business

@@ -35,9 +35,59 @@ function canEditSponsors_() {
 // The sponsor tab of the one sheet the app reads, or null when edits are off.
 function writableSponsorSheet_() {
   if (/^off$/i.test(PropertiesService.getScriptProperties().getProperty('SPONSOR_EDITS') || '')) return null;
-  var sh = sponsorSpreadsheet_().getSheetByName(SPONSOR_TAB);
-  if (!sh) throw new Error('The sponsorship sheet has no "' + SPONSOR_TAB + '" tab.');
+  var ss = sponsorSpreadsheet_(), name = sponsorTabName_(ss);
+  var sh = ss.getSheetByName(name);
+  if (!sh) throw new Error('The sponsorship sheet has no "' + name + '" tab.');
   return sh;
+}
+
+// ---------- Status follows the change ----------
+// The board's sheet has a typed Status column (a dropdown, not a formula).
+// When a change clearly moves a sponsor along (marked paid, said no, signed up
+// at a level, contacted, walk-in), Status moves with it. Never when the same
+// change sets Status itself, and never on a sheet whose Status is a formula.
+
+var STATUS_WORDS = ['Paid', 'Signed up, not paid', 'Contacted', 'Walk-in, not visited', 'Not contacted', 'Not sponsoring'];
+
+function stYes_(v) { return /^\s*(y|yes|true|x|paid|✓)/i.test(String(v == null ? '' : v)); }
+function stSaidNo_(v) { return /not spons|declin|^\s*pass/i.test(String(v == null ? '' : v)); }
+function stReached_(v) { v = String(v == null ? '' : v).trim(); return !!v && !/^(no|false)$/i.test(v) && !stSaidNo_(v); }
+function stAmount_(v) { return Number(String(v == null ? '' : v).replace(/[^0-9.]/g, '')) || 0; }
+
+// head: the header texts. before/after: that row's cells. Returns the new
+// Status, or '' when Status should stay as it is.
+function statusAfter_(head, before, after) {
+  var low = head.map(function (h) { return String(h).toLowerCase().trim(); });
+  var col = function (re) { for (var i = 0; i < low.length; i++) if (re.test(low[i])) return i; return -1; };
+  var c = { st: col(/^status$/), paid: col(/^paid/), con: col(/^contacted/), amt: col(/^amount/),
+            tier: col(new RegExp('^tier selected ' + SEASON)), walk: col(/^walk-?in/) };
+  if (c.st < 0) return '';
+  var b = function (k) { return c[k] < 0 ? '' : String(before[c[k]] == null ? '' : before[c[k]]); };
+  var a = function (k) { return c[k] < 0 ? '' : String(after[c[k]] == null ? '' : after[c[k]]); };
+  var cur = b('st').trim(), next = '';
+  var early = ['', 'Not contacted', 'Contacted', 'Walk-in, not visited'];
+  var signedNow = stAmount_(a('amt')) > 0 || (!!a('tier').trim() && !/^none/i.test(a('tier').trim()));
+  var signedBefore = stAmount_(b('amt')) > 0 || (!!b('tier').trim() && !/^none/i.test(b('tier').trim()));
+  if (stYes_(a('paid')) && !stYes_(b('paid'))) next = 'Paid';
+  else if (stSaidNo_(a('con')) && !stSaidNo_(b('con'))) next = 'Not sponsoring';
+  else if (signedNow && !signedBefore && early.indexOf(cur) >= 0) next = 'Signed up, not paid';
+  else if (stReached_(a('con')) && !stReached_(b('con')) && ['', 'Not contacted', 'Walk-in, not visited'].indexOf(cur) >= 0) next = 'Contacted';
+  else if (stYes_(a('walk')) && !stYes_(b('walk')) && ['', 'Not contacted'].indexOf(cur) >= 0) next = 'Walk-in, not visited';
+  else if (!cur && after.some(function (x) { return String(x || '').trim(); })) next = 'Not contacted';
+  return next && next !== cur ? next : '';
+}
+
+// Write the followed Status on one row, logged like any other change.
+function followStatus_(sh, t, row, before, after, company) {
+  var c = -1;
+  t.head.forEach(function (h, i) { if (c < 0 && /^status$/i.test(h)) c = i; });
+  if (c < 0) return '';
+  if (sh.getRange(row, c + 1).getFormulas()[0][0]) return '';
+  var next = statusAfter_(t.head, before, after);
+  if (!next) return '';
+  sh.getRange(row, c + 1).setValue(next);
+  logChanges_(sh, [{ company: company, what: t.head[c], from: before[c] || '', to: next }]);
+  return next;
 }
 
 // ---------- change log ----------
@@ -145,9 +195,10 @@ function sponsorAdd(data) {
     for (var r = t.h0 + 1; r < t.v.length; r++) {
       if (companyKey_(t.v[r][cCo]) === key) return fail(company + ' is already on the sheet (row ' + (r + 1) + ').');
     }
-    var vals = { company: company, contact: data.contact, phone: data.phone, email: data.email, owner: data.owner, contacted: data.contacted, notes: data.notes };
+    var vals = { company: company, contact: data.contact, phone: data.phone, email: data.email, owner: data.owner, contacted: data.contacted, notes: data.notes,
+                 tier: data.tier, amount: data.amount };
     var map = { company: cCo, contact: col(/^contact$/), phone: col(/^phone/), email: col(/^email/), owner: col(/^lybs owner/),
-                contacted: col(/^contacted/), notes: col(/^notes?$/) };
+                contacted: col(/^contacted/), notes: col(/^notes?$/), tier: col(new RegExp('^tier selected ' + SEASON)), amount: col(/^amount/) };
     var row = [];
     for (var i = 0; i < t.head.length; i++) row.push('');
     Object.keys(map).forEach(function (k) { if (map[k] >= 0 && vals[k]) row[map[k]] = clean(String(vals[k]).trim(), k === 'notes' ? 500 : 120); });
@@ -164,6 +215,7 @@ function sponsorAdd(data) {
       f.forEach(function (x, i) { if (x) sh.getRange(at, i + 1).setFormulaR1C1(x); });
     }
     logChanges_(sh, [{ company: company, what: 'Added', from: '', to: [data.contact, data.email].filter(Boolean).join(', ') }]);
+    followStatus_(sh, t, at, t.head.map(function () { return ''; }), row, company);
     return ok({ message: company + ' added.', row: at });
   } finally {
     lock.releaseLock();
@@ -187,6 +239,9 @@ function sponsorEdit(data) {
     // The row must still be the same sponsor, in case rows moved since the page loaded.
     if (cCo >= 0 && companyKey_(t.v[row - 1][cCo]) !== companyKey_(data.company)) return fail('That row changed since you opened it. Refresh and try again.');
     var values = data.values || {}, changed = 0, kept = [], log = [];
+    var before = t.v[row - 1].slice(), after = before.slice();
+    // A change that names Status itself keeps it as given, even unchanged.
+    var setStatus = Object.keys(values).some(function (h) { return /^status$/i.test(String(h).replace(/\s+/g, ' ').trim()); });
     if (cCo >= 0 && Object.prototype.hasOwnProperty.call(values, t.head[cCo]) && !String(values[t.head[cCo]] || '').trim()) return fail('A row needs a company name.');
     var formulas = sh.getRange(row, 1, 1, t.head.length).getFormulas()[0];
     Object.keys(values).forEach(function (h) {
@@ -197,10 +252,12 @@ function sponsorEdit(data) {
       if (nv === String(t.v[row - 1][i])) return;
       log.push({ company: t.v[row - 1][cCo >= 0 ? cCo : 0], what: t.head[i], from: t.v[row - 1][i], to: nv });
       sh.getRange(row, i + 1).setValue(nv);
+      after[i] = nv;
       changed++;
     });
     logChanges_(sh, log);
-    return ok({ message: changed ? 'Saved.' : 'Nothing changed.', changed: changed, kept: kept });
+    var st = changed && !setStatus ? followStatus_(sh, t, row, before, after, t.v[row - 1][cCo >= 0 ? cCo : 0]) : '';
+    return ok({ message: changed ? 'Saved.' : 'Nothing changed.', changed: changed, kept: kept, status: st });
   } finally {
     lock.releaseLock();
   }
@@ -259,6 +316,10 @@ function sponsorWalkIn(data) {
     if (was === nv) return ok({ message: 'Nothing changed.', changed: 0 });
     sh.getRange(row, c + 1).setValue(nv);
     logChanges_(sh, [{ company: t.v[row - 1][cCo], what: WALKIN_HEAD, from: was, to: nv }]);
+    var wb = t.v[row - 1].slice(), wa = wb.slice(), wh = t.head.slice();
+    while (wh.length <= c) { wh.push(''); wb.push(''); wa.push(''); }
+    wh[c] = WALKIN_HEAD; wb[c] = was; wa[c] = nv;
+    followStatus_(sh, { head: wh }, row, wb, wa, t.v[row - 1][cCo]);
     return ok({ message: data.on ? 'Marked walk-in only.' : 'Walk-in label taken off.', changed: 1 });
   } finally {
     lock.releaseLock();

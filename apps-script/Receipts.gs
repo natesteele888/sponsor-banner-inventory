@@ -69,7 +69,7 @@ function receiptKey_(r) {
 }
 
 function receiptRows_() {
-  var tab = bookTab_(sponsorSpreadsheet_(), SPONSOR_TAB);
+  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
   if (!tab) return [];
   var head = tab.headers.map(function (h) { return h.toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };

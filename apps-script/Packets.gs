@@ -103,3 +103,28 @@ function packetLogo(data) {
   }
   return ok({ logo: best ? logoBlob_(best) : null, files: best ? 1 : 0 });
 }
+
+// Put one info packet on the sponsor list: the business, contact, email,
+// phone and level from that packet's row, read here and not from the page.
+// Any signed-in board member may, as with adding a contact. A business that
+// is already on the list is refused, so nothing is entered twice. The packet
+// itself stays on the packets sheet untouched.
+function packetAdd(data) {
+  var ss = packetSpreadsheet_();
+  if (!ss) return fail('The packets sheet was not found.');
+  var tab = bookTab_(ss, PACKET_TAB), row = Number(data.row), hit = null;
+  (tab ? tab.rows : []).forEach(function (r) { if (r.row === row) hit = r; });
+  if (!hit) return fail('That packet is no longer on the sheet.');
+  var low = tab.headers.map(function (h) { return String(h).toLowerCase(); });
+  var get = function (re) { for (var i = 0; i < low.length; i++) if (re.test(low[i])) return String(hit.cells[i] || '').trim(); return ''; };
+  var company = get(/^business/);
+  if (!company) return fail('That packet has no business name.');
+  var level = get(/^level/), tier = tierFromText_(level);
+  var amt = TIER_AMOUNTS[tier] || (Number(String(level).replace(/[^0-9.]/g, '')) || 0);
+  var when = get(/^submitted/);
+  return sponsorAdd({
+    company: company, contact: get(/^contact name/), email: firstEmail_(get(/^email/)), phone: get(/^phone/),
+    contacted: 'Yes', tier: tier || level, amount: amt ? '$' + String(Math.round(amt)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '',
+    notes: 'Sent the info packet' + (when ? ' (' + when + ')' : '') + '.'
+  });
+}
