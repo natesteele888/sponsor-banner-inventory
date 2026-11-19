@@ -570,9 +570,11 @@
     return 3;
   }
   function payMatches(name, email) {
-    return sponsors().map(function (s) { return { s: s, score: payScore(s, name, email), g: payGroup(s) }; })
+    // A same-name (or same-email) match goes first, whatever its group, so a
+    // sponsor typed exactly is never listed under one that only shares a word.
+    return sponsors().map(function (s) { var sc = payScore(s, name, email), g = payGroup(s); return { s: s, score: sc, g: g, t: sc >= 90 ? -1 : g }; })
       .filter(function (m) { return m.score > 0; })
-      .sort(function (a, b) { return (a.g - b.g) || (b.score - a.score) || a.s.company.localeCompare(b.s.company); })
+      .sort(function (a, b) { return (a.t - b.t) || (a.g - b.g) || (b.score - a.score) || a.s.company.localeCompare(b.s.company); })
       .slice(0, 8);
   }
   function payForm() {
@@ -588,10 +590,10 @@
     if (f.email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(f.email)) { msg.textContent = 'That email doesn’t look right.'; return; }
     var list = payMatches(f.name, f.email);
     msg.textContent = list.length ? 'Pick who it’s from.' : 'Nobody on the sheet matches that name.';
-    var last = -1;
+    var last = null;
     box.innerHTML = '<ul class="rc-list">' + list.map(function (m) {
-      var s = m.s, head = m.g !== last ? '<li class="pay-g">' + esc(PAY_GROUPS[m.g]) + '</li>' : '';
-      last = m.g;
+      var s = m.s, head = m.t !== last ? '<li class="pay-g">' + esc(m.t < 0 ? 'Same name' : PAY_GROUPS[m.g]) + '</li>' : '';
+      last = m.t;
       var said = [s.contact, s.amountText ? 'sheet says ' + s.amountText : '', s.owner ? s.owner + '’s' : ''].filter(Boolean).join(' · ');
       return head + '<li class="rc-item"><div class="rc-who"><b>' + esc(s.company) + '</b><span>' + esc(said) + '</span></div>' +
         '<div class="rc-acts"><button class="btn small' + (m.g === 4 ? '' : ' primary') + '" type="button" data-pay="' + s.row + '">This one</button></div></li>';
