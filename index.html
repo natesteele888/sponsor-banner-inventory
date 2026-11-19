@@ -88,17 +88,28 @@
         <button class="btn small" id="spRefresh" type="button">Refresh</button>
       </div>
     </div>
-    <!-- Any board member: a person or business they reached out to (sponsors.js, Edits.gs). -->
+    <!-- Any board member: a new sponsor, or someone they reached out to (sponsors.js, Edits.gs). -->
     <details id="spAddBox" class="rcpt hidden">
-      <summary class="rc-h">＋ Add a contact</summary>
+      <summary class="rc-h">＋ Add sponsor</summary>
       <form id="spAddForm" class="field-grid" autocomplete="off">
+        <details class="full rc-more">
+          <summary>Signed up on the website? Paste the form here</summary>
+          <label class="full">What the form says <textarea id="spa_paste" rows="4" maxlength="5000" placeholder="Copy the Registration Details page (or the form email) and paste it here"></textarea></label>
+          <div class="sheet-acts"><button class="btn small" id="spaFill" type="button">Fill in from it</button></div>
+        </details>
         <label class="full">Business or person <input id="spa_company" type="text" maxlength="120" required></label>
         <label>Contact name <input id="spa_contact" type="text" maxlength="120"></label>
         <label>Phone <input id="spa_phone" type="tel" maxlength="40"></label>
         <label>Email <input id="spa_email" type="email" maxlength="120"></label>
         <label>LYBS owner <input id="spa_owner" type="text" maxlength="60" placeholder="Who reached out"></label>
+        <label>Level <select id="spa_tier"><option value="">Not signed up yet (just a contact)</option><option>Gameday</option><option>All-Star</option><option>MVP</option><option>Championship</option><option>Championship+</option></select></label>
+        <div id="spa_money" class="full field-grid hidden">
+          <label>Amount <input id="spa_amount" type="text" inputmode="decimal" maxlength="20" placeholder="$"></label>
+          <label>Paying with <select id="spa_how"><option value="">Money (not paid yet)</option><option value="inkind">In kind (goods or services)</option></select></label>
+        </div>
         <label class="full">Notes <input id="spa_notes" type="text" maxlength="500"></label>
-        <div class="sheet-acts full"><button class="btn primary" id="spaSave" type="submit">Add contact</button><span id="spaStatus" class="status" role="status"></span></div>
+        <p class="hint full">A level adds them as signed up, not paid. Mark them paid later with Record a payment.</p>
+        <div class="sheet-acts full"><button class="btn primary" id="spaSave" type="submit">Add sponsor</button><span id="spaStatus" class="status" role="status"></span></div>
       </form>
     </details>
     <!-- Sponsorship editors: a payment came in, find who it's from (sponsors.js). -->
@@ -108,7 +119,7 @@
       <form id="spPayForm" class="field-grid" autocomplete="off">
         <label class="full">Who paid <input id="spp_name" type="text" maxlength="120" required placeholder="Business or person, as on the check or payment"></label>
         <label>Amount <input id="spp_amount" type="text" inputmode="decimal" maxlength="20" required placeholder="$"></label>
-        <label>How <select id="spp_how"><option value="online">Crossbar (online)</option><option value="check">Check</option><option value="cash">Cash</option><option value="venmo">Venmo</option></select></label>
+        <label>How <select id="spp_how"><option value="online">Crossbar (online)</option><option value="check">Check</option><option value="cash">Cash</option><option value="venmo">Venmo</option><option value="inkind">In kind (goods or services)</option></select></label>
         <label>Check # or Venmo name <input id="spp_ref" type="text" maxlength="60" placeholder="Optional"></label>
         <label class="full">Their email <input id="spp_email" type="email" maxlength="120" placeholder="If you have it, for the receipt"></label>
         <div class="sheet-acts full"><button class="btn primary" id="sppFind" type="submit">Find them</button><span id="sppStatus" class="status" role="status"></span></div>

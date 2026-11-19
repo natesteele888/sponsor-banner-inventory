@@ -18,6 +18,10 @@
  *                     (default "March 20")
  *   NUDGES_LIVE       "on" sends to sponsors; anything else sends tests to
  *                     RECEIPTS_TEST_TO only
+ *
+ * Every round starts off. Its list shows only once a sponsorship editor taps
+ * "Start this round" (nudgeRound), and even then each email waits for
+ * Preview and Send. Which rounds were started is kept in NUDGES_ON_<season>.
  *   RECEIPT_ORG_ADDRESS  where checks go (shared with receipts)
  * Sends go through leagueSend_ (Mail.gs), so they come from the league address.
  */
@@ -75,6 +79,13 @@ function nudgeLog_() {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(NUDGES_PROP) || '{}'); } catch (e) { return {}; }
 }
 function saveNudgeLog_(log) { PropertiesService.getScriptProperties().setProperty(NUDGES_PROP, JSON.stringify(log)); }
+
+// Rounds a board member started by hand: { 'yyyy-mm-dd': { by, at } }.
+var NUDGES_ON_PROP = 'NUDGES_ON_' + SEASON;
+function nudgesOn_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(NUDGES_ON_PROP) || '{}'); } catch (e) { return {}; }
+}
+function roundStarted_(round) { return !!(round && nudgesOn_()[round.date]); }
 
 function contactedState_(v) {
   v = String(v || '').trim();
@@ -134,7 +145,7 @@ function nudgeList() {
   var s = nudgeSettings_(), r = currentNudgeRound_();
   return {
     settings: { missing: s.missing, live: s.live, testTo: !!s.testTo, sender: senderSettings_().connected },
-    current: r.current, next: r.next, rounds: r.rounds,
+    current: r.current, next: r.next, rounds: r.rounds, started: roundStarted_(r.current),
     items: nudgeRows_(r.current).map(function (x) { return { key: x.key, row: x.row, company: x.company, email: x.email, status: x.status, at: x.at }; })
   };
 }
@@ -159,6 +170,7 @@ function nudgeSend(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var s = nudgeSettings_(), r = currentNudgeRound_();
   if (!r.current) return fail('No follow-up round has started yet.');
+  if (!roundStarted_(r.current)) return fail('Follow-ups are off for this round. Tap Start this round first.');
   if (s.missing.length) return fail('Follow-ups are not set up yet: missing ' + s.missing.join(', ') + ' (Script Properties).');
   if (!s.live && !s.testTo) return fail('Follow-ups are in test mode with no test address set.');
   var lock = LockService.getScriptLock();
@@ -176,6 +188,22 @@ function nudgeSend(data) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Start this round's follow-ups by hand, or turn them back off. Editors only.
+// Starting sends nothing: it only lets the round's list show, one Preview and
+// Send at a time.
+function nudgeRound(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can start follow-ups.');
+  var r = currentNudgeRound_();
+  if (!r.current) return fail('No follow-up round has started yet.');
+  if (String(data.round || '') !== r.current.date) return fail('That round changed. Refresh.');
+  var on = nudgesOn_(), how = String(data.how || '');
+  if (how === 'start') on[r.current.date] = { by: WHO && WHO.email ? String(WHO.email) : '', at: dayOf_(new Date()) };
+  else if (how === 'stop') delete on[r.current.date];
+  else return fail('Unknown choice.');
+  PropertiesService.getScriptProperties().setProperty(NUDGES_ON_PROP, JSON.stringify(on));
+  return ok({ message: how === 'start' ? r.current.label + ' is on. Each follow-up still waits for Preview and Send.' : r.current.label + ' is off. Nothing will go out.', started: how === 'start' });
 }
 
 // Skip a sponsor this round, or undo a skip.
