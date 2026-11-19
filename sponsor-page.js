@@ -113,8 +113,13 @@
       $('greet').textContent = 'This page needs the personal link from your LYBS receipt email. Please open it from there, or just reply to that email.';
       return;
     }
+    // If the backend never answers, say so rather than sit on "Loading".
+    var slow = setTimeout(function () {
+      if (!P) $('greet').textContent = "This is taking longer than it should. Refresh the page, or just reply to the email and we'll sort it out.";
+    }, 20000);
     call({ action: 'sponsorPageGet' }).then(function (res) {
-      if (!res.ok) { $('greet').textContent = res.error; return; }
+      clearTimeout(slow);
+      if (!res || !res.ok) { $('greet').textContent = (res && res.error) || "We couldn't load your page. Refresh, or just reply to the email."; return; }
       P = res;
       $('greet').textContent = 'Thank you, ' + res.company + '! Please send us your info by ' + res.deadline + '.' +
         (res.sent ? ' We already have your info; sending again adds an update.' : '');
@@ -129,6 +134,7 @@
       $('pageForm').classList.remove('hidden');
       renderLevels();
     }).catch(function () {
+      clearTimeout(slow);
       $('greet').textContent = "We couldn't load your page. Check your connection and refresh, or just reply to the email.";
     });
   }

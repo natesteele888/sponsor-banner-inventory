@@ -281,9 +281,14 @@
         '<button class="btn small" type="button" data-pv="close">Close</button></span></div>' +
         (canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' from the league address, only when you tap Send.</p>' : '') +
         '<div class="rc-pv-msg status" role="status"></div>';
-      // No scripts run inside the receipt; same origin only so this page can print it.
+      // No scripts run inside the receipt; same origin only so this page can
+      // print it. A link in it (the sponsor packet) opens in its own tab, where
+      // the page can run: opened inside this frame it would sit on "Loading".
       var f = document.createElement('iframe');
-      f.className = 'rc-frame'; f.title = 'Receipt preview'; f.setAttribute('sandbox', 'allow-same-origin allow-modals'); f.srcdoc = res.html;
+      f.className = 'rc-frame'; f.title = 'Receipt preview';
+      f.setAttribute('sandbox', 'allow-same-origin allow-modals allow-popups allow-popups-to-escape-sandbox');
+      var doc = String(res.html), base = '<base target="_blank">';
+        f.srcdoc = /<head[^>]*>/i.test(doc) ? doc.replace(/<head[^>]*>/i, function (h) { return h + base; }) : base + doc;
       pv.appendChild(f); pv.classList.remove('hidden');
       var said = pv.querySelector('.rc-pv-msg');
       pv.querySelector('[data-pv="print"]').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { said.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
@@ -585,7 +590,12 @@
 
   function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
   // What's still owed for an upgrade: the level's price less what the sheet shows paid.
-  function upgradeLeft(s, u) { return Math.max(0, (u.price || 0) - (s.paid ? s.amount || 0 : 0)) || u.owed || 0; }
+  // Once the sheet shows them paid, the sheet decides: a difference already
+  // paid in full (say through Edit) leaves nothing owed, not the old figure.
+  function upgradeLeft(s, u) {
+    if (s.paid && s.amount > 0 && u.price > 0) return Math.max(0, u.price - s.amount);
+    return u.owed || Math.max(0, (u.price || 0) - (s.paid ? s.amount || 0 : 0));
+  }
 
   function loadPackets() {
     A().apiPost({ action: 'sponsorPackets' }).then(function (res) {
