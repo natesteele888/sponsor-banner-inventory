@@ -126,9 +126,11 @@ function doPost(e) {
     if (action === 'seasonRequest') return seasonRequest(data);
     if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
     // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
-    if (action === 'sponsorBook') return ok(Object.assign(sponsorBook(), sponsorPerms_()));
+    if (action === 'sponsorBook') { var bk = sponsorBook(); bk.changes = sponsorChanges_(sponsorSpreadsheet_(), 1000); return ok(Object.assign(bk, sponsorPerms_())); }
     if (action === 'sponsorAdd') return sponsorAdd(data);
     if (action === 'sponsorEdit') return sponsorEdit(data);
+    if (action === 'sponsorWalkIn') return sponsorWalkIn(data);
+    if (action === 'walkInForm') return walkInForm();
     // This season's committed total next to last season's (History.gs). Totals only.
     if (action === 'sponsorHistory') return ok(sponsorHistory());
     if (action === 'receiptList') return ok(receiptList());

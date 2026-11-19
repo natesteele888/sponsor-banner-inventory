@@ -130,26 +130,53 @@ What sponsors send on the info packet page (level, business, jersey name, write-
 
 Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.
 
-## Board edits (the board's own copy of the sheet)
+## Board edits (straight into the shared sheet)
 
-The app can run on the board's own copy of the sponsorship sheet instead of
-reading the sponsorship lead's sheet. Nothing changes until this is switched on.
+Edits made in the app go straight into the one sponsorship sheet the app reads
+(today that's the sponsorship lead's sheet, found by its name). There is no
+separate copy to keep in step. `SPONSOR_SHEET_USE` still points the app at a
+different sheet if that's ever wanted; leave it unset to keep using the lead's
+sheet. Set `SPONSOR_EDITS` to `off` to stop every edit at once (the app goes
+back to read-only); delete it to turn edits back on.
 
-- **Switch on:** set the Script Property `SPONSOR_SHEET_USE` to the copy's
-  spreadsheet id. The app then reads and writes only that copy.
-- **Switch back:** delete `SPONSOR_SHEET_USE`. The app goes back to reading the
-  lead's sheet by name, and every edit is refused, so that sheet is never
-  written from the app.
 - **Add a contact:** any signed-in board member can add a person or business
   they reached out to. A name already on the sheet is refused. Columns the
   sheet works out with a formula get the row above's formula.
-- **Edit a row, Mark paid, Mark contacted, Not sponsoring:** only editors.
-  Editors are the league admin account plus the Google addresses in the
-  Script Property `SPONSOR_EDITORS` (comma separated). Paid rows and amounts
-  can be changed. Formula columns are left alone. "Not sponsoring" goes in
-  the Contacted? column and takes the row off follow-up emails.
+- **Edit a row, Mark paid, Mark contacted, Not sponsoring, Assign:** only
+  editors. Editors are the league admin account plus the Google addresses in
+  the Script Property `SPONSOR_EDITORS` (comma separated). Formula columns are
+  left alone. "Not sponsoring" goes in the Contacted? column and takes the row
+  off follow-up emails.
+- **Hold to confirm:** Mark paid, Mark contacted, Not sponsoring, Assign and
+  Save changes are pressed and held until the ring fills. A plain tap asks
+  "Tap again or hold" with what will change (for example "Amount: $500 →
+  $1,000"); a second tap within a few seconds does it, which also works from
+  the keyboard. Each one then shows a ✓ line such as "Paid."
+- **Change history:** every change made in the app (who, what, old → new,
+  when) is written to a **Change log** tab in the same sheet, made the first
+  time it's needed. Each sponsor's card shows its own changes under
+  **Changes**.
 - Each save checks the row still holds the same sponsor, so a sheet that was
   re-sorted since the page loaded is not written to the wrong row.
+
+## Views, towns and owners
+
+- **Show** has: this season's sponsors, all sponsors, past sponsors nobody has
+  reached out to yet, needs a new owner, walk-in only, and **My sponsors**.
+- **Town** filters by the town in the Address column.
+- **Assign:** editors set a sponsor's owner (the LYBS Owner column) on its
+  card. **My sponsors** lists the rows whose owner is you; it shows once
+  `SPONSOR_PEOPLE` is set, as `Name = google address, Name = google address`
+  (the name is how you appear in the LYBS Owner column).
+- **Needs a new owner:** past sponsors not signed this season whose owner is
+  blank or only former board members. Former members are listed in
+  `SPONSOR_FORMER_OWNERS` (comma separated first names as they appear in the
+  sheet). The card still shows who reached out last year.
+- **Walk-in only:** editors can label a sponsor walk-in only (a "Walk-in only"
+  column, made the first time). Its card shows the address with a map link
+  and a **Print form** button that opens the printable sponsorship form. The
+  form lives in the league's Drive, never in this repo; set `WALKIN_FORM_ID`
+  to its Drive file id. The app only hands it to signed-in board members.
 
 ## Follow-up emails
 

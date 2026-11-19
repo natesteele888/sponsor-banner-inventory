@@ -26,7 +26,7 @@
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
   var S = {
-    book: null, loading: null, filter: 'signed', // opens on this season's sponsors owner: '', search: '',
+    book: null, loading: null, filter: 'signed', area: '', me: '', // opens on this season's sponsors owner: '', search: '',
     current: null, entry: false, skipPop: false,
     teams: null, teamsYear: null // [{ sport, division, team }] from the Dashboard
   };
@@ -46,6 +46,43 @@
   function yes(v) { return /^\s*(y|yes|true|x|paid)/i.test(String(v || '')); }
   function fmtMoney(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
   // "Matt " and "matt" are the same board member.
+  // The town in an address, for splitting the list by area:
+  // "12 Example St, Lunenburg, MA 01462" and "5 Sample Rd Fitchburg, MA" give
+  // Lunenburg and Fitchburg.
+  function townOf(addr) {
+    var a = String(addr || '').replace(/,?\s*(united states|usa)\b.*$/i, '');
+    var m = a.match(/^(.*?)[,\s]+(MA|RI|NH|CT|VT|ME|NY|Massachusetts)\b/i);
+    if (!m) return '';
+    var segs = m[1].split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    var last = segs.length ? segs[segs.length - 1] : '';
+    if (/\d/.test(last) || /\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|way|blvd|suite)\b\.?$/i.test(last)) {
+      var w = last.split(/\s+/); last = /\d/.test(w[w.length - 1]) ? '' : w[w.length - 1];
+    }
+    if (/^(po box|box|suite)/i.test(last)) last = '';
+    return last ? last.toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }) : '';
+  }
+
+  // Is this sponsor one of mine? The LYBS Owner cell can name more than one
+  // person ("Jami/Ashley").
+  function isMine(s) {
+    var me = String(S.me || '').trim().toLowerCase();
+    if (!me) return false;
+    return String(s.owner || '').toLowerCase().split(/[\/,&+]|\band\b/).some(function (n) { return n.trim() === me; });
+  }
+
+  // A past sponsor not back yet whose owner is blank, not a person ("yes"),
+  // or someone no longer on the board (the SPONSOR_FORMER_OWNERS setting), so
+  // nobody is reaching out to them now. Who reached out before stays on the card.
+  function needsOwner(s) {
+    if (isIn(s) || contactState(s) === 'not') return false;
+    if (!(s.past || s.tierPrev || String(s.prevContact || '').trim())) return false;
+    var former = (S.former || []).map(function (n) { return String(n).toLowerCase(); });
+    var names = String(s.owner || '').toLowerCase().split(/[\/,&+]|\band\b/).map(function (n) { return n.trim(); })
+      .filter(function (n) { return n && !/^(yes|no|y|n|x|true|false)$/.test(n); });
+    if (!names.length) return true;
+    return names.every(function (n) { return former.indexOf(n) >= 0; });
+  }
+
   function person(v) { var s = String(v || '').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : ''; }
 
   function mainTab() { return S.book && S.book.tabs[0]; }
@@ -72,7 +109,9 @@
       owedBanner: colOf(t, /^owed a banner/),
       team: colOf(t, /^(associated team|team)/),
       owedPlaque: colOf(t, /^owed a plaque/),
-      notes: colOf(t, /^notes?$/)
+      notes: colOf(t, /^notes?$/),
+      address: colOf(t, /^address/),
+      walkIn: colOf(t, /^walk.?in/)
     };
     var picks = {};
     (S.book.teams || []).forEach(function (p) { picks[p.key] = p; });
@@ -90,6 +129,7 @@
         amount: amount, amountText: get('amount'), paid: yes(get('paid')), paidText: get('paid'),
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
         sheetTeam: get('team'), pick: pick, notes: get('notes'),
+        address: get('address'), area: townOf(get('address')), walkIn: yes(get('walkIn')),
         team: hasTeam(pick) ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
@@ -105,12 +145,17 @@
     unpaid: function (s) { return isIn(s) && !s.paid; },
     notContacted: function (s) { return !String(s.contacted).trim(); },
     lapsed: function (s) { return s.past && !isIn(s); },
+    pastNotContacted: function (s) { return s.past && !isIn(s) && contactState(s) === 'none'; },
+    walkIn: function (s) { return s.walkIn; },
+    mine: function (s) { return isMine(s); },
+    needsOwner: function (s) { return needsOwner(s); },
     noTeam: function (s) { return isIn(s) && !s.team; }
   };
 
   function matches(s) {
     if (!FILTERS[S.filter](s)) return false;
     if (S.owner && s.owner !== S.owner) return false;
+    if (S.area && s.area !== S.area) return false;
     if (S.search) {
       var q = S.search.toLowerCase();
       if ([s.company, s.contact, s.owner, s.contacted, s.team, s.notes].join(' ').toLowerCase().indexOf(q) < 0) return false;
@@ -131,6 +176,8 @@
         throw A().backendError(msg || 'Could not read the sponsorship sheet.');
       }
       S.book = res;
+      S.me = res.me || '';
+      S.former = res.former || [];
       $('#spStatus').textContent = '';
       render();
       renderAddBox();
@@ -414,6 +461,45 @@
     }).catch(function () { $('#spaSave').disabled = false; msg.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
   }
 
+  // Press and hold until the ring fills, or tap twice (the keyboard way), to
+  // confirm a change. ask() names the change while it waits for the second tap.
+  var HOLD_MS = 900;
+  function holdable(btn, ask, run) {
+    btn.classList.add('hold');
+    var start = 0, raf = 0, fired = false;
+    var raff = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+    var caf = window.cancelAnimationFrame || clearTimeout;
+    function stop() { caf(raf); start = 0; btn.classList.remove('holding'); btn.style.setProperty('--hold', '0'); }
+    function disarm() { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.was; } clearTimeout(btn._t); }
+    function go() { disarm(); run(); }
+    function paint() {
+      if (!start) return;
+      var pct = Math.min(1, (Date.now() - start) / HOLD_MS);
+      btn.style.setProperty('--hold', String(pct));
+      if (pct >= 1) { stop(); fired = true; go(); } else raf = raff(paint);
+    }
+    btn.addEventListener('pointerdown', function (e) {
+      if (btn.disabled || (e.button != null && e.button > 0)) return;
+      fired = false; start = Date.now(); btn.classList.add('holding'); raf = raff(paint);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { btn.addEventListener(ev, function () { if (start) stop(); }); });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    btn.addEventListener('click', function () {
+      if (fired) { fired = false; return; }
+      if (btn.dataset.armed) return go();
+      var q = ask();
+      if (!q) return;
+      btn.dataset.armed = '1'; btn.dataset.was = btn.textContent; btn.textContent = 'Tap again or hold: ' + q;
+      clearTimeout(btn._t); btn._t = setTimeout(function () { if (btn.isConnected) disarm(); }, 6000);
+    });
+  }
+
+  // A clear "done" line after a change.
+  function doneNote(text) {
+    var st = $('#spEditStatus');
+    st.innerHTML = '<span class="sp-done">✓ ' + A().esc(text) + '</span>';
+  }
+
   function showEditActs(s) {
     var can = !!(S.book && S.book.writable && S.book.canEdit);
     $('#spEditActs').classList.toggle('hidden', !can);
@@ -421,15 +507,23 @@
     var st = contactState(s);
     $('#spContactBtn').classList.toggle('hidden', !can || st !== 'none');
     $('#spNoBtn').classList.toggle('hidden', !can || s.paid || st === 'not');
+    $('#spWalkBtn').classList.toggle('hidden', !can);
+    $('#spWalkBtn').textContent = s.walkIn ? 'Not walk-in only' : 'Walk-in only';
+    $('#spAssign').classList.toggle('hidden', !can);
+    $('#spAssignTo').value = s.owner || '';
+    var owners = {};
+    sponsors().forEach(function (x) { String(x.owner || '').split('/').forEach(function (n) { n = person(n); if (n && !/^(yes|no)$/i.test(n)) owners[n] = 1; }); });
+    $('#spOwners').innerHTML = Object.keys(owners).sort().map(function (o) { return '<option value="' + A().esc(o) + '">'; }).join('');
     $('#spEditStatus').textContent = '';
     $('#spEditBtn').textContent = 'Edit row';
+    $('#spSaveBtn').classList.add('hidden');
     S.editing = false;
   }
 
   function startEdit() {
     var s = S.current, t = mainTab(), esc = A().esc;
     if (!s) return;
-    if (S.editing) return saveEdit();
+    if (S.editing) { open(s.row); return; }
     S.editing = true;
     var fx = S.book.formulaCols || [];
     $('#spFields').innerHTML = '<div class="field-grid">' + t.headers.map(function (h, i) {
@@ -437,8 +531,9 @@
       var v = s.cells[i] || '', calc = fx.indexOf(i) >= 0;
       return '<label' + (h.length > 22 || /^notes?$/i.test(h) ? ' class="full"' : '') + '>' + esc(h) +
         '<input type="text" data-col="' + i + '" value="' + esc(v) + '"' + (calc ? ' disabled title="Worked out by the sheet"' : '') + '></label>';
-    }).join('') + '</div><p class="hint">Row ' + s.row + '. Grey boxes are worked out by the sheet.</p>';
-    $('#spEditBtn').textContent = 'Save row';
+    }).join('') + '</div><p class="hint">Row ' + s.row + '. Grey boxes are worked out by the sheet. Hold Save changes to confirm.</p>';
+    $('#spEditBtn').textContent = 'Cancel';
+    $('#spSaveBtn').classList.remove('hidden');
   }
 
   function saveRow(values, done) {
@@ -452,16 +547,31 @@
     }).catch(function () { $('#spEditStatus').textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
   }
 
-  function saveEdit() {
-    var t = mainTab(), values = {};
+  // What the open edit form would change, column by column.
+  function pendingEdits() {
+    var t = mainTab(), out = [];
     $$('#spFields input[data-col]').forEach(function (inp) {
       if (inp.disabled) return;
-      var i = Number(inp.dataset.col);
-      if (inp.value !== (S.current.cells[i] || '')) values[t.headers[i]] = inp.value;
+      var i = Number(inp.dataset.col), was = S.current.cells[i] || '';
+      if (inp.value !== was) out.push({ h: t.headers[i], from: was, to: inp.value });
     });
-    if (!Object.keys(values).length) { S.editing = false; open(S.current.row); return; }
-    var row = S.current.row;
-    saveRow(values, function () { open(row); $('#spEditStatus').textContent = 'Saved.'; });
+    return out;
+  }
+  function describe(list) {
+    return list.map(function (c) { return c.h + ': ' + (c.from || 'blank') + ' → ' + (c.to || 'blank'); }).join('; ');
+  }
+  function askSave() {
+    var list = pendingEdits();
+    if (!list.length) { $('#spEditStatus').textContent = 'Nothing changed.'; return ''; }
+    $('#spEditStatus').textContent = describe(list);
+    return 'save ' + list.length + (list.length === 1 ? ' change' : ' changes');
+  }
+  function saveEdit() {
+    var list = pendingEdits(), values = {};
+    if (!list.length) { S.editing = false; open(S.current.row); return; }
+    list.forEach(function (c) { values[c.h] = c.to; });
+    var row = S.current.row, said = describe(list);
+    saveRow(values, function () { open(row); doneNote('Saved. ' + said); });
   }
 
   // The Contacted? column: blank (or "No") means nobody has reached out yet;
@@ -474,34 +584,61 @@
     return !v || /^no$/i.test(v) ? 'none' : 'yes';
   }
 
-  function setContacted(value, said, btn) {
-    var t = mainTab(), c = colOf(t, /^contacted/), row = S.current.row;
-    if (c < 0) { $('#spEditStatus').textContent = 'The sheet has no Contacted? column.'; return; }
-    if (btn && !btn.dataset.armed) {
-      btn.dataset.armed = '1'; var was = btn.textContent; btn.textContent = 'Tap again: ' + S.current.company + ' is not sponsoring';
-      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = was; } }, 6000);
-      return;
-    }
-    if (btn) { delete btn.dataset.armed; btn.textContent = 'Not sponsoring'; }
+  function setColumn(re, missing, value, said) {
+    var t = mainTab(), c = colOf(t, re), row = S.current.row;
+    if (c < 0) { $('#spEditStatus').textContent = missing; return; }
     var values = {}; values[t.headers[c]] = value;
-    saveRow(values, function () { open(row); $('#spEditStatus').textContent = said; });
+    saveRow(values, function () { open(row); doneNote(said); });
   }
 
-  function markContacted() { setContacted('Yes', 'Marked contacted.'); }
-  function markNotSponsoring() { setContacted('Not sponsoring', 'Marked not sponsoring. No follow-up emails go to them.', $('#spNoBtn')); }
+  function markContacted() { setColumn(/^contacted/, 'The sheet has no Contacted? column.', 'Yes', 'Contacted. Saved to the sheet.'); }
+  function markNotSponsoring() { setColumn(/^contacted/, 'The sheet has no Contacted? column.', 'Not sponsoring', 'Not sponsoring. No follow-up emails go to them.'); }
+  function markPaid() { setColumn(/^paid/, 'The sheet has no Paid? column.', 'Yes', 'Paid. Its receipt is now under Receipts to send.'); }
 
-  function markPaid() {
-    var t = mainTab(), c = colOf(t, /^paid/), row = S.current.row;
-    if (c < 0) { $('#spEditStatus').textContent = 'The sheet has no Paid? column.'; return; }
-    var b = $('#spPaidBtn');
-    if (!b.dataset.armed) {
-      b.dataset.armed = '1'; b.textContent = 'Tap again: mark ' + S.current.company + ' paid';
-      setTimeout(function () { if (b.isConnected) { delete b.dataset.armed; b.textContent = 'Mark paid'; } }, 6000);
-      return;
-    }
-    delete b.dataset.armed; b.textContent = 'Mark paid';
-    var values = {}; values[t.headers[c]] = 'Yes';
-    saveRow(values, function () { open(row); $('#spEditStatus').textContent = 'Marked paid. Its receipt is now under Receipts to send.'; });
+  function assignTo() {
+    var who = person($('#spAssignTo').value.trim()), s = S.current;
+    if (who === person(s.owner)) { $('#spEditStatus').textContent = who ? 'Already ' + who + '’s.' : 'Pick someone first.'; return; }
+    setColumn(/^lybs owner/, 'The sheet has no LYBS Owner column.', who, who ? 'Assigned to ' + who + '.' : 'Nobody is assigned now.');
+  }
+  function askAssign() {
+    var who = person($('#spAssignTo').value.trim()), s = S.current;
+    if (who === person(s.owner)) { $('#spEditStatus').textContent = who ? 'Already ' + who + '’s.' : 'Type a name first.'; return ''; }
+    return who ? 'give ' + s.company + ' to ' + who : 'unassign ' + s.company;
+  }
+
+  function toggleWalkIn() {
+    var s = S.current, row = s.row, on = !s.walkIn;
+    $('#spEditStatus').textContent = 'Saving…';
+    A().apiPost({ action: 'sponsorWalkIn', row: row, company: s.company, on: on }).then(function (res) {
+      if (!res.ok) { $('#spEditStatus').textContent = res.error || 'That did not save.'; return; }
+      return load().then(function () { open(row); doneNote(res.message || 'Saved.'); });
+    }).catch(function () { $('#spEditStatus').textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+  }
+
+  // The printable sponsorship form for walk-ins, served to signed-in board
+  // members from the league's Drive (never stored in this public site).
+  function printForm() {
+    var b = $('#spFormBtn'); b.disabled = true; var was = b.textContent; b.textContent = 'Opening…';
+    var w = window.open('', '_blank');
+    A().apiPost({ action: 'walkInForm' }).then(function (res) {
+      b.disabled = false; b.textContent = was;
+      if (!res.ok || !res.base64) { if (w) w.close(); $('#spEditStatus').textContent = res.error || 'The form isn’t set up yet.'; return; }
+      var bin = atob(res.base64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([bytes], { type: res.mime || 'application/pdf' }));
+      if (w) w.location = url; else window.location = url;
+    }).catch(function () { b.disabled = false; b.textContent = was; if (w) w.close(); $('#spEditStatus').textContent = 'Could not reach the backend. Try again.'; });
+  }
+
+  // Who changed what on this sponsor, newest first, from the sheet's Change log tab.
+  function renderChanges(s) {
+    var esc = A().esc;
+    var list = (S.book.changes || []).filter(function (c) { return nameKey(c.company) === s.key; });
+    $('#spChanges').innerHTML = list.length ? '<ul class="sp-changes">' + list.slice(0, 30).map(function (c) {
+      var who = String(c.who || '').split('@')[0];
+      return '<li><span class="when">' + esc(c.at) + '</span> <b>' + esc(who) + '</b> ' +
+        (c.what === 'Added' ? 'added this sponsor' : esc(c.what) + ': ' + esc(c.from || 'blank') + ' → ' + esc(c.to || 'blank')) + '</li>';
+    }).join('') + '</ul>' : '<p class="hint">No changes made in the app yet.</p>';
   }
 
   // ---------- year over year ----------
@@ -638,7 +775,8 @@
       stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money') +
       stat(inn.length, S.book.season + ' sponsors') +
       stat(all.filter(FILTERS.notContacted).length, 'not contacted') +
-      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet');
+      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet') +
+      stat(all.filter(needsOwner).length, 'need a new owner');
     S.committed = committed;
     renderYoY();
 
@@ -655,6 +793,15 @@
       return '<option value="' + esc(o) + '"' + (o === S.owner ? ' selected' : '') + '>' + esc(o) + ' (' + owners[o] + ')</option>';
     }).join('');
 
+    // Area picker: the towns in the sponsors' addresses.
+    var areas = {};
+    all.forEach(function (s) { if (s.area) areas[s.area] = (areas[s.area] || 0) + 1; });
+    $('#spArea').innerHTML = '<option value="">Every town</option>' + Object.keys(areas).sort().map(function (a) {
+      return '<option value="' + esc(a) + '"' + (a === S.area ? ' selected' : '') + '>' + esc(a) + ' (' + areas[a] + ')</option>';
+    }).join('');
+    var mo = $('#spFilter option[value="mine"]');
+    if (mo) { mo.hidden = !S.me; mo.textContent = 'My sponsors' + (S.me ? ' (' + all.filter(isMine).length + ')' : ''); }
+
     var items = all.filter(matches).sort(function (a, b) {
       return (b.amount - a.amount) || a.company.localeCompare(b.company);
     });
@@ -665,10 +812,14 @@
           facts([
             s.tier ? s.tier + (s.amountText ? ' ' + s.amountText : '') : (s.tierPrev ? 'Last year: ' + s.tierPrev : ''),
             s.owner ? 'Owner: ' + s.owner : '',
+            s.area || '',
+            String(s.prevContact || '').trim() ? 'Reached out last year: ' + s.prevContact : '',
+            needsOwner(s) ? 'Needs a new owner' : '',
             String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
             s.team ? 'Team: ' + s.team : '',
             S.packetKeys && S.packetKeys[s.key] ? 'Info packet in' : ''
           ]) +
+          (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
           (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
         '</div>' +
         cardBadge(s) +
@@ -715,6 +866,9 @@
         return '<a href="mailto:' + m + '">' + m + '</a>';
       });
     }
+    if (/^address/.test(h) && /\d|,/.test(value)) {
+      return '<a href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(value) + '" target="_blank" rel="noopener">' + esc(value) + '</a>';
+    }
     if (/^phone/.test(h)) {
       var digits = value.replace(/[^0-9+]/g, '');
       if (digits.length >= 10 && digits.length <= 12) return '<a href="tel:' + digits + '">' + esc(value) + '</a>';
@@ -736,6 +890,12 @@
       return '<p class="ss-row"><span>' + esc(h) + '</span>' + linkify(h, v) + '</p>';
     }).join('') + '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p>';
     showEditActs(s);
+    var mapUrl = s.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.address) : '';
+    $('#spWalkIn').classList.toggle('hidden', !s.walkIn);
+    $('#spWalkIn').innerHTML = s.walkIn ? '<b>Walk-in only.</b> Stop by in person with the printed form; they mail it back with a check or money order.' +
+      (s.address ? ' <a href="' + esc(mapUrl) + '" target="_blank" rel="noopener">' + esc(s.address) + '</a>' : ' No address on the sheet yet.') : '';
+    $('#spFormBtn').classList.toggle('hidden', !s.walkIn);
+    renderChanges(s);
 
     var p = s.pick || {};
     $('#sp_division').value = p.division || '';
@@ -877,9 +1037,14 @@
     $('#spRefresh').addEventListener('click', function () { load(); });
     $('#spAddForm').addEventListener('submit', addContact);
     $('#spEditBtn').addEventListener('click', startEdit);
-    $('#spPaidBtn').addEventListener('click', markPaid);
-    $('#spContactBtn').addEventListener('click', markContacted);
-    $('#spNoBtn').addEventListener('click', markNotSponsoring);
+    holdable($('#spSaveBtn'), askSave, saveEdit);
+    holdable($('#spPaidBtn'), function () { return 'mark ' + S.current.company + ' paid'; }, markPaid);
+    holdable($('#spContactBtn'), function () { return 'mark ' + S.current.company + ' contacted'; }, markContacted);
+    holdable($('#spNoBtn'), function () { return S.current.company + ' is not sponsoring'; }, markNotSponsoring);
+    holdable($('#spAssignBtn'), askAssign, assignTo);
+    $('#spWalkBtn').addEventListener('click', toggleWalkIn);
+    $('#spFormBtn').addEventListener('click', printForm);
+    $('#spArea').addEventListener('change', function (e) { S.area = e.target.value; render(); });
     $('#spReceipts').addEventListener('click', function (e) { var b = e.target.closest('button[data-rc]'); if (b) receiptAct(b); });
     $('#spNudges').addEventListener('click', function (e) { var b = e.target.closest('button[data-nd]'); if (b) nudgeAct(b); });
     $('#spClose').addEventListener('click', close);

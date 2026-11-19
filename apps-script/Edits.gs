@@ -2,11 +2,14 @@
  * Board edits to the sponsor tracker. Lives next to Code.gs in the same Apps
  * Script project (Files → + → Script, name it "Edits").
  *
- * The app only ever writes to the board's own copy of the sponsorship sheet,
- * named by the SPONSOR_SHEET_USE Script Property. Without that property the
- * app reads the sponsorship lead's sheet by name, as before, and every edit
- * is refused, so that sheet is never written from here. Deleting the
- * property switches the app back to it.
+ * Edits go to the one shared sheet the app reads (the sponsorship lead's
+ * sheet, or the board copy once SPONSOR_SHEET_USE names it), so every board
+ * member's app and the sheet itself show a change on the next load. Setting
+ * the SPONSOR_EDITS Script Property to "off" turns every edit off.
+ *
+ * Every change is written to a "Change log" tab in that same sheet: when,
+ * who, which sponsor, which column, old value and new value. The app shows
+ * it on each sponsor.
  *
  *   Add a contact   any signed-in board member: a person or business they
  *                   reached out to becomes a new row
@@ -29,18 +32,80 @@ function canEditSponsors_() {
   return emailHash_(mail) === BOOTSTRAP_ADMIN_EMAIL_HASH || sponsorEditors_().indexOf(mail) >= 0;
 }
 
-// The board copy, or null when the app is still on the lead's sheet.
+// The sponsor tab of the one sheet the app reads, or null when edits are off.
 function writableSponsorSheet_() {
-  var id = PropertiesService.getScriptProperties().getProperty('SPONSOR_SHEET_USE');
-  if (!id) return null;
-  var sh = SpreadsheetApp.openById(id).getSheetByName(SPONSOR_TAB);
-  if (!sh) throw new Error('The board copy has no "' + SPONSOR_TAB + '" tab.');
+  if (/^off$/i.test(PropertiesService.getScriptProperties().getProperty('SPONSOR_EDITS') || '')) return null;
+  var sh = sponsorSpreadsheet_().getSheetByName(SPONSOR_TAB);
+  if (!sh) throw new Error('The sponsorship sheet has no "' + SPONSOR_TAB + '" tab.');
   return sh;
+}
+
+// ---------- change log ----------
+
+var CHANGE_LOG_TAB = 'Change log';
+var CHANGE_LOG_HEAD = ['When', 'Who', 'Sponsor', 'What', 'From', 'To'];
+
+function changeLogSheet_(ss, make) {
+  var sh = ss.getSheetByName(CHANGE_LOG_TAB);
+  if (sh || !make) return sh;
+  sh = ss.insertSheet(CHANGE_LOG_TAB);
+  sh.getRange(1, 1, 1, CHANGE_LOG_HEAD.length).setValues([CHANGE_LOG_HEAD]).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+// entries: [{ company, what, from, to }]. A hiccup here never blocks the change.
+function logChanges_(sh, entries) {
+  if (!entries || !entries.length) return;
+  try {
+    var log = changeLogSheet_(sh.getParent(), true);
+    var when = Utilities.formatDate(new Date(), 'America/New_York', 'yyyy-MM-dd HH:mm');
+    var who = WHO && WHO.email ? String(WHO.email).toLowerCase() : 'unknown';
+    var rows = entries.map(function (e) {
+      return [when, who, String(e.company || ''), String(e.what || ''), String(e.from == null ? '' : e.from), String(e.to == null ? '' : e.to)]
+        .map(function (v) { return /^[=+\-@]/.test(v) ? "'" + v : v; });
+    });
+    log.getRange(log.getLastRow() + 1, 1, rows.length, CHANGE_LOG_HEAD.length).setValues(rows);
+  } catch (e) { console.log('change log: ' + e); }
+}
+
+// The newest changes, for the app. Never throws.
+function sponsorChanges_(ss, max) {
+  try {
+    var log = changeLogSheet_(ss, false);
+    if (!log || log.getLastRow() < 2) return [];
+    var n = Math.min(log.getLastRow() - 1, max || 1000);
+    var v = log.getRange(log.getLastRow() - n + 1, 1, n, CHANGE_LOG_HEAD.length).getDisplayValues();
+    return v.reverse().map(function (r) {
+      return { at: r[0], who: r[1], company: r[2], key: companyKey_(r[2]), what: r[3], from: r[4], to: r[5] };
+    });
+  } catch (e) { console.log('change log read: ' + e); return []; }
+}
+
+// Names in a Script Property ("TJ, Brian"), kept out of this public file.
+function namesProp_(key) {
+  return String(PropertiesService.getScriptProperties().getProperty(key) || '').split(/[,;\n]+/)
+    .map(function (n) { return n.trim(); }).filter(Boolean);
+}
+
+// The signed-in person's name as the LYBS Owner column writes it, from the
+// SPONSOR_PEOPLE Script Property ("Matt = their@address, Lauren = ..."), so
+// "My sponsors" can find their rows. Blank when they aren't listed.
+function sponsorMe_() {
+  var mail = WHO && WHO.email ? String(WHO.email).toLowerCase() : '';
+  if (!mail) return '';
+  var raw = PropertiesService.getScriptProperties().getProperty('SPONSOR_PEOPLE') || '';
+  var hit = '';
+  raw.split(/[,;\n]+/).forEach(function (pair) {
+    var m = pair.split('=');
+    if (m.length === 2 && m[1].trim().toLowerCase() === mail) hit = m[0].trim();
+  });
+  return hit;
 }
 
 // What this person may do, and which columns are worked out by the sheet.
 function sponsorPerms_() {
-  var out = { writable: false, canAdd: false, canEdit: false, formulaCols: [] };
+  var out = { writable: false, canAdd: false, canEdit: false, formulaCols: [], me: sponsorMe_(), former: namesProp_('SPONSOR_FORMER_OWNERS') };
   var sh;
   try { sh = writableSponsorSheet_(); } catch (e) { console.log('board copy: ' + e); return out; }
   if (!sh) return out;
@@ -65,7 +130,7 @@ function sponsorHead_(sh) {
 function sponsorAdd(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var sh = writableSponsorSheet_();
-  if (!sh) return fail('Adding contacts turns on once the board copy of the sheet is switched on.');
+  if (!sh) return fail('Adding contacts is turned off right now.');
   var company = clean(String(data.company || '').trim(), 120);
   if (!company) return fail('Add the business or person’s name.');
   var lock = LockService.getScriptLock();
@@ -98,6 +163,7 @@ function sponsorAdd(data) {
       var f = sh.getRange(at - 1, 1, 1, row.length).getFormulasR1C1()[0];
       f.forEach(function (x, i) { if (x) sh.getRange(at, i + 1).setFormulaR1C1(x); });
     }
+    logChanges_(sh, [{ company: company, what: 'Added', from: '', to: [data.contact, data.email].filter(Boolean).join(', ') }]);
     return ok({ message: company + ' added.', row: at });
   } finally {
     lock.releaseLock();
@@ -109,7 +175,7 @@ function sponsorEdit(data) {
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can change a row.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var sh = writableSponsorSheet_();
-  if (!sh) return fail('Editing turns on once the board copy of the sheet is switched on.');
+  if (!sh) return fail('Editing is turned off right now.');
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return fail('Someone else is saving right now. Try again in a moment.');
   try {
@@ -120,7 +186,7 @@ function sponsorEdit(data) {
     t.head.forEach(function (h, i) { if (cCo < 0 && /^(company|business)/i.test(h)) cCo = i; });
     // The row must still be the same sponsor, in case rows moved since the page loaded.
     if (cCo >= 0 && companyKey_(t.v[row - 1][cCo]) !== companyKey_(data.company)) return fail('That row changed since you opened it. Refresh and try again.');
-    var values = data.values || {}, changed = 0, kept = [];
+    var values = data.values || {}, changed = 0, kept = [], log = [];
     if (cCo >= 0 && Object.prototype.hasOwnProperty.call(values, t.head[cCo]) && !String(values[t.head[cCo]] || '').trim()) return fail('A row needs a company name.');
     var formulas = sh.getRange(row, 1, 1, t.head.length).getFormulas()[0];
     Object.keys(values).forEach(function (h) {
@@ -129,17 +195,19 @@ function sponsorEdit(data) {
       if (formulas[i]) { kept.push(t.head[i]); return; }
       var nv = clean(String(values[h] == null ? '' : values[h]).trim(), 500);
       if (nv === String(t.v[row - 1][i])) return;
+      log.push({ company: t.v[row - 1][cCo >= 0 ? cCo : 0], what: t.head[i], from: t.v[row - 1][i], to: nv });
       sh.getRange(row, i + 1).setValue(nv);
       changed++;
     });
+    logChanges_(sh, log);
     return ok({ message: changed ? 'Saved.' : 'Nothing changed.', changed: changed, kept: kept });
   } finally {
     lock.releaseLock();
   }
 }
 
-// After a live send, note it on the board copy's own row (a "Receipt sent" or
-// "Last follow-up" column), when the copy is switched on and has that column.
+// After a live send, note it on the sponsor's row (a "Receipt sent" or
+// "Last follow-up" column), when the sheet has that column.
 // A hiccup here never undoes or blocks the send itself.
 function noteOnBoardCopy_(company, header, value) {
   try {
@@ -152,8 +220,60 @@ function noteOnBoardCopy_(company, header, value) {
     if (cCo < 0 || cAt < 0) return false;
     var key = companyKey_(company);
     for (var r = t.h0 + 1; r < t.v.length; r++) {
-      if (companyKey_(t.v[r][cCo]) === key) { sh.getRange(r + 1, cAt + 1).setValue(value); return true; }
+      if (companyKey_(t.v[r][cCo]) === key) {
+        logChanges_(sh, [{ company: t.v[r][cCo], what: t.head[cAt], from: t.v[r][cAt], to: value }]);
+        sh.getRange(r + 1, cAt + 1).setValue(value); return true;
+      }
     }
   } catch (e) { console.log('note on board copy: ' + e); }
   return false;
+}
+
+// Walk-in only: someone has to stop by in person. Editors only. The sheet
+// gets a "Walk-in only" column at the end the first time it's used.
+var WALKIN_HEAD = 'Walk-in only';
+function sponsorWalkIn(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can change a row.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var sh = writableSponsorSheet_();
+  if (!sh) return fail('Editing is turned off right now.');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return fail('Someone else is saving right now. Try again in a moment.');
+  try {
+    var t = sponsorHead_(sh), row = Number(data.row);
+    if (!(row > t.h0 + 1) || row > t.v.length) return fail('That row is no longer on the sheet. Refresh and try again.');
+    var cCo = -1;
+    t.head.forEach(function (h, i) { if (cCo < 0 && /^(company|business)/i.test(h)) cCo = i; });
+    if (cCo < 0 || companyKey_(t.v[row - 1][cCo]) !== companyKey_(data.company)) return fail('That row changed since you opened it. Refresh and try again.');
+    var c = -1;
+    t.head.forEach(function (h, i) { if (c < 0 && /^walk-?in/i.test(h)) c = i; });
+    if (c < 0) {
+      var width = 0;
+      t.head.forEach(function (h, i) { if (h) width = i + 1; });
+      c = width;
+      if (c + 1 > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+      sh.getRange(t.h0 + 1, c + 1).setValue(WALKIN_HEAD);
+    }
+    var was = c < t.head.length ? String(t.v[row - 1][c] || '') : '';
+    var nv = data.on ? 'Yes' : '';
+    if (was === nv) return ok({ message: 'Nothing changed.', changed: 0 });
+    sh.getRange(row, c + 1).setValue(nv);
+    logChanges_(sh, [{ company: t.v[row - 1][cCo], what: WALKIN_HEAD, from: was, to: nv }]);
+    return ok({ message: data.on ? 'Marked walk-in only.' : 'Walk-in label taken off.', changed: 1 });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// The printable sponsorship form for walk-ins. The file stays in the league's
+// Drive (its id in the WALKIN_FORM_ID Script Property); signed-in board
+// members get its bytes to open and print. Never stored in this public site.
+function walkInForm() {
+  var id = PropertiesService.getScriptProperties().getProperty('WALKIN_FORM_ID');
+  if (!id) return fail('The printable form isn’t set up yet.');
+  try {
+    var f = DriveApp.getFileById(id), b = f.getBlob();
+    if (b.getBytes().length > 8 * 1024 * 1024) return fail('The form file is too big to open here.');
+    return ok({ name: f.getName(), mime: b.getContentType(), base64: Utilities.base64Encode(b.getBytes()) });
+  } catch (e) { return fail('The printable form did not open.'); }
 }
