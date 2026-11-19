@@ -539,7 +539,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv.lv-on { border: 2px solid var(--blue); background: var(--blue-bg); box-shadow: 0 10px 30px rgba(46,82,232,.25); }
 .lv-paid.lv-on { border-color: var(--green); background: var(--green-bg); box-shadow: 0 10px 30px rgba(27,122,78,.25); }
 /* Their level (or the upgrade they picked) sits a little bigger than the rest. */
-.lv[data-mine] { margin: -8px -6px; padding: 24px 18px 20px; z-index: 1; }
+.lv[data-mine] { margin: -8px -6px; padding: 23px 17px 19px; z-index: 1; }
 /* Bigger by its frame, not by scaling, so its perk rows still line up with the others. */
 .lv-below { opacity: .5; }
 .lv-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 4px 12px; border-radius: 999px; background: var(--green); color: var(--card); }
