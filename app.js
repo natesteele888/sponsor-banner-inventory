@@ -514,6 +514,7 @@
     noteProblem: noteProblem,
     sendErrorText: sendErrorText,
     banners: function () { return state.banners; },
+    image: fetchImage,
     whenBannersLoaded: function () { return state.loaded ? Promise.resolve() : loadBanners(); }
   };
 
