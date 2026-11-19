@@ -238,8 +238,7 @@
     var row = function (i) {
       var acts = !can ? '<button class="btn small" data-rc="preview" type="button">' + (i.status === 'sent' ? 'Open receipt' : 'Preview') + '</button>'
         : i.status === 'ready'
-        ? '<button class="btn small" data-rc="preview" type="button">Preview</button>' +
-          '<button class="btn small primary" data-rc="send" type="button">Send</button>' +
+        ? '<button class="btn small primary" data-rc="preview" type="button">Preview and send</button>' +
           '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
         : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
             (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
@@ -263,7 +262,7 @@
 
   // One receipt, as the sponsor will get it, in a preview pane. With send on,
   // the pane has its own Send button: a first tap asks, the second sends.
-  // Nothing goes out unless that button (or the list's own Send) is tapped.
+  // Nothing goes out unless that button is tapped.
   function showReceipt(pv, key, msg, opts) {
     var esc = A().esc;
     msg.textContent = 'Building the preview…';
@@ -335,20 +334,13 @@
   function receiptAct(btn) {
     var li = btn.closest('.rc-item'), key = li.dataset.key, how = btn.dataset.rc, msg = li.querySelector('.rc-msg');
     var item = S.receipts.items.filter(function (i) { return i.key === key; })[0];
-    if (how === 'preview') return showReceipt(rowPreview(li), key, msg, { send: false });
-    // Send asks once more on the button itself; the second tap sends.
-    if (how === 'send' && !btn.dataset.armed) {
-      btn.dataset.armed = '1';
-      btn.textContent = S.receipts.settings.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
-      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Send'; } }, 6000);
-      return;
-    }
+    // Send lives in the preview, so every receipt is seen before it goes.
+    if (how === 'preview') return showReceipt(rowPreview(li), key, msg, { send: canEdit() && item && item.status === 'ready' });
+    if (how !== 'skip' && how !== 'undo') return;
     btn.disabled = true;
-    msg.textContent = how === 'send' ? 'Sending…' : 'Saving…';
-    var req = how === 'send' ? { action: 'receiptSend', key: key } : { action: 'receiptMark', key: key, how: how };
-    A().apiPost(req).then(function (res) {
+    msg.textContent = 'Saving…';
+    A().apiPost({ action: 'receiptMark', key: key, how: how }).then(function (res) {
       if (!res.ok) { btn.disabled = false; msg.textContent = res.error || 'That did not go through.'; return; }
-      if (how === 'send' && res.status !== 'sent') { btn.disabled = false; delete btn.dataset.armed; btn.textContent = 'Send'; msg.textContent = res.message; return; }
       $('#spStatus').textContent = res.message || 'Saved.';
       loadReceipts();
     }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });

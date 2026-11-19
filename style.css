@@ -541,3 +541,16 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-for { font-size: 14px; font-weight: 600; color: var(--ink); margin: 0; }
 .lv-pay { border-color: var(--blue); }
 .lv-ways { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+
+/* Small phones: the title stays on two lines next to a compact Dashboard
+   button, and the four tabs share the width with nothing hidden off the side. */
+@media (max-width: 480px) {
+  .brand { gap: 8px; }
+  .brand > div { min-width: 0; }
+  .brand .logo { height: 28px; max-width: 68px; }
+  .topbar h1 { font-size: 18px; }
+  .topbar h1 span { white-space: nowrap; }
+  .bar .hbtn { padding: 0 9px; font-size: 12.5px; }
+  .tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 5px; overflow: visible; margin: 0; padding: 10px 0 2px; }
+  .tab-btn { padding: 4px 4px; font-size: 12.5px; line-height: 1.15; white-space: normal; min-width: 0; }
+}
