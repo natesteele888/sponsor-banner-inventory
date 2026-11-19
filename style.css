@@ -568,10 +568,10 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
   .lv-swipe { display: block; }
   /* Narrow cards, with room either side so the first and last can sit in the
      middle too, and the ones next door always peek in. */
-  .lv-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 10px; padding: 18px 20% 12px; margin: 0 -10px; scrollbar-width: none; align-items: stretch; }
+  .lv-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 10px; padding: 18px 18vw 12px; margin: 0 -10px; scrollbar-width: none; align-items: stretch; }
   .lv-list::-webkit-scrollbar { display: none; }
-  .lv { flex: 0 0 58%; scroll-snap-align: center; }
-  .lv[data-mine] { flex-basis: 64%; transform: none; }
+  .lv { flex: 0 0 58vw; scroll-snap-align: center; }
+  .lv[data-mine] { flex-basis: 64vw; transform: none; }
 }
 /* A clear gap and a pointer between the levels and the form, so nobody stops at the levels. */
 .lv-next { margin: 22px auto 6px; width: fit-content; max-width: 100%; text-align: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--gold); background: var(--gold-bg); border: 1px solid var(--gold); border-radius: 999px; padding: 6px 18px; }
