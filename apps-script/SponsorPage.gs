@@ -45,13 +45,15 @@ var SPONSOR_PAGE_COLUMNS = ['token', 'key', 'company', 'createdAt', 'submittedAt
 var UPGRADE_WAITING = 'Waiting on payment';
 var UPGRADE_PAID = 'Paid';
 
-// Low to high. Gameday takes any amount and needs only the business name.
+// Low to high, as the league's Become a Sponsor page lists them. Gameday
+// takes any amount and needs only the business name; Championship is $750
+// and up (plus: shows as "$750+"). photo: a framed team photo; social:
+// 0 none, 1 a spotlight, 2 two or three spotlights a year.
 var DEFAULT_SPONSOR_LEVELS = [
-  { name: 'Gameday', price: 0, jersey: false, logo: false, writeup: 0, banner: false },
-  { name: 'All-Star', price: 300, jersey: true, logo: true, writeup: 0, banner: false },
-  { name: 'MVP', price: 500, jersey: true, logo: true, writeup: 200, banner: true },
-  { name: 'Championship', price: 750, jersey: true, logo: true, writeup: 800, banner: true },
-  { name: 'Championship+', price: 1000, jersey: true, logo: true, writeup: 800, banner: true }
+  { name: 'Gameday', price: 0, jersey: false, logo: false, writeup: 0, banner: false, photo: false, social: 0 },
+  { name: 'All-Star', price: 300, jersey: true, logo: true, writeup: 0, banner: false, photo: false, social: 0 },
+  { name: 'MVP', price: 500, jersey: true, logo: true, writeup: 200, banner: true, photo: true, social: 1 },
+  { name: 'Championship', price: 750, plus: true, jersey: true, logo: true, writeup: 800, banner: true, photo: true, social: 2 }
 ];
 
 function sponsorLevels_() {
@@ -59,8 +61,9 @@ function sponsorLevels_() {
   if (raw) {
     try {
       var list = JSON.parse(raw).filter(function (l) { return l && l.name && Number(l.price) >= 0; }).map(function (l) {
-        return { name: String(l.name).slice(0, 40), price: Number(l.price), jersey: !!l.jersey, logo: !!l.logo,
-          writeup: Math.max(0, Math.min(2000, Number(l.writeup) || 0)), banner: !!l.banner };
+        return { name: String(l.name).slice(0, 40), price: Number(l.price), plus: !!l.plus, jersey: !!l.jersey, logo: !!l.logo,
+          writeup: Math.max(0, Math.min(2000, Number(l.writeup) || 0)), banner: !!l.banner,
+          photo: !!l.photo, social: Math.max(0, Math.min(2, Number(l.social) || 0)) };
       });
       if (list.length) return list.sort(function (a, b) { return a.price - b.price; });
     } catch (e) { console.log('SPONSOR_LEVELS is not valid JSON: ' + e); }
@@ -234,7 +237,8 @@ function payOptions_() {
 }
 
 function levelView_(l, amount, paid) {
-  return { name: l.name, price: l.price, jersey: l.jersey, logo: l.logo, writeup: l.writeup, banner: l.banner,
+  return { name: l.name, price: l.price, plus: !!l.plus, jersey: l.jersey, logo: l.logo, writeup: l.writeup, banner: l.banner,
+           photo: !!l.photo, social: l.social || 0,
            state: l === paid ? 'paid' : (l.price > amount && l.price > paid.price ? 'upgrade' : 'below'),
            owed: l === paid || l.price <= paid.price ? 0 : Math.max(0, l.price - amount) };
 }
@@ -268,11 +272,9 @@ function sponsorPageGet(data) {
   return ok({
     season: SEASON, company: st.row.company, contactName: st.row.contact, deadline: INFO_DEADLINE,
     paid: { level: st.paid.name, amount: st.row.amount },
-    // Every paid level, low to high: theirs marked paid, the ones above as
-    // upgrades, the ones below shown for reference only. A free level shows
-    // only when it is theirs.
-    levels: st.levels.filter(function (l) { return l === st.paid || l.price > 0; })
-      .map(function (l) { return levelView_(l, st.row.amount, st.paid); }),
+    // Every level, low to high: theirs marked paid, the ones above as
+    // upgrades, the ones below shown for reference only.
+    levels: st.levels.map(function (l) { return levelView_(l, st.row.amount, st.paid); }),
     upgrade: pending, sent: !!rec.submittedAt, pay: payOptions_()
   });
 }

@@ -531,43 +531,46 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 /* Sponsor's own info page (sponsor.html): their level, and upgrades */
 /* A price table: the levels side by side, theirs highlighted. Wider than
    the form below it on a computer; on a phone the cards swipe sideways. */
-.lv-wrap { width: min(1040px, calc(100vw - 32px)); position: relative; left: 50%; transform: translateX(-50%); box-sizing: border-box; }
+.lv-wrap { width: min(920px, calc(100vw - 32px)); position: relative; left: 50%; transform: translateX(-50%); box-sizing: border-box; }
 .lv-h { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 22px; letter-spacing: 1px; color: var(--ink); text-align: center; margin: 8px 0 4px; }
 .lv-swipe { display: none; text-align: center; font-size: 13px; color: var(--ink3); margin: 0 0 6px; }
-.lv-list { list-style: none; margin: 0; padding: 16px 2px 6px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 14px; align-items: stretch; }
-.lv { position: relative; border: 1px solid var(--line); border-radius: 16px; padding: 22px 18px 18px; background: var(--card); display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow); }
+.lv-list { list-style: none; margin: 0; padding: 14px 2px 4px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; align-items: stretch; }
+.lv { position: relative; border: 1px solid var(--line); border-radius: 14px; padding: 16px 12px 12px; background: var(--card); display: flex; flex-direction: column; gap: 4px; box-shadow: var(--shadow); }
 .lv.lv-on { border: 2px solid var(--blue); background: var(--blue-bg); box-shadow: 0 10px 30px rgba(46,82,232,.25); }
 .lv-paid.lv-on { border-color: var(--green); background: var(--green-bg); box-shadow: 0 10px 30px rgba(27,122,78,.25); }
 .lv-below { opacity: .5; }
 .lv-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 4px 12px; border-radius: 999px; background: var(--green); color: var(--card); }
 .lv-badge-up { background: var(--blue); color: var(--card); }
-.lv-name { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 26px; letter-spacing: 1px; color: var(--ink); line-height: 1.1; }
-.lv-tag { font-size: 13px; color: var(--ink2); min-height: 2.6em; }
-.lv-price { font-size: 40px; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -.5px; }
-.lv-sub { font-size: 12px; color: var(--ink3); margin-bottom: 6px; }
-.lv-act { align-self: stretch; justify-content: center; margin: 2px 0 6px; }
+.lv-name { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 21px; letter-spacing: 1px; color: var(--ink); line-height: 1.1; }
+.lv-tag { font-size: 12px; color: var(--ink2); }
+.lv-price { font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -.5px; }
+.lv-sub { font-size: 11px; color: var(--ink3); margin-bottom: 4px; }
+.lv-act { align-self: stretch; justify-content: center; margin: 2px 0 4px; }
 /* The Upgrade button glows and lifts a little on hover, while pressed on a
    phone, and on keyboard focus. */
 .lv-act[data-up] { transition: box-shadow .18s ease, transform .18s ease, filter .18s ease; }
 .lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible {
   box-shadow: 0 0 0 3px rgba(124,155,255,.28), 0 0 22px 4px rgba(124,155,255,.55); transform: translateY(-2px); filter: brightness(1.1); outline: none; }
 @media (prefers-reduced-motion: reduce) { .lv-act[data-up] { transition: none; } .lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible { transform: none; } }
-.lv-lock { font-size: 13px; color: var(--green); font-weight: 600; margin: 2px 0 6px; min-height: 36px; }
+.lv-lock { font-size: 12px; color: var(--green); font-weight: 600; margin: 2px 0 4px; }
 .lv-lock-up { color: var(--blue); }
-.lv-perks { list-style: none; margin: 4px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
-.lv-perks li { font-size: 13px; color: var(--ink); padding-left: 24px; position: relative; line-height: 1.35; }
-.lv-perks li::before { position: absolute; left: 0; top: 0; width: 17px; height: 17px; border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.lv-perks { list-style: none; margin: 2px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
+.lv-perks li { font-size: 12px; color: var(--ink); padding-left: 21px; position: relative; line-height: 1.3; }
+.lv-perks li::before { position: absolute; left: 0; top: 0; width: 15px; height: 15px; border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .lv-perks .lv-yes::before { content: "✓"; background: var(--blue); color: var(--card); }
 .lv-paid .lv-perks .lv-yes::before { background: var(--green); color: var(--card); }
-.lv-perks .lv-no { color: var(--ink3); text-decoration: line-through; }
+.lv-perks .lv-no { color: var(--ink3); }
 .lv-perks .lv-no::before { content: "–"; background: var(--panel); color: var(--ink3); }
 @media (max-width: 760px) {
   .lv-wrap { width: auto; left: 0; transform: none; }
   .lv-swipe { display: block; }
   .lv-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 12px; padding: 16px 10px 10px; margin: 0 -10px; scrollbar-width: none; }
   .lv-list::-webkit-scrollbar { display: none; }
-  .lv { flex: 0 0 78%; scroll-snap-align: center; }
+  .lv { flex: 0 0 68%; scroll-snap-align: center; }
 }
+/* A clear gap and a pointer between the levels and the form, so nobody stops at the levels. */
+.lv-next { margin: 22px auto 6px; width: fit-content; max-width: 100%; text-align: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--gold); background: var(--gold-bg); border: 1px solid var(--gold); border-radius: 999px; padding: 6px 18px; }
+#levels { margin-bottom: 14px; }
 .lv-note { font-size: 14px; color: var(--gold); margin: 0; }
 .lv-for { font-size: 14px; font-weight: 600; color: var(--ink); margin: 0; }
 .lv-pay { border-color: var(--blue); }
