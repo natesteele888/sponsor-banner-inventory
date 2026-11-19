@@ -73,9 +73,6 @@ body {
 @media (min-width: 900px) {
   .banner-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .banner-list > :not(li) { grid-column: 1 / -1; }
-  .toolbar { flex-direction: row; align-items: flex-end; gap: 12px; }
-  .toolbar > input[type=search] { flex: 1 1 320px; }
-  .toolbar .filters { margin: 0; flex: 0 1 auto; }
 }
 .tabs { display: flex; gap: 6px; padding: 12px 0 2px; }
 .tab-btn {
@@ -103,6 +100,14 @@ main { position: relative; z-index: 1; padding: 14px 16px 32px; max-width: 1040p
   text-transform: uppercase; color: var(--ink3); flex: 1 1 160px; max-width: 260px; }
 .filters select { text-transform: none; letter-spacing: normal; font-weight: 500; }
 .filters .btn { min-height: 38px; }
+/* Wide screens: search and filters share one row. This sits after the base
+   .toolbar and .filters rules so it wins; above them, the search box's
+   320px flex size was read as a height in the column layout. */
+@media (min-width: 900px) {
+  .toolbar { flex-direction: row; align-items: flex-end; gap: 12px; }
+  .toolbar > input[type=search] { flex: 1 1 320px; min-width: 0; }
+  .toolbar .filters { margin: 0; flex: 0 1 auto; }
+}
 
 .status { font-size: 13px; color: var(--ink2); min-height: 16px; }
 .hint { font-size: 13px; color: var(--ink2); margin: 0 0 8px; }
