@@ -186,7 +186,7 @@ function receiptSend(data) {
     if (!how.ok) return fail(how.error);
     var log = receiptLog_();
     var at = dayOf_(new Date());
-    if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); }
+    if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); noteOnBoardCopy_(r.company, 'Receipt sent', at); }
     return ok({ message: s.live ? 'Receipt sent to ' + r.email + '.' : 'Test receipt sent to the test address. The row stays ready.', status: s.live ? 'sent' : 'ready', at: at });
   } finally {
     lock.releaseLock();

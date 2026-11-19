@@ -167,7 +167,7 @@ function nudgeSend(data) {
     var how = leagueSend_({ to: s.live ? row.email : s.testTo, subject: m.subject, text: m.text, html: m.html, live: s.live });
     if (!how.ok) return fail(how.error);
     var at = dayOf_(new Date());
-    if (s.live) { var log = nudgeLog_(); log[r.current.date] = log[r.current.date] || {}; log[r.current.date][row.key] = { how: 'sent', at: at }; saveNudgeLog_(log); }
+    if (s.live) { var log = nudgeLog_(); log[r.current.date] = log[r.current.date] || {}; log[r.current.date][row.key] = { how: 'sent', at: at }; saveNudgeLog_(log); noteOnBoardCopy_(row.company, 'Last follow-up', at + ' ' + r.current.label); }
     return ok({ message: s.live ? 'Follow-up sent to ' + row.email + '.' : 'Test follow-up sent to the test address. The row stays ready.', status: s.live ? 'sent' : 'ready', at: at });
   } finally {
     lock.releaseLock();

@@ -176,3 +176,7 @@ Settings → Accounts and Import → Send mail as → Add another email address,
 then the confirmation link Gmail mails to that address). Until then, live
 sends are refused, and test sends come from the owner's Gmail with the
 league address as reply-to.
+
+When the board copy is switched on and has a **Receipt sent** or **Last
+follow-up** column, each live send writes its date (and the round's name) on
+that sponsor's row, so the sheet shows it too.

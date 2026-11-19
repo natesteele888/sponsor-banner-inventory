@@ -137,3 +137,23 @@ function sponsorEdit(data) {
     lock.releaseLock();
   }
 }
+
+// After a live send, note it on the board copy's own row (a "Receipt sent" or
+// "Last follow-up" column), when the copy is switched on and has that column.
+// A hiccup here never undoes or blocks the send itself.
+function noteOnBoardCopy_(company, header, value) {
+  try {
+    var sh = writableSponsorSheet_();
+    if (!sh) return false;
+    var t = sponsorHead_(sh);
+    var low = t.head.map(function (h) { return h.toLowerCase(); });
+    var cCo = -1, cAt = low.indexOf(String(header).toLowerCase());
+    low.forEach(function (h, i) { if (cCo < 0 && /^(company|business)/.test(h)) cCo = i; });
+    if (cCo < 0 || cAt < 0) return false;
+    var key = companyKey_(company);
+    for (var r = t.h0 + 1; r < t.v.length; r++) {
+      if (companyKey_(t.v[r][cCo]) === key) { sh.getRange(r + 1, cAt + 1).setValue(value); return true; }
+    }
+  } catch (e) { console.log('note on board copy: ' + e); }
+  return false;
+}
