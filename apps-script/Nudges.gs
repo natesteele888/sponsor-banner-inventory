@@ -13,7 +13,8 @@
  * Script Properties (nothing private is written in this public file):
  *   NUDGE_DATES       the round dates, e.g. 2026-12-10, 2027-01-14 (default:
  *                     Dec 10, Jan 14, Feb 11 and Mar 6 of the season)
- *   NUDGE_SIGN        the sign-off, e.g. "Name, Title"
+ *   (NUDGE_SIGN is no longer used: league emails are signed as the league,
+ *   personal ones by whoever writes them.)
  *   SPONSOR_DEADLINE  the last day for sponsors as written in the emails
  *                     (default "March 20")
  *   NUDGES_LIVE       "on" sends to sponsors; anything else sends tests to
@@ -24,22 +25,44 @@
  * Preview and Send. Which rounds were started is kept in NUDGES_ON_<season>.
  *   RECEIPT_ORG_ADDRESS  where checks go (shared with receipts)
  * Sends go through leagueSend_ (Mail.gs), so they come from the league address.
+ *
+ * Two versions of each email:
+ *   league    the default. Written as the league, signed "Lunenburg Youth
+ *             Baseball & Softball", sent from the league address on Send.
+ *   personal  a warmer note in the board member's own voice, signed with
+ *             their name. It never goes out from here: the app opens it in
+ *             their own email (Gmail or another mail app) so it comes from
+ *             their address, and they send it there. "I sent it" then marks
+ *             the sponsor done for the round.
+ * Either can be edited in the preview before it goes out.
  */
 
 var NUDGES_PROP = 'NUDGES_' + SEASON;
 var NUDGE_KINDS = {
   holiday: { label: 'Holiday hello', subject: 'Happy holidays from LYBS', body: [
     'Thinking about you this holiday season and wanted to say thanks again for hearing us out about sponsoring {org}. If {company} is still interested, we\'d love to have you with us this spring.',
-    'Just reply to this email with any questions. Checks or money orders can go to {address}.'], close: 'Happy holidays,' },
+    'Just reply to this email with any questions. Checks or money orders can go to {address}.'], close: 'Happy holidays,',
+    mine: { subject: 'Happy holidays, and thanks again', body: [
+      'I wanted to wish you a happy holiday season and thank you again for hearing me out about sponsoring LYBS. If {company} is still thinking it over, I\'d love to have you with us this spring.',
+      'If you have any questions at all, just reply and I\'ll get right back to you.'], close: 'Happy holidays,' } },
   checkin: { label: 'New year check-in', subject: 'Checking in about sponsoring LYBS', body: [
     'Happy new year! I wanted to check in and see if {company} is still interested in sponsoring LYBS this spring. Sponsors keep our fees down and get the kids the gear they need.',
-    'If you have any questions, just reply here and I\'ll get right back to you.'], close: 'Thanks,' },
+    'If you have any questions, just reply here and I\'ll get right back to you.'], close: 'Thanks,',
+    mine: { subject: 'Quick check-in about LYBS', body: [
+      'Happy new year! I wanted to check in myself and see if {company} is still interested in sponsoring LYBS this spring. Every sponsor helps keep fees down for our families and gets the kids the gear they need.',
+      'Just reply here with any questions and I\'ll get you an answer.'], close: 'Thanks,' } },
   jersey: { label: 'Before jerseys', subject: 'Getting {company} on a jersey', body: [
     'We\'re starting to plan jerseys and banners for the spring. If {company} would like to sponsor this year, the sooner we hear from you, the easier it is to get your name on a jersey.',
-    'Our last day for sponsors is {deadline}. Checks or money orders can go to {address}.'], close: 'Thanks so much,' },
+    'Our last day for sponsors is {deadline}. Checks or money orders can go to {address}.'], close: 'Thanks so much,',
+    mine: { subject: 'Getting {company} on a jersey this spring', body: [
+      'We\'re starting to put the jerseys and banners together for the spring, and I\'d love to see {company} on one. The sooner I hear back, the easier it is to make that happen.',
+      'Our last day for sponsors is {deadline}. Checks or money orders can go to {address}.'], close: 'Thanks so much,' } },
   last: { label: 'Last call', subject: 'Last call for LYBS sponsors', body: [
     'Quick heads up that our last day for sponsors is {deadline}. After that the jerseys go to print and we can\'t add new names.',
-    'If {company} would still like to be part of the season, just reply here or mail a check to {address} by then.'], close: 'Thank you,' }
+    'If {company} would still like to be part of the season, just reply here or mail a check to {address} by then.'], close: 'Thank you,',
+    mine: { subject: 'Last call for LYBS sponsors', body: [
+      'I wanted to give you a heads up that our last day for sponsors is {deadline}. After that the jerseys go to print and we can\'t add new names.',
+      'If {company} would still like to be part of the season, just reply and I\'ll take care of the rest.'], close: 'Thank you,' } }
 };
 
 function nudgeSettings_() {
@@ -52,7 +75,6 @@ function nudgeSettings_() {
     live: String(p.getProperty('NUDGES_LIVE') || '').trim().toLowerCase() === 'on'
   };
   s.missing = [];
-  if (!s.sign) s.missing.push('NUDGE_SIGN');
   if (!s.address) s.missing.push('RECEIPT_ORG_ADDRESS');
   return s;
 }
@@ -119,24 +141,49 @@ function nudgeRows_(round) {
   return out;
 }
 
-function nudgeEmail_(round, r, s) {
-  var k = NUDGE_KINDS[round.kind];
+// A sign-off name from the app: plain words only, kept short.
+function cleanSignName_(v) {
+  return String(v || '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+// One sponsor's email this round. voice 'league' (default) or 'personal'.
+function nudgeEmail_(round, r, s, opt) {
+  opt = opt || {};
+  var personal = opt.voice === 'personal';
+  var base = NUDGE_KINDS[round.kind], k = personal ? base.mine : base;
   var first = String(r.contact || '').trim().split(/\s+/)[0] || '';
   var fill = function (t) {
     return t.replace(/\{org\}/g, RECEIPT_ORG).replace(/\{company\}/g, r.company || 'your business')
       .replace(/\{deadline\}/g, s.deadline).replace(/\{address\}/g, s.address || 'our PO Box');
   };
-  var e = function (v) { return String(v).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); };
   var hi = 'Hi ' + (first || 'there') + ',';
-  var paras = k.body.map(fill);
-  var sign = [k.close].concat(String(s.sign || 'SIGN-OFF NOT SET').split(/\s*,\s*/));
-  var text = [hi, ''].concat(paras.join('\n\n')).concat(['', sign.join('\n')]).join('\n');
+  var sign = personal ? [k.close, cleanSignName_(opt.signName) || 'Your name', RECEIPT_ORG] : [k.close, RECEIPT_ORG];
+  var text = [hi].concat(k.body.map(fill)).concat([sign.join('\n')]).join('\n\n');
+  var m = { subject: fill(k.subject), text: text, voice: personal ? 'personal' : 'league' };
+  m.html = nudgeHtml_(text, !personal);
+  return m;
+}
+
+// The email's look, built from its plain text: a blank line starts a new
+// paragraph. The league version carries the league's logo on top.
+function nudgeHtml_(text, logo) {
+  var e = function (v) { return String(v).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); };
   var p = 'margin:0 0 14px;font-size:15px;line-height:1.5';
-  var html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#0B1120;max-width:560px">' +
-    '<img src="' + e(leagueLogoUrl_()) + '" width="110" height="46" alt="LYBS" style="display:block;width:110px;height:46px;border:0;margin:0 0 18px">' +
-    '<p style="' + p + '">' + e(hi) + '</p>' + paras.map(function (x) { return '<p style="' + p + '">' + e(x) + '</p>'; }).join('') +
-    '<p style="' + p + '">' + sign.map(e).join('<br>') + '</p></div>';
-  return { subject: fill(k.subject), text: text, html: html };
+  var paras = String(text || '').replace(/\r\n?/g, '\n').split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(String);
+  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#0B1120;max-width:560px">' +
+    (logo ? '<img src="' + e(leagueLogoUrl_()) + '" width="110" height="46" alt="LYBS" style="display:block;width:110px;height:46px;border:0;margin:0 0 18px">' : '') +
+    paras.map(function (x) { return '<p style="' + p + '">' + x.split('\n').map(e).join('<br>') + '</p>'; }).join('') + '</div>';
+}
+
+// Wording edited in the preview: used only when it's a sensible size.
+function editedNudge_(data) {
+  var sub = data.subject == null ? '' : String(data.subject).replace(/[\r\n]+/g, ' ').trim();
+  var txt = data.text == null ? '' : String(data.text).replace(/\r\n?/g, '\n').trim();
+  if (!sub && !txt) return null;
+  if (!sub || !txt) return { error: 'The email needs a subject and a message.' };
+  if (sub.length > 200) return { error: 'That subject is too long.' };
+  if (txt.length > 6000) return { error: 'That message is too long.' };
+  return { subject: sub, text: txt };
 }
 
 // ---------- the app's actions ----------
@@ -161,8 +208,9 @@ function nudgePreview(data) {
   if (!round) return fail('No follow-up round has started yet.');
   var row = data.key ? findNudgeRow_(round, data.key) : { company: 'Your Business', contact: '' };
   if (!row) return fail('That sponsor no longer fits this follow-up. Refresh.');
-  var m = nudgeEmail_(round, row, s);
-  return ok({ subject: m.subject, html: m.html, round: round.label });
+  var m = nudgeEmail_(round, row, s, { voice: data.voice, signName: data.signName });
+  var to = data.key ? (s.live ? row.email : s.testTo) : '';
+  return ok({ subject: m.subject, text: m.text, html: m.html, voice: m.voice, round: round.label, to: to, live: s.live });
 }
 
 // One tap from a board member sends one follow-up. Never called on a schedule.
@@ -180,6 +228,9 @@ function nudgeSend(data) {
     if (!row) return fail('That sponsor no longer fits this follow-up. Refresh.');
     if (row.status !== 'ready') return fail('This one was already ' + (row.status === 'sent' ? 'sent' : 'skipped') + ' this round.');
     var m = nudgeEmail_(r.current, row, s);
+    var ed = editedNudge_(data);
+    if (ed && ed.error) return fail(ed.error);
+    if (ed) m = { subject: ed.subject, text: ed.text, html: nudgeHtml_(ed.text, true) };
     var how = leagueSend_({ to: s.live ? row.email : s.testTo, subject: m.subject, text: m.text, html: m.html, live: s.live });
     if (!how.ok) return fail(how.error);
     var at = dayOf_(new Date());
@@ -212,6 +263,20 @@ function nudgeMark(data) {
   var r = currentNudgeRound_();
   if (!r.current) return fail('No follow-up round has started yet.');
   var key = String(data.key || ''), log = nudgeLog_(), day = log[r.current.date] = log[r.current.date] || {};
+  if (data.how === 'personal') {
+    // The board member sent it from their own email; this only records it.
+    var s = nudgeSettings_();
+    if (!roundStarted_(r.current)) return fail('Follow-ups are off for this round. Tap Start this round first.');
+    var row = findNudgeRow_(r.current, key);
+    if (!row) return fail('That sponsor no longer fits this follow-up. Refresh.');
+    if (row.status !== 'ready') return fail('This one was already ' + (row.status === 'sent' ? 'sent' : 'skipped') + ' this round.');
+    if (!s.live) return ok({ message: 'Test mode: noted, and the row stays ready.', status: 'ready' });
+    var at = dayOf_(new Date()), by = WHO && WHO.email ? String(WHO.email) : '';
+    day[key] = { how: 'sent', at: at, by: by, voice: 'personal' };
+    saveNudgeLog_(log);
+    noteOnBoardCopy_(row.company, 'Last follow-up', at + ' ' + r.current.label + ' (personal' + (by ? ', ' + by : '') + ')');
+    return ok({ message: 'Marked as sent from your email.', status: 'sent', at: at });
+  }
   if (data.how === 'undo') {
     if (day[key] && day[key].how === 'sent') return fail('A sent follow-up stays marked sent.');
     delete day[key];
