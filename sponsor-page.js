@@ -257,5 +257,7 @@
   $('bannerChoice').addEventListener('change', showChoice);
   $('writeup').addEventListener('input', function () { $('writeupCount').textContent = $('writeup').value.length; });
   $('pageForm').addEventListener('submit', submit);
+  // Lets a tap show the Upgrade button's pressed glow on iPhones too.
+  document.addEventListener('touchstart', function () { }, { passive: true });
   load();
 })();
