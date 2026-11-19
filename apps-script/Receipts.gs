@@ -109,11 +109,16 @@ function receiptEmail_(r, s, when) {
   var html =
     '<div style="background:#F4F6FA;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E3E6EE;border-radius:12px;border-collapse:separate;overflow:hidden">' +
-    '<tr><td style="background:#0a1628;padding:20px 24px;color:#ffffff">' +
-      '<div style="font-size:20px;font-weight:bold;line-height:1.25">' + e(RECEIPT_ORG) + '</div>' +
-      (s.address ? '<div style="font-size:13px;color:#C9D2E8;margin-top:4px">' + e(s.address) + '</div>' : '') +
-      '<div style="font-size:12px;letter-spacing:1.5px;color:#9FB3E6;margin-top:14px;font-weight:bold">NON-PROFIT DONATION RECEIPT</div>' +
+    // Letterhead: the league logo top left, the league's name and address beside it.
+    '<tr><td style="padding:18px 24px 16px;border-bottom:4px solid #2E52E8">' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
+        '<td style="vertical-align:middle;padding-right:16px"><img src="' + e(leagueLogoUrl_()) + '" width="130" height="54" alt="LYBS" style="display:block;width:130px;height:54px;border:0"></td>' +
+        '<td style="vertical-align:middle">' +
+          '<div style="font-size:18px;font-weight:bold;line-height:1.25;color:#0a1628">' + e(RECEIPT_ORG) + '</div>' +
+          (s.address ? '<div style="font-size:13px;color:#5B6478;margin-top:3px">' + e(s.address) + '</div>' : '') +
+        '</td></tr></table>' +
     '</td></tr>' +
+    '<tr><td style="background:#0a1628;padding:10px 24px;font-size:12px;letter-spacing:1.5px;color:#ffffff;font-weight:bold">NON-PROFIT DONATION RECEIPT</td></tr>' +
     '<tr><td style="padding:20px 24px 4px">' +
       '<p style="margin:0 0 14px;font-size:15px;line-height:1.5">Thank you for supporting ' + e(RECEIPT_ORG) + '. Please keep this receipt for your tax records.</p>' +
       '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">' +

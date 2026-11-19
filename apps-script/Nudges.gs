@@ -119,6 +119,7 @@ function nudgeEmail_(round, r, s) {
   var text = [hi, ''].concat(paras.join('\n\n')).concat(['', sign.join('\n')]).join('\n');
   var p = 'margin:0 0 14px;font-size:15px;line-height:1.5';
   var html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#0B1120;max-width:560px">' +
+    '<img src="' + e(leagueLogoUrl_()) + '" width="110" height="46" alt="LYBS" style="display:block;width:110px;height:46px;border:0;margin:0 0 18px">' +
     '<p style="' + p + '">' + e(hi) + '</p>' + paras.map(function (x) { return '<p style="' + p + '">' + e(x) + '</p>'; }).join('') +
     '<p style="' + p + '">' + sign.map(e).join('<br>') + '</p></div>';
   return { subject: fill(k.subject), text: text, html: html };

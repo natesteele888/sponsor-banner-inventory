@@ -180,3 +180,7 @@ league address as reply-to.
 When the board copy is switched on and has a **Receipt sent** or **Last
 follow-up** column, each live send writes its date (and the round's name) on
 that sponsor's row, so the sheet shows it too.
+
+The receipt and the follow-ups carry the LYBS logo as a letterhead, top left
+(`icons/lybs-wordmark.png`, attached inline when sent; `LEAGUE_LOGO_URL`
+overrides it).
