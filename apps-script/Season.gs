@@ -46,6 +46,18 @@ var SPONSOR_SHEET_NAME = SEASON + '_Sponsorship Sheet';
 var SPONSOR_TAB = SEASON + ' sponsors';
 var ONLINE_TAB = 'OnlineLogs';
 
+// The board's own sponsor sheet has one tab people type in and a sorted view
+// tab that is all formulas. The app reads and writes the typing tab when the
+// sheet has one, else the season's sponsor tab (the sponsorship lead's own
+// sheet). The SPONSOR_TAB_USE Script Property can name another tab.
+var ENTRY_TAB = 'Enter sponsors here';
+function sponsorTabName_(ss) {
+  var want = PropertiesService.getScriptProperties().getProperty('SPONSOR_TAB_USE');
+  if (want && ss.getSheetByName(want)) return want;
+  if (ss.getSheetByName(ENTRY_TAB)) return ENTRY_TAB;
+  return SPONSOR_TAB;
+}
+
 // Same rule as that sheet's own "Owed a Banner" column (=Amount>=500).
 var BANNER_MIN_AMOUNT = 500;
 var TIER_AMOUNTS = { 'MVP': 500, 'Championship': 750, 'Championship+': 1000 };
@@ -262,7 +274,7 @@ function readTab_(ss, name) {
 // Banner-level rows on the sponsorship sheet: anyone a board member has logged,
 // however they came in (form, website payment, email or check).
 function fromSponsorSheet_(ss) {
-  return readTab_(ss, SPONSOR_TAB).map(function (r) {
+  return readTab_(ss, sponsorTabName_(ss)).map(function (r) {
     var amount = parseAmount_(r['Amount']);
     var tier = tierFromText_(r['Tier Selected 2027']) || tierFromAmount_(amount);
     if (amount < BANNER_MIN_AMOUNT && !TIER_AMOUNTS[tier]) return null;
@@ -312,7 +324,7 @@ function fromDonationEmails_(ss, season) {
   var label = GmailApp.getUserLabelByName(SEEN_LABEL) || GmailApp.createLabel(SEEN_LABEL);
   var threads = GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' +
     DONATIONS_SINCE + ' -label:' + SEEN_LABEL_SEARCH, 0, 50);
-  var people = readTab_(ss, SPONSOR_TAB);
+  var people = readTab_(ss, sponsorTabName_(ss));
   var out = [];
   threads.forEach(function (t) {
     t.getMessages().forEach(function (m) {
@@ -790,7 +802,7 @@ function sponsorSpreadsheet_() {
     // Only a sheet that has the season's sponsor tab counts.
     var ss;
     try { ss = SpreadsheetApp.openById(f.getId()); } catch (e) { continue; }
-    if (!ss.getSheetByName(SPONSOR_TAB)) continue;
+    if (!ss.getSheetByName(SPONSOR_TAB) && !ss.getSheetByName(ENTRY_TAB)) continue;
     best = ss; bestAt = at;
   }
   if (!best) throw new Error('Could not find the "' + SPONSOR_SHEET_NAME + '" sheet in Drive.');
@@ -827,7 +839,7 @@ function bookTab_(ss, name) {
 
 function sponsorBook() {
   var ss = sponsorSpreadsheet_();
-  var tabs = SPONSOR_BOOK_TABS.map(function (n) { return bookTab_(ss, n); }).filter(Boolean);
+  var tabs = [sponsorTabName_(ss)].concat(SPONSOR_BOOK_TABS.slice(1)).map(function (n) { return bookTab_(ss, n); }).filter(Boolean);
   return {
     season: SEASON,
     sheetName: ss.getName(),
@@ -894,7 +906,7 @@ function sponsorTeamSave(data) {
 function sponsorSheet() {
   var ss = sponsorSpreadsheet_();
   var season = Number(SEASON);
-  var main = sheetRows_(ss, SPONSOR_TAB, {
+  var main = sheetRows_(ss, sponsorTabName_(ss), {
     owner: /^lybs owner/,
     contacted: /^contacted/,
     company: /^(company|business)/,
@@ -1052,7 +1064,7 @@ function teamPageSponsor_(teamId) {
   var picks = {};
   sponsorTeams_().rows.forEach(function (t) { picks[String(t.key)] = t; });
   var seen = {}, list = [];
-  sheetRows_(ss, SPONSOR_TAB, { company: /^(company|business)/, team: /^(associated team|team)/ }).rows
+  sheetRows_(ss, sponsorTabName_(ss), { company: /^(company|business)/, team: /^(associated team|team)/ }).rows
     .forEach(function (r) {
       var key = companyKey_(r.company);
       if (!r.company || !key || seen[key]) return;

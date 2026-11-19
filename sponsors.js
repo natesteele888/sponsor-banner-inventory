@@ -403,6 +403,11 @@
     var fresh = function (r) { return !get(r, 'status') || /^new/i.test(get(r, 'status')); };
     var rows = P.rows.slice().reverse();   // newest first
     var nNew = rows.filter(fresh).length;
+    // Which packets' businesses are already on the sponsor list.
+    var mt = mainTab(), mc = mt ? colOf(mt, /^(company|business)/) : -1, listed = {};
+    if (mt && mc >= 0) mt.rows.forEach(function (r) { if (r.cells[mc]) listed[nameKey(r.cells[mc])] = true; });
+    var canAdd = !!(S.book && S.book.writable && S.book.canAdd);
+    var onList = function (r) { return !!listed[nameKey(get(r, 'biz'))]; };
     box.innerHTML = '<h2 class="rc-h">Sponsor info packets (' + rows.length + ')' + (nNew ? ' · ' + nNew + ' new' : '') + '</h2>' +
       '<ul class="rc-list">' + rows.map(function (r) {
         var body = P.headers.map(function (h, i) {
@@ -412,9 +417,23 @@
         return '<li class="pk-item"><details data-row="' + r.row + '"><summary><b>' + esc(get(r, 'biz') || 'No business name') + '</b>' +
           '<span>' + esc([get(r, 'level'), get(r, 'when')].filter(Boolean).join(' · ')) + '</span>' +
           A().badge(fresh(r) ? 'New' : get(r, 'status'), fresh(r) ? 'warn' : 'muted') + '</summary>' +
-          '<div class="pk-logo" aria-live="polite"></div>' + body + '</details></li>';
+          '<div class="pk-logo" aria-live="polite"></div>' +
+          (onList(r) ? '<p class="hint pk-on">On the sponsor list.</p>' :
+            canAdd && get(r, 'biz') ? '<p class="pk-add"><button type="button" class="btn pk-add-btn" data-row="' + r.row + '">Add to sponsor list</button> <span class="hint" aria-live="polite"></span></p>' : '') +
+          body + '</details></li>';
       }).join('') + '</ul>';
     box.classList.remove('hidden');
+    $$('#spPackets .pk-add-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var note = btn.parentNode.querySelector('.hint');
+        btn.disabled = true; note.textContent = 'Adding…';
+        A().apiPost({ action: 'packetAdd', row: Number(btn.dataset.row) }).then(function (res) {
+          if (!res.ok) { btn.disabled = false; note.textContent = res.error || 'That did not save.'; return; }
+          note.textContent = res.message || 'Added.';
+          load();
+        }).catch(function () { btn.disabled = false; note.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+      });
+    });
     $$('#spPackets details').forEach(function (d) {
       d.addEventListener('toggle', function () {
         var spot = d.querySelector('.pk-logo');

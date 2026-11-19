@@ -84,11 +84,12 @@ function contactedState_(v) {
 
 // Everyone who fits today, with their state for the current round.
 function nudgeRows_(round) {
-  var tab = bookTab_(sponsorSpreadsheet_(), SPONSOR_TAB);
+  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
   if (!tab) return [];
   var head = tab.headers.map(function (h) { return h.toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
-  var c = { company: col(/^(company|business)/), contact: col(/^contact$/), email: col(/^email/), contacted: col(/^contacted/), paid: col(/^paid/) };
+  var c = { company: col(/^(company|business)/), contact: col(/^contact$/), email: col(/^email/), contacted: col(/^contacted/), paid: col(/^paid/),
+            status: col(/^status$/) };
   if (c.company < 0 || c.email < 0 || c.contacted < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
   var done = round ? (nudgeLog_()[round.date] || {}) : {};
@@ -96,6 +97,8 @@ function nudgeRows_(round) {
   tab.rows.forEach(function (r) {
     var row = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), email: firstEmail_(get(r, 'email')) };
     if (!row.company || !row.email || contactedState_(get(r, 'contacted')) !== 'yes' || isYes_(get(r, 'paid'))) return;
+    // On the board's sheet a typed Status says it too: no nudge after a no or a payment.
+    if (/^(paid|not sponsoring)$/i.test(get(r, 'status'))) return;
     row.key = companyKey_(row.company) + '|' + row.email.toLowerCase();
     var d = done[row.key];
     row.status = d ? d.how : 'ready';

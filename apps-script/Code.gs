@@ -142,6 +142,7 @@ function doPost(e) {
     if (action === 'nudgeSend') return nudgeSend(data);
     if (action === 'nudgeMark') return nudgeMark(data);
     if (action === 'sponsorPackets') return ok(sponsorPackets());
+    if (action === 'packetAdd') return packetAdd(data);
     if (action === 'packetLogo') return packetLogo(data);
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
