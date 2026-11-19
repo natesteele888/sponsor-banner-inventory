@@ -589,9 +589,11 @@
     return 4;
   }
   function payMatches(name, email) {
-    return sponsors().map(function (s) { return { s: s, score: payScore(s, name, email), g: payGroup(s) }; })
+    // A same-name (or same-email) match goes first, whatever its group, so a
+    // sponsor typed exactly is never listed under one that only shares a word.
+    return sponsors().map(function (s) { var sc = payScore(s, name, email), g = payGroup(s); return { s: s, score: sc, g: g, t: sc >= 90 ? -1 : g }; })
       .filter(function (m) { return m.score > 0; })
-      .sort(function (a, b) { return (a.g - b.g) || (b.score - a.score) || a.s.company.localeCompare(b.s.company); })
+      .sort(function (a, b) { return (a.t - b.t) || (a.g - b.g) || (b.score - a.score) || a.s.company.localeCompare(b.s.company); })
       .slice(0, 8);
   }
   function payForm() {
@@ -608,10 +610,10 @@
     if (f.email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(f.email)) { msg.textContent = 'That email doesn’t look right.'; return; }
     var list = payMatches(f.name, f.email);
     msg.textContent = list.length ? 'Pick who it’s from.' : 'Nobody on the sheet matches that name.';
-    var last = -1;
+    var last = null;
     box.innerHTML = '<ul class="rc-list">' + list.map(function (m) {
-      var s = m.s, head = m.g !== last ? '<li class="pay-g">' + esc(PAY_GROUPS[m.g]) + '</li>' : '';
-      last = m.g;
+      var s = m.s, head = m.t !== last ? '<li class="pay-g">' + esc(m.t < 0 ? 'Same name' : PAY_GROUPS[m.g]) + '</li>' : '';
+      last = m.t;
       var u = upgradeFor(s);
       var said = [u ? 'upgrade to ' + u.to + ': ' + fmtMoney(upgradeLeft(s, u)) + ' to pay' : '', s.contact, s.amountText ? 'sheet says ' + s.amountText : '', s.owner ? s.owner + '’s' : ''].filter(Boolean).join(' · ');
       return head + '<li class="rc-item"><div class="rc-who"><b>' + esc(s.company) + '</b><span>' + esc(said) + '</span></div>' +
@@ -639,17 +641,19 @@
         : up ? (f.amount >= left
             ? 'Counts ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + ' toward ' + s.company + '’s upgrade to ' + up.to + ': the sheet goes to ' + fmtMoney((s.amount || 0) + f.amount) + ' and ' + up.to + '.'
             : 'Adds ' + fmtMoney(f.amount) + ' to ' + s.company + '’s total. That’s less than the ' + fmtMoney(left) + ' the upgrade needs, so it stays at ' + (s.tier || 'its level') + ' for now.')
-        : (s.paid ? s.company + ' is already marked paid. Tap again to record this payment too. ' : '') +
-          'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
+        : s.paid && s.amount > 0
+          // A second payment adds a note; it never writes over the amount already on the sheet.
+          ? s.company + ' is already marked paid. Tap again to add this ' + fmtMoney(f.amount) + ' payment to its notes. The amount stays ' + s.amountText + '; change it with Edit if this adds to it.'
+          : 'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
       setTimeout(function () { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = isNew ? 'Add new sponsor' : 'This one'; } }, 8000);
       return;
     }
     delete btn.dataset.armed;
-    $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
-    msg.textContent = 'Saving…';
     var t = mainTab(), head = function (re) { var c = colOf(t, re); return c < 0 ? '' : t.headers[c]; };
     var hPaid = head(/^paid\??$/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/), hHow = head(/^(paid how|payment method|paid by)/);
     if (!hPaid) { msg.textContent = 'The sheet has no Paid? column.'; return; }
+    $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
+    msg.textContent = 'Saving…';
     var note = payNote(f);
     var step = isNew
       ? A().apiPost({ action: 'sponsorAdd', company: f.name, email: f.email, amount: String(f.amount), notes: note }).then(function (res) {
@@ -673,7 +677,7 @@
             var hTier = head(new RegExp('^tier selected ' + Number(S.book.season))), hBanner = head(/^owed a banner/);
             if (done && hTier) v[hTier] = up.to;
             if (done && up.banner && hBanner && !s.owedBanner) v[hBanner] = 'TRUE';
-          } else if (hAmt && f.amount !== s.amount) v[hAmt] = String(f.amount);
+          } else if (hAmt && !(s.paid && s.amount > 0) && f.amount !== s.amount) v[hAmt] = String(f.amount);
           if (hNotes) v[hNotes] = s.notes ? s.notes + '; ' + note : note;
           if (hEmail && f.email && !s.email) v[hEmail] = f.email;
           return A().apiPost({ action: 'sponsorEdit', row: s.row, company: s.company, values: v }).then(function (res) {
