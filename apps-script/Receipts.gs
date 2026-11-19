@@ -14,10 +14,10 @@
  *        ▼
  *   RECEIPTS_<season> Script Property remembers it as sent, and the day
  *
- * Website payments are left out: the league site already emails its own tax
- * receipt when a donation is accepted. A row counts as a website payment when
- * a "Donation received from" notice matches its contact name and amount, or
- * when someone taps "Website sent it" on the row.
+ * Every paid row on the sponsor list gets this receipt, online and check
+ * payers alike, so for a sponsor the league site's own receipt button is
+ * not used. Plain donations from people who aren't on the sponsor list
+ * never show here: those keep the website's receipt button.
  *
  * What the receipt says about the league comes from Script Properties, so no
  * address, tax ID, name or link is written in this public file:
@@ -68,34 +68,6 @@ function receiptKey_(r) {
   return companyKey_(r.company) + '|' + r.email.toLowerCase() + '|' + Math.round(r.amount * 100);
 }
 
-// Website donations from the league site's own notices: who and how much.
-function websiteDonations_() {
-  var cache = CacheService.getScriptCache(), ck = 'RCPT_WEB_' + SEASON;
-  var hit = cache.get(ck);
-  if (hit) { try { return JSON.parse(hit); } catch (e) { /* read again */ } }
-  var out = [];
-  try {
-    GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' + DONATIONS_SINCE, 0, 100)
-      .forEach(function (t) {
-        t.getMessages().forEach(function (m) {
-          var x = (m.getPlainBody() || '').match(/received a \$([\d,]+(?:\.\d+)?) donation from ([^\.\n]+)/i);
-          if (x) out.push({ name: nameKey_(x[2]), amount: parseAmount_(x[1]) });
-        });
-      });
-  } catch (e) { console.log('website donations not read: ' + e); }
-  cache.put(ck, JSON.stringify(out), 600);
-  return out;
-}
-
-function paidOnline_(r, web) {
-  if (/\b(online|website|crossbar)\b/i.test(r.paidText + ' ' + r.notes)) return true;
-  var who = nameKey_(r.contact);
-  if (!who) return false;
-  var flip = who.split(' ').reverse().join(' ');   // "Camerano Jason" is "Jason Camerano"
-  return web.some(function (d) { return (d.name === who || d.name === flip) && Math.abs(d.amount - r.amount) < 0.01; });
-}
-
-// Paid rows with an email, from the sheet, with what has happened to each.
 function receiptRows_() {
   var tab = bookTab_(sponsorSpreadsheet_(), SPONSOR_TAB);
   if (!tab) return [];
@@ -105,18 +77,16 @@ function receiptRows_() {
             amount: col(/^amount/), paid: col(/^paid/), notes: col(/^notes?$/) };
   if (c.company < 0 || c.amount < 0 || c.paid < 0 || c.email < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
-  var log = receiptLog_(), web = null, out = [];
+  var log = receiptLog_(), out = [];
   tab.rows.forEach(function (r) {
     var row = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), email: firstEmail_(get(r, 'email')),
                 address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes') };
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
+    row.online = /\b(online|website|crossbar|card)\b/i.test(row.paidText + ' ' + row.notes);
     var done = log[row.key];
-    if (done) { row.status = done.how; row.at = done.at; }
-    else {
-      web = web || websiteDonations_();
-      row.status = paidOnline_(row, web) ? 'website' : 'ready';
-    }
+    if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; }
+    else row.status = 'ready';
     out.push(row);
   });
   return out;
@@ -135,17 +105,36 @@ function receiptEmail_(r, s, when) {
   var rows = [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation amount', amount], ['Date', date]]
     .filter(function (x) { return x[1]; });
 
+  var thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for sponsoring ' + RECEIPT_ORG + ' this season!';
+
   var cell = 'padding:10px 0;border-bottom:1px solid #E3E6EE;font-size:15px;vertical-align:top;';
   var html =
-    '<div style="background:#F4F6FA;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
-    '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E3E6EE;border-radius:12px;border-collapse:separate;overflow:hidden">' +
-    '<tr><td style="background:#0a1628;padding:20px 24px;color:#ffffff">' +
-      '<div style="font-size:20px;font-weight:bold;line-height:1.25">' + e(RECEIPT_ORG) + '</div>' +
-      (s.address ? '<div style="font-size:13px;color:#C9D2E8;margin-top:4px">' + e(s.address) + '</div>' : '') +
-      '<div style="font-size:12px;letter-spacing:1.5px;color:#9FB3E6;margin-top:14px;font-weight:bold">NON-PROFIT DONATION RECEIPT</div>' +
+    '<div class="rc-outer" style="background:#F4F6FA;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
+    // The sponsor packet: its own card above the receipt, with clear space
+    // between, so a screenshot of the receipt stays clean. Left off the PDF.
+    // The opening line: a thank-you to the sponsor by name. Left off the PDF
+    // and the printed copy, which are the tax receipt.
+    '<!--ty--><div class="rc-ty" style="max-width:560px;margin:0 auto 20px;font-size:20px;font-weight:bold;line-height:1.35;color:#0a1628">' + e(thanks) + '</div><!--/ty-->' +
+    (s.packetUrl ?
+      '<!--pk--><table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto 28px;background:#EEF3FF;border:1px solid #C9D6FF;border-left:4px solid #2E52E8;border-radius:12px;border-collapse:separate">' +
+        '<tr><td style="padding:18px 20px">' +
+          '<div style="font-size:17px;font-weight:bold;margin-bottom:6px;color:#0a1628">One more step: your sponsor info packet</div>' +
+          '<div style="font-size:14px;line-height:1.5;margin-bottom:14px">Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.</div>' +
+          '<a href="' + e(s.packetUrl) + '" style="display:inline-block;background:#2E52E8;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 20px;border-radius:8px">Fill out your sponsor packet</a>' +
+        '</td></tr></table><!--/pk-->' : '') +
+    '<table role="presentation" class="rc-card" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E3E6EE;border-radius:12px;border-collapse:separate;overflow:hidden">' +
+    // Letterhead: the league logo top left, the league's name and address beside it.
+    '<tr><td style="padding:18px 24px 16px;border-bottom:4px solid #2E52E8">' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
+        '<td style="vertical-align:middle;padding-right:16px"><img src="' + e(leagueLogoUrl_()) + '" width="130" height="54" alt="LYBS" style="display:block;width:130px;height:54px;border:0"></td>' +
+        '<td style="vertical-align:middle">' +
+          '<div style="font-size:18px;font-weight:bold;line-height:1.25;color:#0a1628">' + e(RECEIPT_ORG) + '</div>' +
+          (s.address ? '<div style="font-size:13px;color:#5B6478;margin-top:3px">' + e(s.address) + '</div>' : '') +
+        '</td></tr></table>' +
     '</td></tr>' +
+    '<tr><td style="background:#0a1628;padding:10px 24px;font-size:12px;letter-spacing:1.5px;color:#ffffff;font-weight:bold">NON-PROFIT DONATION RECEIPT</td></tr>' +
     '<tr><td style="padding:20px 24px 4px">' +
-      '<p style="margin:0 0 14px;font-size:15px;line-height:1.5">Thank you for supporting ' + e(RECEIPT_ORG) + '. Please keep this receipt for your tax records.</p>' +
+      '<p style="margin:0 0 14px;font-size:15px;line-height:1.5">Thank you for supporting ' + e(RECEIPT_ORG) + '. <!--pdf-->Your receipt is attached as a PDF to print or save for your taxes.<!--/pdf--></p>' +
       '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">' +
       rows.map(function (x) {
         var big = x[0] === 'Donation amount';
@@ -157,22 +146,39 @@ function receiptEmail_(r, s, when) {
       '<p style="margin:12px 0 0;font-size:14px;line-height:1.5">Issued by ' + e(s.issuer || 'NOT SET') + '</p>' +
       '<p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#5B6478">' + e(taxLine) + '</p>' +
     '</td></tr>' +
-    (s.packetUrl ?
-      '<tr><td style="padding:16px 24px 24px">' +
-        '<div style="background:#EEF3FF;border-radius:10px;padding:16px">' +
-          '<div style="font-size:15px;font-weight:bold;margin-bottom:6px">Next: your sponsor info</div>' +
-          '<div style="font-size:14px;line-height:1.5;margin-bottom:12px">Pick your sponsorship level and send us your logo and details so we can recognize you.</div>' +
-          '<a href="' + e(s.packetUrl) + '" style="display:inline-block;background:#1A56DB;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:10px 18px;border-radius:8px">Open the sponsor packet</a>' +
-        '</div>' +
-      '</td></tr>' : '<tr><td style="padding:0 0 20px"></td></tr>') +
+    '<tr><td style="padding:0 0 20px"></td></tr>' +
     '</table></div>';
 
-  var text = [RECEIPT_ORG, s.address, '', 'NON-PROFIT DONATION RECEIPT', '']
+  var text = [thanks, ''].concat(s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
+    .concat([RECEIPT_ORG, s.address, '', 'NON-PROFIT DONATION RECEIPT', '', 'Thank you for supporting ' + RECEIPT_ORG + '. Your receipt is attached as a PDF to print or save for your taxes.', ''])
     .concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }))
     .concat(['', noGoods, 'Issued by ' + (s.issuer || 'NOT SET'), '', taxLine])
-    .concat(s.packetUrl ? ['', 'Next: pick your sponsorship level and send us your info:', s.packetUrl] : [])
     .join('\n');
   return { subject: subject, html: html, text: text };
+}
+
+// The receipt as a page of its own: prints on one sheet, without the grey
+// surround or the packet card.
+function receiptDoc_(html, title) {
+  return '<!doctype html><html><head><meta charset="utf-8"><title>' + String(title).replace(/[<>&]/g, '') + '</title>' +
+    '<style>@page{size:letter;margin:12mm}body{margin:0;background:#fff}' +
+    '@media print{.rc-outer{background:#fff!important;padding:0!important}.rc-packet,.rc-ty{display:none!important}}</style></head><body>' +
+    html + '</body></html>';
+}
+
+// The same receipt as a PDF, to attach. The logo goes in as data, since the
+// PDF maker doesn't fetch pictures. Returns null if it can't be made.
+function receiptPdf_(r, s, when) {
+  try {
+    var m = receiptEmail_(r, s, when), logo = logoDataUri_();
+    var html = m.html.split('src="' + leagueLogoUrl_() + '"').join(logo ? 'src="' + logo + '"' : 'src=""')
+      .replace(/<!--ty-->[\s\S]*?<!--\/ty-->/, '')
+      .replace(/<!--pk-->[\s\S]*?<!--\/pk-->/, '')
+      .replace(/<!--pdf-->[\s\S]*?<!--\/pdf-->/, 'Please keep this receipt for your tax records.');
+    var doc = receiptDoc_(html.replace('background:#F4F6FA;padding:24px 12px', 'background:#ffffff;padding:0'), m.subject);
+    var name = 'LYBS ' + SEASON + ' donation receipt - ' + String(r.company).replace(/[^\w &.'-]+/g, '').trim() + '.pdf';
+    return HtmlService.createHtmlOutput(doc).getBlob().getAs(MimeType.PDF).setName(name);
+  } catch (e) { console.log('receipt pdf: ' + e); return null; }
 }
 
 // ---------- the app's actions ----------
@@ -180,9 +186,9 @@ function receiptEmail_(r, s, when) {
 function receiptList() {
   var s = receiptSettings_();
   return {
-    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: !!s.packetUrl },
+    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: !!s.packetUrl, sender: senderSettings_().connected },
     items: receiptRows_().map(function (r) {
-      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.amount), status: r.status, at: r.at || '' };
+      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.amount), status: r.status, at: r.at || '', online: !!r.online };
     })
   };
 }
@@ -194,8 +200,10 @@ function findReceiptRow_(key) {
 function receiptPreview(data) {
   var r = findReceiptRow_(data.key);
   if (!r) return fail('That row is no longer marked paid with an email.');
-  var s = receiptSettings_(), m = receiptEmail_(r, s);
-  return ok({ subject: m.subject, html: m.html, to: s.live ? r.email : (s.testTo ? 'test address' : ''), live: s.live });
+  // A sent receipt reopens with the day it was sent, ready to print again.
+  var when = r.status === 'sent' && /^\d{4}-\d{2}-\d{2}$/.test(r.at || '') ? new Date(r.at + 'T12:00:00') : null;
+  var s = receiptSettings_(), m = receiptEmail_(r, s, when);
+  return ok({ subject: m.subject, html: receiptDoc_(m.html, m.subject), to: s.live ? r.email : (s.testTo ? 'test address' : ''), live: s.live, sent: r.status === 'sent' });
 }
 
 // One tap from a board member sends one receipt. Never called on a schedule.
@@ -210,20 +218,21 @@ function receiptSend(data) {
     var r = findReceiptRow_(data.key);
     if (!r) return fail('That row is no longer marked paid with an email.');
     if (r.status === 'sent') return fail('That receipt was already sent' + (r.at ? ' on ' + r.at : '') + '.');
-    if (r.status === 'website' && !data.anyway) return fail('The website already sent this one its receipt.');
     var m = receiptEmail_(r, s);
     var to = s.live ? r.email : s.testTo;
-    MailApp.sendEmail({ to: to, subject: (s.live ? '' : '[TEST] ') + m.subject, body: m.text, htmlBody: m.html, name: RECEIPT_ORG });
+    var pdf = receiptPdf_(r, s);
+    var how = leagueSend_({ to: to, subject: m.subject, text: m.text, html: m.html, live: s.live, attachments: pdf ? [pdf] : null });
+    if (!how.ok) return fail(how.error);
     var log = receiptLog_();
     var at = dayOf_(new Date());
-    if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); }
+    if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); noteOnBoardCopy_(r.company, 'Receipt sent', at); }
     return ok({ message: s.live ? 'Receipt sent to ' + r.email + '.' : 'Test receipt sent to the test address. The row stays ready.', status: s.live ? 'sent' : 'ready', at: at });
   } finally {
     lock.releaseLock();
   }
 }
 
-// "Website sent it" (or "Not needed"), and undo for either.
+// "Not needed", and undo.
 function receiptMark(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var key = String(data.key || ''), how = String(data.how || '');
@@ -231,7 +240,7 @@ function receiptMark(data) {
   if (how === 'undo') {
     if (log[key] && log[key].how === 'sent') return fail('A sent receipt stays marked sent.');
     delete log[key];
-  } else if (how === 'website' || how === 'skip') {
+  } else if (how === 'skip') {
     if (!findReceiptRow_(key)) return fail('That row is no longer marked paid with an email.');
     log[key] = { how: how, at: dayOf_(new Date()) };
   } else return fail('Unknown choice.');

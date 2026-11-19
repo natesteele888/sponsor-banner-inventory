@@ -104,11 +104,15 @@ Dashboard. Remove the address to take access away; it ends within five
 minutes. The list stays in the private Apps Script project, never in this
 repo. Needs the Apps Script deploy for this change.
 
+## What the Sponsors list shows first
+
+The list opens on this season's sponsors (anyone with an amount this season), named by the season, for example "2027 sponsors". Every year's rows are one pick away under **Show → All sponsors, every year**, along with the other views.
+
 ## Donation receipts for paid sponsors
 
-When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Website payments are left out, because the league site already emails its own receipt: a row counts as one when a "Donation received from" notice matches its contact name and amount, when its Paid? or Notes says online or website, or when someone taps **Website sent it**.
+When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Sponsors get this receipt from here whether they paid by check or online, so the league site's receipt button is not used for a sponsor (a row whose Paid? or Notes says online, website, Crossbar or card is tagged **Paid online** as a reminder). Plain donations from people who aren't on the sponsor list never show here; those keep the website's receipt button. **Not needed** takes a row off the list (and **Undo** puts it back).
 
-The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) plus a button to the sponsor packet page. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
+The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) with the league letterhead. Above it, as its own card with space between, is the one step left for the sponsor: "One more step: your sponsor info packet" and a **Fill out your sponsor packet** button. The receipt card stands alone, so a screenshot of it is a clean tax copy. A PDF of the receipt alone (no packet card, no link) is attached to every receipt email. In the app, **Preview** on a waiting row and **Open receipt** on a sent one show the receipt with a **Print / Save as PDF** button, which prints the receipt without the packet card. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
 
 Setup (Apps Script editor):
 
@@ -126,23 +130,88 @@ What sponsors send on the info packet page (level, business, jersey name, write-
 
 Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.
 
-## Board edits (the board's own copy of the sheet)
+## Board edits (straight into the shared sheet)
 
-The app can run on the board's own copy of the sponsorship sheet instead of
-reading the sponsorship lead's sheet. Nothing changes until this is switched on.
+Edits made in the app go straight into the one sponsorship sheet the app reads
+(today that's the sponsorship lead's sheet, found by its name). There is no
+separate copy to keep in step. `SPONSOR_SHEET_USE` still points the app at a
+different sheet if that's ever wanted; leave it unset to keep using the lead's
+sheet. Set `SPONSOR_EDITS` to `off` to stop every edit at once (the app goes
+back to read-only); delete it to turn edits back on.
 
-- **Switch on:** set the Script Property `SPONSOR_SHEET_USE` to the copy's
-  spreadsheet id. The app then reads and writes only that copy.
-- **Switch back:** delete `SPONSOR_SHEET_USE`. The app goes back to reading the
-  lead's sheet by name, and every edit is refused, so that sheet is never
-  written from the app.
 - **Add a contact:** any signed-in board member can add a person or business
   they reached out to. A name already on the sheet is refused. Columns the
   sheet works out with a formula get the row above's formula.
-- **Edit a row, Mark paid, Mark contacted, Not sponsoring:** only editors.
-  Editors are the league admin account plus the Google addresses in the
-  Script Property `SPONSOR_EDITORS` (comma separated). Paid rows and amounts
-  can be changed. Formula columns are left alone. "Not sponsoring" goes in
-  the Contacted? column and takes the row off follow-up emails.
+- **Edit a row, Mark paid, Mark contacted, Not sponsoring, Assign:** only
+  editors. Editors are the league admin account plus the Google addresses in
+  the Script Property `SPONSOR_EDITORS` (comma separated). Formula columns are
+  left alone. "Not sponsoring" goes in the Contacted? column and takes the row
+  off follow-up emails.
+- **Hold to confirm:** Mark paid, Mark contacted, Not sponsoring, Assign and
+  Save changes are pressed and held until the ring fills. A plain tap asks
+  "Tap again or hold" with what will change (for example "Amount: $500 →
+  $1,000"); a second tap within a few seconds does it, which also works from
+  the keyboard. Each one then shows a ✓ line such as "Paid."
+- **Change history:** every change made in the app (who, what, old → new,
+  when) is written to a **Change log** tab in the same sheet, made the first
+  time it's needed. Each sponsor's card shows its own changes under
+  **Changes**.
 - Each save checks the row still holds the same sponsor, so a sheet that was
   re-sorted since the page loaded is not written to the wrong row.
+
+## Views, towns and owners
+
+- **Show** has: this season's sponsors, all sponsors, past sponsors nobody has
+  reached out to yet, needs a new owner, walk-in only, and **My sponsors**.
+- **Town** filters by the town in the Address column.
+- **Assign:** editors set a sponsor's owner (the LYBS Owner column) on its
+  card. **My sponsors** lists the rows whose owner is you; it shows once
+  `SPONSOR_PEOPLE` is set, as `Name = google address, Name = google address`
+  (the name is how you appear in the LYBS Owner column).
+- **Needs a new owner:** past sponsors not signed this season whose owner is
+  blank or only former board members. Former members are listed in
+  `SPONSOR_FORMER_OWNERS` (comma separated first names as they appear in the
+  sheet). The card still shows who reached out last year.
+- **Walk-in only:** editors can label a sponsor walk-in only (a "Walk-in only"
+  column, made the first time). Its card shows the address with a map link
+  and a **Print form** button that opens the printable sponsorship form. The
+  form lives in the league's Drive, never in this repo; set `WALKIN_FORM_ID`
+  to its Drive file id. The app only hands it to signed-in board members.
+
+## Follow-up emails
+
+Sponsors the board has contacted who haven't paid and haven't said no get a
+short follow-up at a few set dates ("rounds"). From a round's date until the
+next one, they show under **Follow-ups to send**. A board member taps
+**Preview**, then **Send** (twice). Nothing is sent on a schedule. **Skip**
+leaves one out for that round. **Schedule** lists the rounds with a sample
+preview of each email.
+
+- Who gets one: Contacted? has a name or "Yes" (not blank, "No" or "Not
+  sponsoring"), Paid? is not yes, and the row has an email.
+- Default rounds: Dec 10 (holiday hello), Jan 14 (new year check-in), Feb 11
+  (before jerseys) and Mar 6 (last call). Change them with `NUDGE_DATES`
+  (e.g. `2026-12-10, 2027-01-14`); the first is the holiday email and the
+  last is the last call.
+- Script Properties: `NUDGE_SIGN` (the sign-off, "Name, Title"),
+  `SPONSOR_DEADLINE` (default "March 20"), `NUDGES_LIVE` ("on" sends to
+  sponsors; otherwise tests go to `RECEIPTS_TEST_TO`), and the shared
+  `RECEIPT_ORG_ADDRESS` for where checks go.
+
+## Sending from the league's address
+
+Receipts and follow-ups both send through `Mail.gs`. Set `SEND_FROM` to the
+league's address. Nothing goes to a sponsor until that address is in the
+"Send mail as" list of the Gmail account that owns this script (Gmail →
+Settings → Accounts and Import → Send mail as → Add another email address,
+then the confirmation link Gmail mails to that address). Until then, live
+sends are refused, and test sends come from the owner's Gmail with the
+league address as reply-to.
+
+When the board copy is switched on and has a **Receipt sent** or **Last
+follow-up** column, each live send writes its date (and the round's name) on
+that sponsor's row, so the sheet shows it too.
+
+The receipt and the follow-ups carry the LYBS logo as a letterhead, top left
+(`icons/lybs-wordmark.png`, attached inline when sent; `LEAGUE_LOGO_URL`
+overrides it).

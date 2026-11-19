@@ -126,15 +126,21 @@ function doPost(e) {
     if (action === 'seasonRequest') return seasonRequest(data);
     if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
     // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
-    if (action === 'sponsorBook') return ok(Object.assign(sponsorBook(), sponsorPerms_()));
+    if (action === 'sponsorBook') { var bk = sponsorBook(); bk.changes = sponsorChanges_(sponsorSpreadsheet_(), 1000); return ok(Object.assign(bk, sponsorPerms_())); }
     if (action === 'sponsorAdd') return sponsorAdd(data);
     if (action === 'sponsorEdit') return sponsorEdit(data);
+    if (action === 'sponsorWalkIn') return sponsorWalkIn(data);
+    if (action === 'walkInForm') return walkInForm();
     // This season's committed total next to last season's (History.gs). Totals only.
     if (action === 'sponsorHistory') return ok(sponsorHistory());
     if (action === 'receiptList') return ok(receiptList());
     if (action === 'receiptPreview') return receiptPreview(data);
     if (action === 'receiptSend') return receiptSend(data);
     if (action === 'receiptMark') return receiptMark(data);
+    if (action === 'nudgeList') return ok(nudgeList());
+    if (action === 'nudgePreview') return nudgePreview(data);
+    if (action === 'nudgeSend') return nudgeSend(data);
+    if (action === 'nudgeMark') return nudgeMark(data);
     if (action === 'sponsorPackets') return ok(sponsorPackets());
     if (action === 'packetLogo') return packetLogo(data);
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);

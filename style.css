@@ -434,3 +434,19 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 #spAddBox summary { cursor: pointer; margin: 0; min-height: 28px; display: flex; align-items: center; }
 #spAddBox[open] summary { margin-bottom: 8px; }
 #spEditActs { flex-wrap: wrap; }
+.rc-path { display: block; font-size: 12.5px; font-weight: 600; color: var(--gold); }
+
+/* Press and hold to confirm: a ring fills while the button is held. */
+.btn.hold::before { content: ''; display: inline-block; width: 14px; height: 14px; margin-right: 7px; vertical-align: -2px; border-radius: 50%;
+  background: conic-gradient(currentColor calc(var(--hold, 0) * 1turn), color-mix(in srgb, currentColor 25%, transparent) 0);
+  -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px); mask: radial-gradient(circle, transparent 4px, #000 4.5px); }
+.btn.hold { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.btn.hold.holding { transform: scale(.98); }
+.sp-done { color: var(--green); font-weight: 600; }
+.sp-changes { list-style: none; padding: 0; margin: 4px 0 12px; font-size: 13px; }
+.sp-changes li { padding: 6px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
+.sp-changes .when { color: var(--ink3); }
+.sp-walkin, .sp-walkin-note { color: var(--gold); }
+.sp-walkin-note { background: var(--gold-bg); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.sp-assign { display: flex; gap: 6px; align-items: end; flex-wrap: wrap; }
+.sp-assign label { font-size: 13px; }

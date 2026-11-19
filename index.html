@@ -66,19 +66,25 @@
     <details id="spYoY" class="yoy hidden"></details>
     <!-- Paid rows with an email: a receipt to send with one tap (sponsors.js, Receipts.gs). -->
     <section id="spReceipts" class="rcpt hidden" aria-live="polite"></section>
+    <section id="spNudges" class="rcpt hidden" aria-live="polite"></section>
     <div class="toolbar">
       <input id="spSearch" type="search" placeholder="Search sponsor, contact, owner, team…">
       <div class="filters">
         <label>Show <select id="spFilter">
-          <option value="all">All sponsors</option>
-          <option value="signed">Signed up</option>
+          <option value="signed" selected>This season's sponsors</option>
+          <option value="all">All sponsors, every year</option>
           <option value="paid">Paid</option>
           <option value="unpaid">Not paid yet</option>
           <option value="notContacted">Not contacted</option>
           <option value="lapsed">Past sponsors, not back yet</option>
+          <option value="pastNotContacted">Past sponsors, nobody has reached out</option>
+          <option value="needsOwner">Needs a new owner</option>
+          <option value="walkIn">Walk-in only</option>
+          <option value="mine" hidden>My sponsors</option>
           <option value="noTeam">Signed up, no team</option>
         </select></label>
         <label>Owner <select id="spOwner"><option value="">Everyone</option></select></label>
+        <label>Town <select id="spArea"><option value="">Every town</option></select></label>
         <button class="btn small" id="spRefresh" type="button">Refresh</button>
       </div>
     </div>
@@ -329,14 +335,26 @@
   </div>
   <div class="sheet-body">
     <h2 id="spTitle" class="ss-title"></h2>
+    <p id="spWalkIn" class="sp-walkin-note hidden"></p>
     <div id="spFields"></div>
     <div id="spEditActs" class="sheet-acts hidden">
       <button class="btn small" id="spEditBtn" type="button">Edit row</button>
+      <button class="btn small primary hidden" id="spSaveBtn" type="button">Save changes</button>
       <button class="btn small" id="spContactBtn" type="button">Mark contacted</button>
       <button class="btn small" id="spNoBtn" type="button">Not sponsoring</button>
       <button class="btn small primary" id="spPaidBtn" type="button">Mark paid</button>
+      <button class="btn small" id="spWalkBtn" type="button">Walk-in only</button>
+      <div id="spAssign" class="sp-assign hidden">
+        <label>Assign to <input id="spAssignTo" type="text" list="spOwners" placeholder="Board member"></label>
+        <datalist id="spOwners"></datalist>
+        <button class="btn small" id="spAssignBtn" type="button">Assign</button>
+      </div>
       <span id="spEditStatus" class="status" role="status"></span>
     </div>
+    <p><button class="btn small hidden" id="spFormBtn" type="button">Print form</button></p>
+
+    <h3 class="ss-h">Changes</h3>
+    <div id="spChanges"></div>
 
     <h3 class="ss-h">Team</h3>
     <div class="field-grid">
