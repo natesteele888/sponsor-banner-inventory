@@ -531,21 +531,21 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 /* Sponsor's own info page (sponsor.html): their level, and upgrades */
 /* A price table: the levels side by side, theirs highlighted. Wider than
    the form below it on a computer; on a phone the cards swipe sideways. */
-.lv-wrap { width: min(860px, calc(100vw - 32px)); position: relative; left: 50%; transform: translateX(-50%); box-sizing: border-box; }
+.lv-wrap { width: min(840px, calc(100vw - 32px)); position: relative; left: 50%; transform: translateX(-50%); box-sizing: border-box; }
 .lv-h { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 22px; letter-spacing: 1px; color: var(--ink); text-align: center; margin: 8px 0 4px; }
 .lv-swipe { display: none; text-align: center; font-size: 13px; color: var(--ink3); margin: 0 0 6px; }
-.lv-list { list-style: none; margin: 0; padding: 14px 2px 4px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; align-items: start; }
-.lv { position: relative; border: 1px solid var(--line); border-radius: 12px; padding: 14px 10px 10px; background: var(--card); display: flex; flex-direction: column; gap: 3px; box-shadow: var(--shadow); }
+.lv-list { list-style: none; margin: 0; padding: 18px 2px 10px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; align-items: stretch; }
+.lv { position: relative; border: 1px solid var(--line); border-radius: 14px; padding: 16px 12px 12px; background: var(--card); display: flex; flex-direction: column; gap: 4px; box-shadow: var(--shadow); }
 .lv.lv-on { border: 2px solid var(--blue); background: var(--blue-bg); box-shadow: 0 10px 30px rgba(46,82,232,.25); }
-/* Upgrades stand out: a blue frame and glow next to their own level. */
-.lv.lv-up { border: 2px solid var(--blue); box-shadow: 0 0 0 3px rgba(124,155,255,.16), 0 8px 22px rgba(46,82,232,.22); }
-.lv-paid.lv-on { border-color: var(--green); background: var(--green-bg); box-shadow: none; }
-.lv-below { opacity: .45; }
-.lv-badge { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; background: var(--green); color: var(--card); }
+.lv-paid.lv-on { border-color: var(--green); background: var(--green-bg); box-shadow: 0 10px 30px rgba(27,122,78,.25); }
+/* Their level (or the upgrade they picked) sits a little bigger than the rest. */
+.lv[data-mine] { transform: scale(1.06); z-index: 1; }
+.lv-below { opacity: .5; }
+.lv-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 4px 12px; border-radius: 999px; background: var(--green); color: var(--card); }
 .lv-badge-up { background: var(--blue); color: var(--card); }
-.lv-name { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 19px; letter-spacing: 1px; color: var(--ink); line-height: 1.1; }
+.lv-name { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 21px; letter-spacing: 1px; color: var(--ink); line-height: 1.1; }
 .lv-tag { font-size: 12px; color: var(--ink2); }
-.lv-price { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -.5px; }
+.lv-price { font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -.5px; }
 .lv-sub { font-size: 11px; color: var(--ink3); margin-bottom: 4px; }
 .lv-act { align-self: stretch; justify-content: center; margin: 2px 0 4px; }
 /* The Upgrade button glows and lifts a little on hover, while pressed on a
@@ -564,26 +564,16 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-perks .lv-no { color: var(--ink3); }
 .lv-perks .lv-no::before { content: "–"; background: var(--panel); color: var(--ink3); }
 @media (max-width: 760px) {
-  /* A phone: all four at once in a 2x2 grid, nothing hidden off to the side. */
   .lv-wrap { width: auto; left: 0; transform: none; }
-  .lv-list { grid-template-columns: repeat(2, 1fr); gap: 14px 8px; padding: 14px 0 4px; }
-  .lv { padding: 13px 8px 8px; }
-  .lv-name { font-size: 17px; }
-  .lv-price { font-size: 21px; }
-  .lv-badge { font-size: 10px; padding: 3px 8px; }
-  .lv-act.btn.small { padding: 6px 6px; font-size: 12px; }
+  .lv-swipe { display: block; }
+  /* Narrow cards, with room either side so the first and last can sit in the
+     middle too, and the ones next door always peek in. */
+  .lv-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 10px; padding: 18px 20vw 12px; margin: 0 -10px; scrollbar-width: none; align-items: stretch; }
+  .lv-list::-webkit-scrollbar { display: none; }
+  .lv { flex: 0 0 52vw; scroll-snap-align: center; }
+  .lv[data-mine] { flex-basis: 60vw; transform: none; }
 }
 /* A clear gap and a pointer between the levels and the form, so nobody stops at the levels. */
-/* What an upgrade adds, shown up front; the full list folds away. */
-.lv-adds { list-style: none; margin: 2px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.lv-adds li { font-size: 12px; font-weight: 600; color: var(--blue); line-height: 1.25; }
-.lv-adds li::before { content: "+ "; font-weight: 700; }
-.lv-more { margin-top: 2px; border-top: 1px solid var(--line); padding-top: 4px; }
-.lv-more > summary { cursor: pointer; font-size: 11px; color: var(--ink3); list-style: none; padding: 2px 0; }
-.lv-more > summary::-webkit-details-marker { display: none; }
-.lv-more > summary::after { content: " ▾"; }
-.lv-more[open] > summary::after { content: " ▴"; }
-.lv-more .lv-perks { border-top: 0; padding-top: 4px; }
 .lv-next { margin: 22px auto 6px; width: fit-content; max-width: 100%; text-align: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--gold); background: var(--gold-bg); border: 1px solid var(--gold); border-radius: 999px; padding: 6px 18px; }
 #levels { margin-bottom: 14px; }
 .lv-note { font-size: 14px; color: var(--gold); margin: 0; }
