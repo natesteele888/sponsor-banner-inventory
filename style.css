@@ -547,21 +547,25 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-tag { font-size: 12px; color: var(--ink2); }
 .lv-price { font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -.5px; }
 .lv-sub { font-size: 11px; color: var(--ink3); margin-bottom: 4px; }
-.lv-act { align-self: stretch; justify-content: center; margin: 2px 0 4px; }
+.lv-head { display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; }
+.lv-perks li { box-sizing: border-box; }
+.lv-foot { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; }
+.lv-foot:empty { padding-top: 0; }
+.lv-act { align-self: stretch; justify-content: center; margin: 0; }
 /* The Upgrade button glows and lifts a little on hover, while pressed on a
    phone, and on keyboard focus. */
 .lv-act[data-up] { transition: box-shadow .18s ease, transform .18s ease, filter .18s ease; }
 .lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible {
   box-shadow: 0 0 0 3px rgba(124,155,255,.28), 0 0 22px 4px rgba(124,155,255,.55); transform: translateY(-2px); filter: brightness(1.1); outline: none; }
 @media (prefers-reduced-motion: reduce) { .lv-act[data-up] { transition: none; } .lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible { transform: none; } }
-.lv-lock { font-size: 12px; color: var(--green); font-weight: 600; margin: 2px 0 4px; }
+.lv-lock { font-size: 12px; color: var(--green); font-weight: 600; margin: 0; text-align: center; }
 .lv-lock-up { color: var(--blue); }
 .lv-perks { list-style: none; margin: 2px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
 .lv-perks li { font-size: 12px; color: var(--ink); padding-left: 21px; position: relative; line-height: 1.3; }
 .lv-perks li::before { position: absolute; left: 0; top: 0; width: 15px; height: 15px; border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .lv-perks .lv-yes::before { content: "✓"; background: var(--blue); color: var(--card); }
 .lv-paid .lv-perks .lv-yes::before { background: var(--green); color: var(--card); }
-.lv-perks .lv-no { color: var(--ink3); }
+.lv-perks .lv-no { color: var(--ink3); text-decoration: line-through; text-decoration-color: rgba(127,127,127,.6); }
 .lv-perks .lv-no::before { content: "–"; background: var(--panel); color: var(--ink3); }
 @media (max-width: 760px) {
   .lv-wrap { width: auto; left: 0; transform: none; }
@@ -574,6 +578,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
   .lv[data-mine] { flex-basis: 60vw; transform: none; }
 }
 /* A clear gap and a pointer between the levels and the form, so nobody stops at the levels. */
+.greet-co { font-size: calc(1em + 2px); font-weight: 700; color: var(--ink); }
 .lv-next { margin: 22px auto 6px; width: fit-content; max-width: 100%; text-align: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--gold); background: var(--gold-bg); border: 1px solid var(--gold); border-radius: 999px; padding: 6px 18px; }
 #levels { margin-bottom: 14px; }
 .lv-note { font-size: 14px; color: var(--gold); margin: 0; }

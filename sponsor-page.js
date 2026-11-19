@@ -103,11 +103,15 @@
         return '<li class="' + (p[0] ? 'lv-yes' : 'lv-no') + '">' + esc(p[1]) + '</li>';
       }).join('');
       return '<li class="lv' + (paid ? ' lv-paid' : below ? ' lv-below' : ' lv-up') + (on ? ' lv-on' : '') + '"' + (on ? ' data-mine="1"' : '') + '>' +
-        badge + '<div class="lv-name">' + esc(l.name) + '</div><div class="lv-tag">' + esc(tagline(l, i)) + '</div>' +
-        '<div class="lv-price">' + price + '</div><div class="lv-sub">' + sub + '</div>' + act +
-        '<ul class="lv-perks">' + list + '</ul></li>';
+        badge + '<div class="lv-head"><div class="lv-name">' + esc(l.name) + '</div><div class="lv-tag">' + esc(tagline(l, i)) + '</div>' +
+        '<div class="lv-price">' + price + '</div><div class="lv-sub">' + sub + '</div></div>' +
+        '<ul class="lv-perks">' + list + '</ul>' +
+        // The button (or their level's note) sits at the bottom, so every
+        // card's perk list starts at the same height.
+        '<div class="lv-foot">' + act + '</div></li>';
     }).join('');
     $('levelList').innerHTML = html;
+    alignRows();
     // On a phone, bring their level (or the upgrade they picked) into view.
     var mine = $('levelList').querySelector('[data-mine]'), list = $('levelList');
     if (mine && list.scrollWidth > list.clientWidth + 4) list.scrollLeft = mine.offsetLeft - (list.clientWidth - mine.offsetWidth) / 2;
@@ -125,6 +129,25 @@
     $('writeupCount').textContent = $('writeup').value.length;
     renderPay($('payBox'), pick ? lv : null);
   }
+
+  // Line the cards up like a comparison table: the top part and each perk
+  // row get the height of the tallest one across the four cards, so every
+  // benefit sits on the same line on every card.
+  function alignRows() {
+    var cards = Array.prototype.slice.call(document.querySelectorAll('#levelList .lv'));
+    if (!cards.length) return;
+    var rows = [cards.map(function (c) { return c.querySelector('.lv-head'); })];
+    var n = cards[0].querySelectorAll('.lv-perks li').length;
+    for (var i = 0; i < n; i++) rows.push(cards.map(function (c) { return c.querySelectorAll('.lv-perks li')[i]; }));
+    rows.forEach(function (row) {
+      row.forEach(function (el) { if (el) el.style.minHeight = ''; });
+      var h = Math.max.apply(null, row.map(function (el) { return el ? el.getBoundingClientRect().height : 0; }));
+      if (h > 0) row.forEach(function (el) { if (el) el.style.minHeight = h + 'px'; });
+    });
+  }
+  var alignT = 0;
+  window.addEventListener('resize', function () { clearTimeout(alignT); alignT = setTimeout(alignRows, 120); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { alignRows(); });
 
   // How to pay the difference for an upgrade.
   function renderPay(box, lv) {
@@ -165,7 +188,8 @@
   // filled while empty, so a fresh copy never writes over what they typed.
   function show(res) {
     P = res;
-    $('greet').textContent = 'Thank you, ' + res.company + '! Please send us your info by ' + res.deadline + '.' +
+    // Their business name a touch bigger and bold, the ask on its own line.
+    $('greet').innerHTML = 'Thank you, <b class="greet-co">' + esc(res.company) + '</b>!<br>Please send us your info by ' + esc(res.deadline) + '.' +
       (res.sent ? ' We already have your info; sending again adds an update.' : '');
     if (res.contactName && !$('contactName').value) $('contactName').value = res.contactName.replace(/^(manager|owner)\s*:\s*/i, '');
     if (!$('business').value) $('business').value = res.company;
