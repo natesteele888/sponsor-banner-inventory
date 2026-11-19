@@ -459,3 +459,22 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-walkin-note { background: var(--gold-bg); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
 .sp-assign { display: flex; gap: 6px; align-items: end; flex-wrap: wrap; }
 .sp-assign label { font-size: 13px; }
+
+/* Sponsor's own info page (sponsor.html): their level, and upgrades */
+.lv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lv { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--card); display: flex; flex-direction: column; gap: 4px; }
+.lv.lv-on { border: 2px solid var(--blue); background: var(--blue-bg); }
+.lv-paid.lv-on { border-color: var(--green); background: var(--green-bg); }
+.lv-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; }
+.lv-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--green); color: #fff; }
+.lv-badge-up { background: var(--blue); }
+.lv-opt { font-size: 12px; color: var(--ink3); }
+.lv-price { font-size: 20px; font-weight: 700; color: var(--ink); }
+.lv-price span { font-size: 14px; font-weight: 500; color: var(--ink2); }
+.lv-gets { font-size: 13px; color: var(--ink2); }
+.lv-lock { font-size: 13px; color: var(--green); font-weight: 600; }
+.lv .btn { align-self: flex-start; margin-top: 4px; }
+.lv-note { font-size: 14px; color: var(--gold); margin: 0; }
+.lv-for { font-size: 14px; font-weight: 600; color: var(--ink); margin: 0; }
+.lv-pay { border-color: var(--blue); }
+.lv-ways { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }

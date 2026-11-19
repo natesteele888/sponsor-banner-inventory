@@ -134,6 +134,18 @@ What sponsors send on the info packet page (level, business, jersey name, write-
 
 Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.
 
+## The sponsor's own page (sponsor.html)
+
+The **Fill out your sponsor packet** button in each receipt opens that sponsor's own page: `sponsor.html?t=...`, with a long random token made the first time their receipt is previewed or sent. Tokens live only on the private data Sheet's **2027 Sponsor pages** tab, never in this repo. The page shows the business, the contact's name and the level they paid for, locked as **Paid**, with their info form right under it. The levels above theirs show as optional upgrades with only the difference owed. Picking one adds that level's fields (write-up, banner) and shows how to pay the difference: Venmo and an online link when `SPONSOR_PAY_VENMO` and `SPONSOR_PAY_ONLINE_URL` are set in Script Properties, a check to the league's mailing address, or cash to a board member.
+
+What they send goes on the **LYBS Sponsor Info Packets** sheet's Packets tab, with their files in a folder inside the packets folder, so it shows under Sponsor info packets like any packet. Its Level says "(paid)", or "(upgrade from ..., $N more owed)".
+
+An upgrade only counts once the difference is paid. Until then the sheet keeps the old level and amount, the sponsor's card says "Upgrade to ... asked, $N to pay", and **Record a payment** lists them first under "Upgrade waiting on payment". Recording a payment for them adds it to their amount. Once the whole difference is in, it sets the new level, ticks Owed a Banner when the new level has one, and marks the upgrade counted. Their next receipt is for the new money only, with the season total under it.
+
+The levels and prices are the defaults in `apps-script/SponsorPage.gs` (Gameday, All-Star $300, MVP $500, Championship $750, Championship+ $1,000). Set `SPONSOR_LEVELS` in Script Properties to change them without new code.
+
+Setup: add `apps-script/SponsorPage.gs` as a script file named `SponsorPage` and deploy a new version.
+
 ## Board edits (straight into the shared sheet)
 
 Edits made in the app go straight into the one sponsorship sheet the app reads.
