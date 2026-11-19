@@ -1253,12 +1253,26 @@
     var esc = A().esc, t = mainTab();
     $('#spTitle').textContent = s.company;
     A().setBadge($('#spBadge'), s.tier || (s.tierPrev ? 'Last year: ' + s.tierPrev : ''), 'muted');
-    // Every column on the sheet, exactly as the sheet has it.
-    $('#spFields').innerHTML = t.headers.map(function (h, i) {
+    // The few facts the board looks for first, then every column on the
+    // sheet, exactly as the sheet has it, one tap away.
+    var season = Number(S.book.season), key = [], rest = [];
+    var KEY = [/^contact$/, /^email/, /^phone/, /^address/, /^lybs owner/, /^contacted/, new RegExp('^tier selected ' + season),
+      /^amount/, /^paid$/, /^(paid how|payment method|paid by)/, /^(associated team|team)$/, /^notes?$/];
+    t.headers.forEach(function (h, i) {
       var v = s.cells[i] || '';
-      if (!h || !v || /^false$/i.test(v)) return '';
-      return '<p class="ss-row"><span>' + esc(h) + '</span>' + linkify(h, v) + '</p>';
-    }).join('') + '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p>';
+      if (!h || !v || /^false$/i.test(v)) return;
+      var k = -1;
+      KEY.forEach(function (re, n) { if (k < 0 && re.test(norm(h))) k = n; });
+      (k >= 0 ? key : rest).push({ h: h, v: v, i: i, k: k });
+    });
+    key.sort(function (a, b) { return a.k - b.k; });
+    var fact = function (f) { return '<div class="sp-fact' + (/^notes?$/i.test(f.h) || f.v.length > 60 ? ' full' : '') + '"><dt>' + esc(f.h) + '</dt><dd>' + linkify(f.h, f.v) + '</dd></div>'; };
+    $('#spFields').innerHTML = (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
+      '<details class="sp-all"><summary>Everything on the sheet (' + (key.length + rest.length) + ')</summary>' +
+      (rest.length ? '<dl class="sp-facts">' + rest.map(fact).join('') + '</dl>' : '') +
+      '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p></details>';
+    renderMarks(s, []);
+    renderBanner(s);
     showEditActs(s);
     $('#spReceipt').classList.add('hidden'); $('#spReceipt').innerHTML = '';
     var mapUrl = s.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.address) : '';
@@ -1281,6 +1295,59 @@
     $('#detailScrim').classList.remove('hidden');
     $('#sponsorSheet').classList.remove('hidden');
     if (!S.entry) { history.pushState({ sponsorSheet: true }, ''); S.entry = true; }
+  }
+
+  // Returning sponsor, new this season, and whether a banner is on file.
+  function returning(s) { return !!(s.past || String(s.tierPrev || '').trim()); }
+  function renderMarks(s, banners) {
+    var badge = A().badge, prev = Number(S.book && S.book.season) - 1, bits = [];
+    if (returning(s)) bits.push(badge('Returning sponsor', 'ok') + '<span>' + (s.tierPrev ? A().esc('Sponsored in ' + prev + ' at ' + s.tierPrev) : 'Sponsored before') + '</span>');
+    else if (isIn(s)) bits.push(badge('New sponsor', 'muted'));
+    if (banners.length) bits.push(badge(banners.length > 1 ? banners.length + ' banners on file' : 'Banner on file', 'muted'));
+    $('#spMarks').innerHTML = bits.map(function (b) { return '<span class="sp-mark">' + b + '</span>'; }).join('');
+  }
+  function bannersFor(s) {
+    return (A().banners() || []).filter(function (b) { return nameKey(b.sponsorName) === s.key; });
+  }
+  // The banner photos on file for this sponsor, small, so the board can see
+  // whether the banner is current. Photos load through the signed-in backend.
+  function renderBanner(s) {
+    var box = $('#spBanner'), esc = A().esc;
+    box.innerHTML = '<p class="hint">Looking for a banner…</p>';
+    A().whenBannersLoaded().then(function () {
+      if (S.current !== s) return;
+      var list = bannersFor(s);
+      renderMarks(s, list);
+      if (!list.length) {
+        box.innerHTML = '<p class="hint">No banner on file' + (s.owedBanner ? '. The sheet says they’re owed one.' : '.') + '</p>';
+        return;
+      }
+      box.innerHTML = list.slice(0, 4).map(function (b) {
+        var when = /^\d{4}-\d{2}-\d{2}/.test(String(b.updatedAt || '')) ? 'Updated ' + fmtDay(String(b.updatedAt).slice(0, 10)) + ', ' + String(b.updatedAt).slice(0, 4) : '';
+        return '<div class="sp-bn" data-file="' + esc(b.driveFileId || '') + '">' +
+          '<button class="sp-bn-thumb" type="button" aria-label="See the banner photo larger"><span class="sp-bn-ph"></span></button>' +
+          '<div class="sp-bn-info"><b>' + esc(b.tier ? b.tier + ' banner' : 'Banner') + '</b>' +
+          A().facts([b.hung ? 'Hung' : 'Not hung', b.condition, when]) + '</div>' +
+          '<img class="sp-bn-big hidden" alt="Banner photo"></div>';
+      }).join('') + (list.length > 4 ? '<p class="hint">' + (list.length - 4) + ' more in Banner stock.</p>' : '') +
+        '<p class="hint">Check the photo matches their current name and logo.</p>';
+      box.querySelectorAll('.sp-bn').forEach(function (el) {
+        var id = el.dataset.file;
+        if (!id) return;
+        A().image(id, 'thumb').then(function (uri) {
+          if (!uri || S.current !== s) return;
+          var img = document.createElement('img'); img.src = uri; img.alt = '';
+          var ph = el.querySelector('.sp-bn-ph'); if (ph) ph.replaceWith(img);
+        });
+        el.querySelector('.sp-bn-thumb').addEventListener('click', function () {
+          var big = el.querySelector('.sp-bn-big');
+          if (!big.classList.contains('hidden')) { big.classList.add('hidden'); return; }
+          big.classList.remove('hidden');
+          if (big.getAttribute('src')) return;
+          A().image(id, 'full').then(function (uri) { if (uri) big.src = uri; else big.classList.add('hidden'); });
+        });
+      });
+    }).catch(function () { if (S.current === s) box.innerHTML = '<p class="hint">Could not load the banners right now.</p>'; });
   }
 
   function fillPickers() {

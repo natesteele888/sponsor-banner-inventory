@@ -247,6 +247,40 @@ select, input[type=url] {
 .ss-received { margin-top: 6px; }
 .ss-row { margin: 6px 0; font-size: 14px; overflow-wrap: anywhere; }
 .ss-row span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink2); }
+/* The sponsor card: marks under the name, the key facts in a tidy grid,
+   everything else on the sheet one tap away. */
+.sp-marks { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 6px 0 2px; }
+.sp-marks:empty { display: none; }
+.sp-mark { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink2); }
+.sp-facts { display: grid; grid-template-columns: 1fr; gap: 10px 16px; margin: 12px 0 0; }
+.sp-fact { margin: 0; min-width: 0; }
+.sp-fact dt { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink2); margin: 0 0 2px; }
+.sp-fact dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.sp-all { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.sp-all > summary { cursor: pointer; font-size: 13px; color: var(--ink2); min-height: 32px; display: flex; align-items: center; }
+.sp-banner { display: flex; flex-direction: column; gap: 10px; }
+.sp-bn { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; align-items: center; }
+.sp-bn-thumb { width: 96px; height: 64px; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); cursor: zoom-in; }
+.sp-bn-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sp-bn-ph { display: block; width: 100%; height: 100%; }
+.sp-bn-info { min-width: 0; font-size: 14px; }
+.sp-bn-info .facts { font-size: 12.5px; color: var(--ink2); }
+.sp-bn-big { grid-column: 1 / -1; width: 100%; max-height: 50vh; object-fit: contain; border-radius: 10px; background: var(--panel); }
+.sp-bn-big.hidden { display: none; }
+@media (min-width: 560px) {
+  .sp-facts { grid-template-columns: 1fr 1fr; }
+  .sp-fact.full { grid-column: 1 / -1; }
+}
+/* Desktop: the card opens as a centered panel, details on the left and the
+   banner, team and logo on the right. */
+@media (min-width: 900px) {
+  #sponsorSheet { left: 50%; right: auto; top: 4vh; bottom: auto; width: min(1040px, 94vw); transform: translateX(-50%);
+    border-radius: 16px; border-bottom: 1px solid var(--line); max-height: 92vh; padding: 18px 24px 24px; }
+  #sponsorSheet .sp-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+  #sponsorSheet .sp-side { border-left: 1px solid var(--line); padding-left: 24px; }
+  #sponsorSheet .sp-side > .ss-h:first-child { margin-top: 12px; }
+  #sponsorSheet .ss-title { font-size: 30px; }
+}
 .btn:disabled { opacity: .45; cursor: default; }
 
 /* Sponsor reply form (intake.html) */
