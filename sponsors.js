@@ -45,7 +45,7 @@
   function money(v) { return Number(String(v || '').replace(/[^0-9.]/g, '')) || 0; }
   function yes(v) { return /^\s*(y|yes|true|x|paid)/i.test(String(v || '')); }
   function fmtMoney(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
-  // "Matt " and "matt" are the same board member.
+  // "Alex " and "alex" are the same board member.
   // The town in an address, for splitting the list by area:
   // "12 Example St, Lunenburg, MA 01462" and "5 Sample Rd Fitchburg, MA" give
   // Lunenburg and Fitchburg.
@@ -63,7 +63,7 @@
   }
 
   // Is this sponsor one of mine? The LYBS Owner cell can name more than one
-  // person ("Jami/Ashley").
+  // person ("Alex/Sam").
   function isMine(s) {
     var me = String(S.me || '').trim().toLowerCase();
     if (!me) return false;

@@ -82,14 +82,14 @@ function sponsorChanges_(ss, max) {
   } catch (e) { console.log('change log read: ' + e); return []; }
 }
 
-// Names in a Script Property ("TJ, Brian"), kept out of this public file.
+// Names in a Script Property ("Alex, Sam"), kept out of this public file.
 function namesProp_(key) {
   return String(PropertiesService.getScriptProperties().getProperty(key) || '').split(/[,;\n]+/)
     .map(function (n) { return n.trim(); }).filter(Boolean);
 }
 
 // The signed-in person's name as the LYBS Owner column writes it, from the
-// SPONSOR_PEOPLE Script Property ("Matt = their@address, Lauren = ..."), so
+// SPONSOR_PEOPLE Script Property ("Alex = their@address, Sam = ..."), so
 // "My sponsors" can find their rows. Blank when they aren't listed.
 function sponsorMe_() {
   var mail = WHO && WHO.email ? String(WHO.email).toLowerCase() : '';
