@@ -438,18 +438,21 @@
 
   // ---------- navigation ----------
 
-  function showView(name) {
+  // sub: one of the Sponsors tab's own tabs (Receipts, Follow-ups, Add
+  // sponsor, Record payment), or nothing for the sponsor list.
+  function showView(name, sub) {
+    sub = name === 'sponsors' ? String(sub || '') : '';
     $$('.view').forEach(function (v) { v.classList.add('hidden'); });
     $('#view-' + name).classList.remove('hidden');
     var tab = name === 'add' ? 'list' : name; // adding a banner is part of Banner stock
     $$('.tab-btn').forEach(function (b) {
-      var on = b.dataset.view === tab;
+      var on = b.dataset.view === tab && String(b.dataset.sp || '') === sub;
       b.classList.toggle('active', on);
       if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     if (name === 'fields' && window.Fields) window.Fields.show();
     if (name === 'season' && window.Season) window.Season.show();
-    if (name === 'sponsors' && window.Sponsors) window.Sponsors.show();
+    if (name === 'sponsors' && window.Sponsors) window.Sponsors.show(sub);
   }
 
   // ---------- wire up ----------
@@ -458,7 +461,11 @@
     if (NOT_CONFIGURED) { showConfigWarning(); }
 
     $$('.tab-btn[data-view]').forEach(function (btn) {
-      btn.addEventListener('click', function () { showView(btn.dataset.view); });
+      btn.addEventListener('click', function () {
+        showView(btn.dataset.view, btn.dataset.sp);
+        // On a phone the bar scrolls sideways: keep the tapped tab in sight.
+        if (btn.scrollIntoView) btn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
     });
 
     $('#search').addEventListener('input', function (e) {

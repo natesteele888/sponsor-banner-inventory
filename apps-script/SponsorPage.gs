@@ -123,7 +123,7 @@ function sponsorPageToken_(company) {
   if (!key) return '';
   var pages = readPages_();
   var hit = pages.rows.filter(function (r) { return r.key === key && /^[a-f0-9]{40}$/.test(String(r.token)); })[0];
-  if (hit) return String(hit.token);
+  if (hit) { rememberPageRec_(hit); return String(hit.token); }
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return '';
   try {
@@ -151,14 +151,40 @@ function pageByToken_(token) {
   if (!/^[a-f0-9]{40}$/.test(token)) return null;
   var pages = readPages_();
   var hit = pages.rows.filter(function (r) { return String(r.token) === token; })[0];
+  if (hit) rememberPageRec_(hit);
   return hit ? { pages: pages, rec: hit } : null;
 }
 
-// ---------- the sponsor's row on the board's sheet (read only here) ----------
+// ---------- speed: the page is read far more than it changes ----------
+// Opening and reading two whole sheets took about 1.7 seconds of every page
+// load. So the page reads from Apps Script's private cache when it can: one
+// sponsor's page record by its token, and a small map of the board sheet's
+// sponsors. Anything that writes either one clears it, the board map is
+// rebuilt whenever a board member opens the app, and a sponsor the map shows
+// as not paid is always checked live, so a cached copy never hides a payment.
+var PAGE_REC_TTL = 21600;      // 6 hours
+var BOARD_ROWS_TTL = 1800;     // 30 minutes
+var PAGE_REC_FIELDS = ['token', 'key', 'company', 'submittedAt', 'upgradeTo', 'upgradeOwed', 'upgradeStatus'];
 
-function boardSponsorRow_(key) {
-  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
-  if (!tab) return null;
+function pageCache_() { return CacheService.getScriptCache(); }
+function rememberPageRec_(rec) {
+  try {
+    var o = {}; PAGE_REC_FIELDS.forEach(function (f) { o[f] = rec[f] == null ? '' : String(rec[f]); });
+    pageCache_().put('spTok_' + String(rec.token), JSON.stringify(o), PAGE_REC_TTL);
+  } catch (e) { /* no cache: read the sheet next time */ }
+}
+function forgetPageRec_(token) { try { pageCache_().remove('spTok_' + String(token)); } catch (e) { } }
+// Read only: the page record from the cache, else from the sheet.
+function pageRecQuick_(token) {
+  token = String(token || '');
+  if (!/^[a-f0-9]{40}$/.test(token)) return null;
+  try { var hit = pageCache_().get('spTok_' + token); if (hit) return JSON.parse(hit); } catch (e) { }
+  var found = pageByToken_(token);
+  return found ? found.rec : null;
+}
+
+// boardRowsGen_ and forgetBoardRows_ live in Edits.gs, next to the writes.
+function boardRowsFrom_(tab) {
   var head = tab.headers.map(function (h) { return String(h).toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), amount: col(/^amount/), paid: col(/^paid\??$/),
@@ -166,11 +192,32 @@ function boardSponsorRow_(key) {
   if (c.tier < 0) c.tier = col(/^tier/);
   if (c.company < 0) return null;
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
-  var hit = null;
-  tab.rows.forEach(function (r) { if (!hit && companyKey_(get(r, 'company')) === key) hit = r; });
-  if (!hit) return null;
-  return { row: hit.row, company: get(hit, 'company'), contact: get(hit, 'contact'), amount: parseAmount_(get(hit, 'amount')),
-           paid: get(hit, 'paid'), tier: get(hit, 'tier') };
+  var map = {};
+  tab.rows.forEach(function (r) {
+    var key = companyKey_(get(r, 'company'));
+    if (!key || map[key]) return;
+    map[key] = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), amount: parseAmount_(get(r, 'amount')),
+                 paid: get(r, 'paid'), tier: get(r, 'tier') };
+  });
+  return map;
+}
+// The app's own read of the board sheet keeps the map fresh (sponsorBook).
+function cacheBoardRows_(tab) {
+  try { var map = tab && boardRowsFrom_(tab); if (map) pageCache_().put('spBoard_' + boardRowsGen_(), JSON.stringify(map), BOARD_ROWS_TTL); } catch (e) { }
+}
+
+// ---------- the sponsor's row on the board's sheet (read only here) ----------
+
+function boardSponsorRow_(key, fresh) {
+  if (!fresh) {
+    try { var hit = pageCache_().get('spBoard_' + boardRowsGen_()); if (hit) return JSON.parse(hit)[key] || null; } catch (e) { }
+  }
+  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
+  if (!tab) return null;
+  var map = boardRowsFrom_(tab);
+  if (!map) return null;
+  cacheBoardRows_(tab);
+  return map[key] || null;
 }
 
 function payOptions_() {
@@ -192,12 +239,16 @@ function levelView_(l, amount, paid) {
 }
 
 // Everything the page needs for one sponsor, or an error to show.
-function sponsorPageState_(token) {
-  var found = pageByToken_(token);
+// quick: the read-only page load, from the cache where it can. A send or an
+// upgrade always reads both sheets live.
+function sponsorPageState_(token, quick) {
+  var found = quick ? (function (rec) { return rec ? { rec: rec } : null; })(pageRecQuick_(token)) : pageByToken_(token);
   if (!found) return { error: 'This link is not valid. Please reply to the email you got from us instead.' };
-  var row = boardSponsorRow_(found.rec.key);
+  var row = boardSponsorRow_(found.rec.key, !quick);
   var levels = sponsorLevels_();
   var paid = paidLevel_(levels, row);
+  // Never trust a cached "not paid": look again live.
+  if (!paid && quick) { row = boardSponsorRow_(found.rec.key, true); paid = paidLevel_(levels, row); }
   if (!paid) return { error: "We don't have your payment marked yet. Once we do, this page shows your sponsorship. Questions? Just reply to the email." };
   var ups = levels.filter(function (l) { return l.price > row.amount && l.price > paid.price; });
   return { found: found, row: row, levels: levels, paid: paid, ups: ups };
@@ -206,7 +257,7 @@ function sponsorPageState_(token) {
 // ---------- public: what the page shows ----------
 
 function sponsorPageGet(data) {
-  var st = sponsorPageState_(data.t);
+  var st = sponsorPageState_(data.t, true);
   if (st.error) return fail(st.error);
   var rec = st.found.rec, pending = null;
   if (rec.upgradeStatus === UPGRADE_WAITING && rec.upgradeTo) {
@@ -307,6 +358,7 @@ function sponsorPageSubmit(data) {
     mark.upgradeAt = todayStamp(); mark.upgradeStatus = UPGRADE_WAITING; mark.upgradePaidAt = '';
   }
   writeFields_(st.found.pages.sheet, st.found.pages.header, rec._row, mark);
+  forgetPageRec_(token);
 
   try {
     MailApp.sendEmail({
@@ -343,8 +395,9 @@ function sponsorUpgradePaid(data) {
   var rec = pages.rows.filter(function (r) { return r.key === key && r.upgradeStatus === UPGRADE_WAITING; })[0];
   if (!rec) return fail('No upgrade is waiting for that sponsor.');
   var to = levelNamed_(sponsorLevels_(), rec.upgradeTo);
-  var row = boardSponsorRow_(key);
+  var row = boardSponsorRow_(key, true);
   if (!to || !row || !isYes_(row.paid) || row.amount < to.price) return fail('The sheet does not show the full ' + (to ? money_(to.price) : '') + ' paid yet, so the upgrade still waits.');
   writeFields_(pages.sheet, pages.header, rec._row, { upgradeStatus: UPGRADE_PAID, upgradePaidAt: todayStamp(), updatedAt: todayStamp() });
+  forgetPageRec_(rec.token);
   return ok({ message: 'Upgrade to ' + to.name + ' counted.' });
 }

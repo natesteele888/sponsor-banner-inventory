@@ -562,3 +562,20 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 /* The narrowest phones: the Dashboard button already goes home, so the logo steps aside. */
 @media (max-width: 360px) { .brand a { display: none; } }
 @media (max-width: 480px) { .banner-card img.sp-card-logo { width: 56px; height: 32px; } }
+
+/* When the website was last checked for sponsor payments. */
+.sp-web { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0; }
+.sp-web .sp-web-msg { margin: 0; flex: 1 1 220px; }
+.sp-web .sp-web-msg.warn { color: var(--ink); font-weight: 600; }
+.sp-web-list { flex: 1 0 100%; order: 3; margin: 0; padding-left: 18px; font-size: 13px; color: var(--ink2); }
+
+/* The Sponsors tab's own tabs: the list shows without the four job boxes,
+   and each job's tab shows only its own box. */
+#view-sponsors:not(.sp-sub) > #spReceipts, #view-sponsors:not(.sp-sub) > #spNudges,
+#view-sponsors:not(.sp-sub) > #spAddBox, #view-sponsors:not(.sp-sub) > #spPayBox { display: none !important; }
+#view-sponsors.sp-sub > :not(.sp-on):not(#spStatus):not(#spModeEmpty) { display: none !important; }
+/* Eight tabs: on a phone the bar scrolls sideways instead of squeezing them. */
+@media (max-width: 600px) {
+  .tabs { display: flex !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -10px !important; padding: 10px 10px 2px !important; scroll-snap-type: x proximity; }
+  .tab-btn { flex: 0 0 auto !important; white-space: nowrap !important; padding: 0 12px !important; min-height: 38px; scroll-snap-align: start; }
+}

@@ -388,6 +388,50 @@ function fromDonationEmails_(ss, season) {
 }
 
 /**
+ * "Has the website been looked at?" for the Sponsors tab. A fresh, read-only
+ * look at the league's Crossbar "Donation received from" notices since the
+ * drive began, each matched to the sponsor sheet the same way the hourly scan
+ * does it. Labels nothing and changes nothing, so it's safe on every open.
+ * Only gifts at a sponsor level ($300 and up) count; a smaller gift is a
+ * plain donation and isn't listed. Cached for 10 minutes.
+ */
+var WEBSITE_MIN_AMOUNT = 300;
+function websiteCheck(fresh) {
+  var cache = CacheService.getScriptCache(), key = 'websiteCheck_v1';
+  if (!fresh) { var hit = cache.get(key); if (hit) return JSON.parse(hit); }
+  var ss = sponsorSpreadsheet_(), people = readTab_(ss, sponsorTabName_(ss));
+  var threads = GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' + DONATIONS_SINCE, 0, 100);
+  var found = [];
+  threads.forEach(function (t) {
+    t.getMessages().forEach(function (m) {
+      var hitM = String(m.getPlainBody() || '').match(/received a \$([\d,]+(?:\.\d+)?) donation from ([^\.\n]+)/i);
+      if (!hitM) return;
+      var amount = parseAmount_(hitM[1]);
+      if (amount < WEBSITE_MIN_AMOUNT) return;
+      found.push({ donor: hitM[2].trim(), amount: amount, when: m.getDate() });
+    });
+  });
+  var out = found.sort(function (a, b) { return b.when - a.when; }).map(function (d) {
+    var dn = nameKey_(d.donor), dc = companyKey_(d.donor), last = dn.split(' ').pop(), match = null;
+    people.forEach(function (p) {
+      if (match || !String(p['Company'] || '').trim()) return;
+      var c = nameKey_(p['Contact']), pc = companyKey_(p['Company']);
+      if ((c && (c === dn || (c.length > 4 && dn.indexOf(c) >= 0) || (dn.length > 4 && c.indexOf(dn) >= 0))) ||
+          (pc && pc.length > 3 && (pc === dc || pc.indexOf(dc) >= 0 && dc.length > 4)) ||
+          (String(p['Notes'] || '') && dn.length > 4 && nameKey_(p['Notes']).indexOf(dn) >= 0)) match = p;
+    });
+    if (!match && last) people.forEach(function (p) {
+      if (!match && String(p['Company'] || '').trim() && nameKey_(p['Contact']).split(' ').pop() === last && parseAmount_(p['Amount']) === d.amount) match = p;
+    });
+    return { donor: d.donor, amount: money_(d.amount), date: Utilities.formatDate(d.when, 'America/New_York', 'MMM d'),
+             company: match ? String(match['Company']).trim() : '', paid: match ? isYes_(match['Paid?']) : false };
+  });
+  var res = { checkedAt: new Date().toISOString(), since: DONATIONS_SINCE, payments: out };
+  try { cache.put(key, JSON.stringify(res), 600); } catch (e) { /* too big to cache: fine */ }
+  return res;
+}
+
+/**
  * The hourly job. Safe to run by hand too ("Check for new sponsors" in the app).
  * Returns how many new sponsors it added.
  */
@@ -840,6 +884,8 @@ function bookTab_(ss, name) {
 function sponsorBook() {
   var ss = sponsorSpreadsheet_();
   var tabs = [sponsorTabName_(ss)].concat(SPONSOR_BOOK_TABS.slice(1)).map(function (n) { return bookTab_(ss, n); }).filter(Boolean);
+  // Keeps the sponsor pages' quick copy of the sheet fresh (SponsorPage.gs).
+  if (tabs[0] && tabs[0].name === sponsorTabName_(ss) && typeof cacheBoardRows_ === 'function') cacheBoardRows_(tabs[0]);
   return {
     season: SEASON,
     sheetName: ss.getName(),

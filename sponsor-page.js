@@ -108,34 +108,62 @@
     $('bannerTextWrap').classList.toggle('hidden', !v || v.indexOf('Reuse') === 0);
   }
 
+  // This sponsor's page as last loaded on this device, so a second visit
+  // shows at once while a fresh copy loads. Only their own business name,
+  // contact name, levels and how to pay; kept a week.
+  var SAVE_KEY = 'lybsSponsorPage_' + token.slice(0, 12), SAVE_DAYS = 7;
+  function saved() {
+    try {
+      var o = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      return o && o.t === token && o.at > Date.now() - SAVE_DAYS * 864e5 && o.res && o.res.ok ? o.res : null;
+    } catch (e) { return null; }
+  }
+  function save(res) {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ t: token, at: Date.now(), res: res })); } catch (e) { }
+  }
+
+  // Fills the page from what the backend sent. The form's own boxes are only
+  // filled while empty, so a fresh copy never writes over what they typed.
+  function show(res) {
+    P = res;
+    $('greet').textContent = 'Thank you, ' + res.company + '! Please send us your info by ' + res.deadline + '.' +
+      (res.sent ? ' We already have your info; sending again adds an update.' : '');
+    if (res.contactName && !$('contactName').value) $('contactName').value = res.contactName.replace(/^(manager|owner)\s*:\s*/i, '');
+    if (!$('business').value) $('business').value = res.company;
+    $('jerseyName').placeholder = res.company;
+    if (res.upgrade) {
+      $('pending').textContent = 'You asked to upgrade to ' + res.upgrade.to + '. It counts once we get the ' + money(res.upgrade.owed) + ' difference.';
+      $('pending').classList.remove('hidden');
+    } else $('pending').classList.add('hidden');
+    $('levels').classList.remove('hidden');
+    $('pageForm').classList.remove('hidden');
+    renderLevels();
+  }
+
   function load() {
     if (!token) {
       $('greet').textContent = 'This page needs the personal link from your LYBS receipt email. Please open it from there, or just reply to that email.';
       return;
     }
+    var early = saved(), fresh = false;
+    if (early) show(early);
     // If the backend never answers, say so rather than sit on "Loading".
     var slow = setTimeout(function () {
-      if (!P) $('greet').textContent = "This is taking longer than it should. Refresh the page, or just reply to the email and we'll sort it out.";
+      if (!fresh && !early) $('greet').textContent = "This is taking longer than it should. Refresh the page, or just reply to the email and we'll sort it out.";
     }, 20000);
     call({ action: 'sponsorPageGet' }).then(function (res) {
-      clearTimeout(slow);
-      if (!res || !res.ok) { $('greet').textContent = (res && res.error) || "We couldn't load your page. Refresh, or just reply to the email."; return; }
-      P = res;
-      $('greet').textContent = 'Thank you, ' + res.company + '! Please send us your info by ' + res.deadline + '.' +
-        (res.sent ? ' We already have your info; sending again adds an update.' : '');
-      if (res.contactName) $('contactName').value = res.contactName.replace(/^(manager|owner)\s*:\s*/i, '');
-      $('business').value = res.company;
-      $('jerseyName').placeholder = res.company;
-      if (res.upgrade) {
-        $('pending').textContent = 'You asked to upgrade to ' + res.upgrade.to + '. It counts once we get the ' + money(res.upgrade.owed) + ' difference.';
-        $('pending').classList.remove('hidden');
+      clearTimeout(slow); fresh = true;
+      if (!res || !res.ok) {
+        try { localStorage.removeItem(SAVE_KEY); } catch (e) { }
+        $('levels').classList.add('hidden'); $('pageForm').classList.add('hidden');
+        $('greet').textContent = (res && res.error) || "We couldn't load your page. Refresh, or just reply to the email.";
+        return;
       }
-      $('levels').classList.remove('hidden');
-      $('pageForm').classList.remove('hidden');
-      renderLevels();
+      save(res);
+      show(res);
     }).catch(function () {
       clearTimeout(slow);
-      $('greet').textContent = "We couldn't load your page. Check your connection and refresh, or just reply to the email.";
+      if (!early) $('greet').textContent = "We couldn't load your page. Check your connection and refresh, or just reply to the email.";
     });
   }
 
