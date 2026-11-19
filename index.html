@@ -82,6 +82,19 @@
         <button class="btn small" id="spRefresh" type="button">Refresh</button>
       </div>
     </div>
+    <!-- Any board member: a person or business they reached out to (sponsors.js, Edits.gs). -->
+    <details id="spAddBox" class="rcpt hidden">
+      <summary class="rc-h">＋ Add a contact</summary>
+      <form id="spAddForm" class="field-grid" autocomplete="off">
+        <label class="full">Business or person <input id="spa_company" type="text" maxlength="120" required></label>
+        <label>Contact name <input id="spa_contact" type="text" maxlength="120"></label>
+        <label>Phone <input id="spa_phone" type="tel" maxlength="40"></label>
+        <label>Email <input id="spa_email" type="email" maxlength="120"></label>
+        <label>LYBS owner <input id="spa_owner" type="text" maxlength="60" placeholder="Who reached out"></label>
+        <label class="full">Notes <input id="spa_notes" type="text" maxlength="500"></label>
+        <div class="sheet-acts full"><button class="btn primary" id="spaSave" type="submit">Add contact</button><span id="spaStatus" class="status" role="status"></span></div>
+      </form>
+    </details>
     <div id="spStatus" class="status"></div>
     <p id="spSource" class="hint"></p>
     <ul id="spList" class="banner-list"></ul>
@@ -317,6 +330,13 @@
   <div class="sheet-body">
     <h2 id="spTitle" class="ss-title"></h2>
     <div id="spFields"></div>
+    <div id="spEditActs" class="sheet-acts hidden">
+      <button class="btn small" id="spEditBtn" type="button">Edit row</button>
+      <button class="btn small" id="spContactBtn" type="button">Mark contacted</button>
+      <button class="btn small" id="spNoBtn" type="button">Not sponsoring</button>
+      <button class="btn small primary" id="spPaidBtn" type="button">Mark paid</button>
+      <span id="spEditStatus" class="status" role="status"></span>
+    </div>
 
     <h3 class="ss-h">Team</h3>
     <div class="field-grid">

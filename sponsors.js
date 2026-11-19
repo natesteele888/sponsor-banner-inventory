@@ -133,6 +133,7 @@
       S.book = res;
       $('#spStatus').textContent = '';
       render();
+      renderAddBox();
       loadHistory();
       loadReceipts();
       loadPackets();
@@ -291,6 +292,123 @@
         }).catch(function () { spot.textContent = 'Could not load the logo. Try again.'; spot.dataset.done = ''; });
       });
     });
+  }
+
+  // ---------- board edits ----------
+  // Add a contact (any board member) and edit a row or mark it paid (editors),
+  // only once the backend says the board copy of the sheet is switched on.
+
+  function renderAddBox() {
+    var box = $('#spAddBox');
+    box.classList.toggle('hidden', !(S.book && S.book.writable && S.book.canAdd));
+  }
+
+  function addContact(e) {
+    e.preventDefault();
+    var f = { company: $('#spa_company').value.trim(), contact: $('#spa_contact').value.trim(), phone: $('#spa_phone').value.trim(),
+      email: $('#spa_email').value.trim(), owner: $('#spa_owner').value.trim(), notes: $('#spa_notes').value.trim() };
+    var msg = $('#spaStatus');
+    if (!f.company) { msg.textContent = 'Add the business or person’s name.'; return; }
+    if (f.email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(f.email)) { msg.textContent = 'That email doesn’t look right.'; return; }
+    msg.textContent = 'Saving…';
+    $('#spaSave').disabled = true;
+    A().apiPost(Object.assign({ action: 'sponsorAdd' }, f)).then(function (res) {
+      $('#spaSave').disabled = false;
+      if (!res.ok) { msg.textContent = res.error || 'That did not save.'; return; }
+      msg.textContent = res.message || 'Added.';
+      $('#spAddForm').reset();
+      load();
+    }).catch(function () { $('#spaSave').disabled = false; msg.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+  }
+
+  function showEditActs(s) {
+    var can = !!(S.book && S.book.writable && S.book.canEdit);
+    $('#spEditActs').classList.toggle('hidden', !can);
+    $('#spPaidBtn').classList.toggle('hidden', !can || s.paid);
+    var st = contactState(s);
+    $('#spContactBtn').classList.toggle('hidden', !can || st !== 'none');
+    $('#spNoBtn').classList.toggle('hidden', !can || s.paid || st === 'not');
+    $('#spEditStatus').textContent = '';
+    $('#spEditBtn').textContent = 'Edit row';
+    S.editing = false;
+  }
+
+  function startEdit() {
+    var s = S.current, t = mainTab(), esc = A().esc;
+    if (!s) return;
+    if (S.editing) return saveEdit();
+    S.editing = true;
+    var fx = S.book.formulaCols || [];
+    $('#spFields').innerHTML = '<div class="field-grid">' + t.headers.map(function (h, i) {
+      if (!h) return '';
+      var v = s.cells[i] || '', calc = fx.indexOf(i) >= 0;
+      return '<label' + (h.length > 22 || /^notes?$/i.test(h) ? ' class="full"' : '') + '>' + esc(h) +
+        '<input type="text" data-col="' + i + '" value="' + esc(v) + '"' + (calc ? ' disabled title="Worked out by the sheet"' : '') + '></label>';
+    }).join('') + '</div><p class="hint">Row ' + s.row + '. Grey boxes are worked out by the sheet.</p>';
+    $('#spEditBtn').textContent = 'Save row';
+  }
+
+  function saveRow(values, done) {
+    var s = S.current;
+    $('#spEditStatus').textContent = 'Saving…';
+    return A().apiPost({ action: 'sponsorEdit', row: s.row, company: s.company, values: values }).then(function (res) {
+      if (!res.ok) { $('#spEditStatus').textContent = res.error || 'That did not save.'; return; }
+      $('#spEditStatus').textContent = res.message || 'Saved.';
+      S.editing = false;
+      return load().then(function () { if (done) done(); });
+    }).catch(function () { $('#spEditStatus').textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+  }
+
+  function saveEdit() {
+    var t = mainTab(), values = {};
+    $$('#spFields input[data-col]').forEach(function (inp) {
+      if (inp.disabled) return;
+      var i = Number(inp.dataset.col);
+      if (inp.value !== (S.current.cells[i] || '')) values[t.headers[i]] = inp.value;
+    });
+    if (!Object.keys(values).length) { S.editing = false; open(S.current.row); return; }
+    var row = S.current.row;
+    saveRow(values, function () { open(row); $('#spEditStatus').textContent = 'Saved.'; });
+  }
+
+  // The Contacted? column: blank (or "No") means nobody has reached out yet;
+  // a name or "Yes" means someone has; "Not sponsoring" means they said no,
+  // which also takes them off the follow-up emails.
+  function contactState(s) {
+    var c = colOf(mainTab(), /^contacted/);
+    var v = c < 0 ? '' : String(s.cells[c] || '').trim();
+    if (/not spons|declin|^pass/i.test(v)) return 'not';
+    return !v || /^no$/i.test(v) ? 'none' : 'yes';
+  }
+
+  function setContacted(value, said, btn) {
+    var t = mainTab(), c = colOf(t, /^contacted/), row = S.current.row;
+    if (c < 0) { $('#spEditStatus').textContent = 'The sheet has no Contacted? column.'; return; }
+    if (btn && !btn.dataset.armed) {
+      btn.dataset.armed = '1'; var was = btn.textContent; btn.textContent = 'Tap again: ' + S.current.company + ' is not sponsoring';
+      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = was; } }, 6000);
+      return;
+    }
+    if (btn) { delete btn.dataset.armed; btn.textContent = 'Not sponsoring'; }
+    var values = {}; values[t.headers[c]] = value;
+    saveRow(values, function () { open(row); $('#spEditStatus').textContent = said; });
+  }
+
+  function markContacted() { setContacted('Yes', 'Marked contacted.'); }
+  function markNotSponsoring() { setContacted('Not sponsoring', 'Marked not sponsoring. No follow-up emails go to them.', $('#spNoBtn')); }
+
+  function markPaid() {
+    var t = mainTab(), c = colOf(t, /^paid/), row = S.current.row;
+    if (c < 0) { $('#spEditStatus').textContent = 'The sheet has no Paid? column.'; return; }
+    var b = $('#spPaidBtn');
+    if (!b.dataset.armed) {
+      b.dataset.armed = '1'; b.textContent = 'Tap again: mark ' + S.current.company + ' paid';
+      setTimeout(function () { if (b.isConnected) { delete b.dataset.armed; b.textContent = 'Mark paid'; } }, 6000);
+      return;
+    }
+    delete b.dataset.armed; b.textContent = 'Mark paid';
+    var values = {}; values[t.headers[c]] = 'Yes';
+    saveRow(values, function () { open(row); $('#spEditStatus').textContent = 'Marked paid. Its receipt is now under Receipts to send.'; });
   }
 
   // ---------- year over year ----------
@@ -518,7 +636,8 @@
       var v = s.cells[i] || '';
       if (!h || !v || /^false$/i.test(v)) return '';
       return '<p class="ss-row"><span>' + esc(h) + '</span>' + linkify(h, v) + '</p>';
-    }).join('') + '<p class="hint">Row ' + s.row + ' on the sheet. Changes to these go on the sheet itself.</p>';
+    }).join('') + '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p>';
+    showEditActs(s);
 
     var p = s.pick || {};
     $('#sp_division').value = p.division || '';
@@ -658,6 +777,11 @@
     $('#spSearch').addEventListener('input', function (e) { S.search = e.target.value; render(); });
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(); });
+    $('#spAddForm').addEventListener('submit', addContact);
+    $('#spEditBtn').addEventListener('click', startEdit);
+    $('#spPaidBtn').addEventListener('click', markPaid);
+    $('#spContactBtn').addEventListener('click', markContacted);
+    $('#spNoBtn').addEventListener('click', markNotSponsoring);
     $('#spReceipts').addEventListener('click', function (e) { var b = e.target.closest('button[data-rc]'); if (b) receiptAct(b); });
     $('#spClose').addEventListener('click', close);
     $('#detailScrim').addEventListener('click', function () { if (S.current) close(); });

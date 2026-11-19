@@ -126,7 +126,9 @@ function doPost(e) {
     if (action === 'seasonRequest') return seasonRequest(data);
     if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
     // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
-    if (action === 'sponsorBook') return ok(sponsorBook());
+    if (action === 'sponsorBook') return ok(Object.assign(sponsorBook(), sponsorPerms_()));
+    if (action === 'sponsorAdd') return sponsorAdd(data);
+    if (action === 'sponsorEdit') return sponsorEdit(data);
     // This season's committed total next to last season's (History.gs). Totals only.
     if (action === 'sponsorHistory') return ok(sponsorHistory());
     if (action === 'receiptList') return ok(receiptList());
@@ -167,8 +169,11 @@ function authorize(idToken) {
   var cacheKey = 'auth_' + Utilities.base64EncodeWebSafe(digest);
   var cache = CacheService.getScriptCache();
   var hit = cache.get(cacheKey);
-  if (hit === 'yes') return { ok: true };
-  if (hit === 'sponsors') return { ok: true, sponsorsOnly: true };
+  if (hit) {
+    var hp = hit.split('|');
+    if (hp[0] === 'yes') return hp[1] ? { ok: true, email: hp[1] } : { ok: true };
+    if (hp[0] === 'sponsors') return hp[1] ? { ok: true, sponsorsOnly: true, email: hp[1] } : { ok: true, sponsorsOnly: true };
+  }
 
   var lookup = UrlFetchApp.fetch(
     'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FIREBASE_WEB_API_KEY,
@@ -189,13 +194,15 @@ function authorize(idToken) {
     if (doc.getResponseCode() !== 200) return denied;
     allowed = ALLOWED_ROLES.indexOf(roleFromApproved(JSON.parse(doc.getContentText()), user.localId)) >= 0;
   }
+  // Only an address Google has verified is kept; it decides who may edit sponsor rows.
+  var mail = user.emailVerified ? String(user.email || '').toLowerCase() : '';
   if (allowed) {
-    cache.put(cacheKey, 'yes', 300);
-    return { ok: true };
+    cache.put(cacheKey, 'yes' + (mail ? '|' + mail : ''), 300);
+    return mail ? { ok: true, email: mail } : { ok: true };
   }
-  if (user.emailVerified && sponsorsOnlyEmails_().indexOf(String(user.email || '').toLowerCase()) >= 0) {
-    cache.put(cacheKey, 'sponsors', 300);
-    return { ok: true, sponsorsOnly: true };
+  if (mail && sponsorsOnlyEmails_().indexOf(mail) >= 0) {
+    cache.put(cacheKey, 'sponsors|' + mail, 300);
+    return { ok: true, sponsorsOnly: true, email: mail };
   }
   return denied;
 }

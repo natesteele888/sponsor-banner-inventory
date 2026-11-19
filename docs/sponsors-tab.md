@@ -125,3 +125,24 @@ Until `RECEIPTS_LIVE` is set to `on`, every Send goes only to `RECEIPTS_TEST_TO`
 What sponsors send on the info packet page (level, business, jersey name, write-up, socials, banner choice, logo) shows under **Sponsor info packets** on the Sponsors tab, newest first, with new ones marked. Open one to see everything they sent and the logo from its files folder. A sponsor's card says "Info packet in" when the business name matches. It's read live from the "LYBS Sponsor Info Packets" sheet (tab Packets) and never written to.
 
 Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.
+
+## Board edits (the board's own copy of the sheet)
+
+The app can run on the board's own copy of the sponsorship sheet instead of
+reading the sponsorship lead's sheet. Nothing changes until this is switched on.
+
+- **Switch on:** set the Script Property `SPONSOR_SHEET_USE` to the copy's
+  spreadsheet id. The app then reads and writes only that copy.
+- **Switch back:** delete `SPONSOR_SHEET_USE`. The app goes back to reading the
+  lead's sheet by name, and every edit is refused, so that sheet is never
+  written from the app.
+- **Add a contact:** any signed-in board member can add a person or business
+  they reached out to. A name already on the sheet is refused. Columns the
+  sheet works out with a formula get the row above's formula.
+- **Edit a row, Mark paid, Mark contacted, Not sponsoring:** only editors.
+  Editors are the league admin account plus the Google addresses in the
+  Script Property `SPONSOR_EDITORS` (comma separated). Paid rows and amounts
+  can be changed. Formula columns are left alone. "Not sponsoring" goes in
+  the Contacted? column and takes the row off follow-up emails.
+- Each save checks the row still holds the same sponsor, so a sheet that was
+  re-sorted since the page loaded is not written to the wrong row.
