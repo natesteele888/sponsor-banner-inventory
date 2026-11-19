@@ -927,6 +927,7 @@
     $('#spEditStatus').textContent = '';
     $('#spEditBtn').textContent = 'Edit row';
     $('#spSaveBtn').classList.add('hidden');
+    $('#spEditActs').classList.remove('editing');
     S.editing = false;
   }
 
@@ -955,6 +956,8 @@
     }).join('') + '</div><p class="hint">Row ' + s.row + '. Dropdowns and checkboxes are the sheet’s own. Grey boxes are worked out by the sheet. Hold Save changes to confirm.</p>';
     $('#spEditBtn').textContent = 'Cancel';
     $('#spSaveBtn').classList.remove('hidden');
+    // While editing, only Cancel and Save show, so the one thing to do is clear.
+    $('#spEditActs').classList.add('editing');
   }
 
   function saveRow(values, done) {
@@ -1179,7 +1182,7 @@
   // The one thing to know about a sponsor, in color only when money is involved.
   function cardBadge(s) {
     var badge = A().badge;
-    if (isIn(s)) return s.paid ? badge('Paid', 'ok') : badge('Not paid yet', 'warn');
+    if (isIn(s)) return s.paid ? badge('Paid', 'ok') : s.inKind ? badge('In kind', 'ok') : badge('Not paid yet', 'warn');
     if (FILTERS.lapsed(s)) return badge('Past sponsor', 'muted');
     if (!String(s.contacted).trim()) return badge('Not contacted', 'muted');
     return badge('Contacted', 'muted');

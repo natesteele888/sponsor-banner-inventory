@@ -506,6 +506,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 #spAddBox summary { cursor: pointer; margin: 0; min-height: 28px; display: flex; align-items: center; }
 #spAddBox[open] summary { margin-bottom: 8px; }
 #spEditActs { flex-wrap: wrap; }
+#spEditActs.editing > :not(#spEditBtn):not(#spSaveBtn):not(#spEditStatus) { display: none; }
 .rc-path { display: block; font-size: 12.5px; font-weight: 600; color: var(--gold); }
 
 /* Press and hold to confirm: a ring fills while the button is held. */
