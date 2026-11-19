@@ -84,6 +84,7 @@ function receiptRows_() {
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
     row.online = /\b(online|website|crossbar|card)\b/i.test(row.how || (row.paidText + ' ' + row.notes));
+    row.inKind = /\bin.?kind\b/i.test(row.how || '');
     // An upgrade paid after an earlier receipt: this receipt is for the new
     // money only, with the season's total under it, so nothing is counted twice.
     var pre = companyKey_(row.company) + '|' + row.email.toLowerCase() + '|', before = 0;
@@ -110,7 +111,11 @@ function receiptEmail_(r, s, when) {
   var ein = s.ein || 'EIN NOT SET';
   var taxLine = RECEIPT_ORG + ' is a 501(c)(3) charitable, tax-exempt organization. Our federal EIN number is ' + ein + '.';
   var noGoods = 'The donor received no goods or services in return for this contribution.';
-  var rows = [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation amount', amount], ['Season total', r.given ? money_(r.total) : ''], ['Payment method', r.how], ['Date', date]]
+  // A gift of goods or services: the receipt says what kind of gift it was
+  // and puts no dollar value on it.
+  var rows = (r.inKind
+    ? [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation', 'In-kind gift of goods or services'], ['Date', date]]
+    : [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation amount', amount], ['Season total', r.given ? money_(r.total) : ''], ['Payment method', r.how], ['Date', date]])
     .filter(function (x) { return x[1]; });
 
   var thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for sponsoring ' + RECEIPT_ORG + ' this season!';
@@ -204,7 +209,7 @@ function receiptList() {
   return {
     settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().connected },
     items: receiptRows_().map(function (r) {
-      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.given || r.amount), status: r.status, at: r.at || '', online: !!r.online };
+      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', online: !!r.online, inKind: !!r.inKind };
     })
   };
 }

@@ -112,7 +112,8 @@
       owedPlaque: colOf(t, /^owed a plaque/),
       notes: colOf(t, /^notes?$/),
       address: colOf(t, /^address/),
-      walkIn: colOf(t, /^walk.?in/)
+      walkIn: colOf(t, /^walk.?in/),
+      how: colOf(t, /^(paid how|payment method|paid by)/)
     };
     var picks = {};
     (S.book.teams || []).forEach(function (p) { picks[p.key] = p; });
@@ -131,6 +132,7 @@
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
         sheetTeam: get('team'), pick: pick, notes: get('notes'),
         address: get('address'), area: townOf(get('address')), walkIn: yes(get('walkIn')),
+        how: get('how'), inKind: IN_KIND.test(get('how')),
         team: hasTeam(pick) ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
@@ -138,6 +140,8 @@
 
   // Signed up for this season: an amount on the sheet ("NONE"/$0 doesn't count).
   function isIn(s) { return s.amount > 0; }
+  // Paid in goods or services (Paid how says "In kind"): counted on its own, never as cash.
+  var IN_KIND = /\bin.?kind\b/i;
 
   var FILTERS = {
     all: function () { return true; },
@@ -241,17 +245,19 @@
             (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
         '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
-        (i.online ? '<span class="rc-path">Paid online: send this one, not Crossbar’s receipt</span>' : '') + '</div>' +
-        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div></li>';
+        (i.online ? '<span class="rc-path">Paid online: send this one, not Crossbar’s receipt</span>' : '') +
+        (i.inKind ? '<span class="rc-path">Paid in kind: the receipt describes the gift and shows no dollar amount</span>' : '') + '</div>' +
+        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
     };
-    box.innerHTML =
-      '<h2 class="rc-h">' + (ready.length ? ready.length + ' receipt' + (ready.length === 1 ? '' : 's') + ' to send' : 'Receipts: all caught up') + '</h2>' +
+    box.innerHTML = '<details class="rc-box"' + (S.rcOpen ? ' open' : '') + '>' +
+      '<summary class="rc-h">' + (ready.length ? 'Receipts ready to send ' + countBadge(ready.length) : 'Receipts: all caught up') + '</summary>' +
       '<p class="hint rc-note">Sponsors get this receipt with the packet link, whether they paid by check or online. Plain donations that aren’t for a sponsorship keep Crossbar’s own receipt and never show here.</p>' +
       (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
       '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
       (web.length || sent.length ? '<details class="rc-more"><summary>Sent or not needed (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
         web.concat(sent).map(row).join('') + '</ul></details>' : '') +
-      '<div id="rcPreview" class="rc-preview hidden"></div>';
+      '</details>';
+    keepOpen(box, 'rcOpen');
     box.classList.remove('hidden');
   }
 
@@ -329,7 +335,7 @@
   function receiptAct(btn) {
     var li = btn.closest('.rc-item'), key = li.dataset.key, how = btn.dataset.rc, msg = li.querySelector('.rc-msg');
     var item = S.receipts.items.filter(function (i) { return i.key === key; })[0];
-    if (how === 'preview') return showReceipt($('#rcPreview'), key, msg, { send: false });
+    if (how === 'preview') return showReceipt(rowPreview(li), key, msg, { send: false });
     // Send asks once more on the button itself; the second tap sends.
     if (how === 'send' && !btn.dataset.armed) {
       btn.dataset.armed = '1';
@@ -370,6 +376,22 @@
     'mailing address': 'the league’s mailing address', EIN: 'the league’s tax ID', 'who issues it': 'who signs the receipts' };
   function setupWords(list) { return list.map(function (k) { return SETUP_WORDS[k] || k; }).join(', '); }
 
+  function countBadge(n) { return '<span class="rc-badge" aria-label="' + n + ' ready">' + n + '</span>'; }
+  // A box stays open or closed across refreshes, the way the person left it.
+  function keepOpen(box, key) {
+    var dt = box.querySelector('details.rc-box');
+    if (dt) dt.addEventListener('toggle', function () { S[key] = dt.open; });
+  }
+  // A preview opens right under its own sponsor's row; any other one closes.
+  function rowPreview(li) {
+    var pv = li.querySelector('.rc-preview');
+    document.querySelectorAll('.rc-item .rc-preview').forEach(function (p) {
+      if (p !== pv) { p.classList.add('hidden'); p.innerHTML = ''; }
+    });
+    pv.innerHTML = '';
+    return pv;
+  }
+
   function renderNudges() {
     var box = $('#spNudges'), esc = A().esc, N = S.nudges;
     if (!N || !N.rounds || !N.rounds.length) { box.classList.add('hidden'); return; }
@@ -379,9 +401,20 @@
     if (set.missing && set.missing.length) notes.push('Still needed before these can go out: ' + setupWords(set.missing) + '.');
     else if (!set.live) notes.push('Test mode: follow-ups go to the test address, not the sponsor.');
     if (!set.sender) notes.push('The league email address is not connected yet, so nothing can go to a sponsor.');
-    var head = N.current
-      ? (ready.length ? ready.length + ' follow-up' + (ready.length === 1 ? '' : 's') + ' to send' : 'Follow-ups: all caught up') + ' · ' + esc(N.current.label)
-      : 'Follow-ups start ' + esc(fmtDay(N.next && N.next.date));
+    var on = !!(N.current && N.started), can = canEdit();
+    var head = !N.current ? 'Follow-ups: off. First round ' + esc(fmtDay(N.next && N.next.date))
+      : !on ? 'Follow-ups: off · ' + esc(N.current.label)
+      : (ready.length ? 'Follow-ups to send ' + countBadge(ready.length) : 'Follow-ups: all caught up') + ' · ' + esc(N.current.label);
+    var count = N.items.length + ' contacted sponsor' + (N.items.length === 1 ? ' is' : 's are') + ' on the list right now.';
+    var body = function () { return !N.current
+      ? '<p class="hint">' + count + ' Follow-ups stay off until someone starts a round here. Even then, each one waits for Preview and Send.</p>'
+      : !on
+        ? '<p class="hint">' + count + ' Nothing goes out unless someone starts this round. Even then, each one waits for Preview and Send.</p>' +
+          (can ? '<div class="rc-acts"><button class="btn small" data-nd="start" type="button">Start this round</button></div>' : '') +
+          '<div class="rc-msg nd-msg" role="status"></div>'
+        : '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
+          (can ? '<div class="rc-acts nd-off"><button class="btn small" data-nd="stop" type="button">Turn this round off</button></div>' : '') +
+          '<div class="rc-msg nd-msg" role="status"></div>'; };
     var row = function (i) {
       var acts = i.status === 'ready'
         ? '<button class="btn small" data-nd="preview" type="button">Preview</button>' +
@@ -390,38 +423,58 @@
         : '<span class="rc-state">' + (i.status === 'sent' ? 'Sent' : 'Skipped') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
           (i.status === 'sent' ? '' : '<button class="btn small" data-nd="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '"><div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.email) + '</span></div>' +
-        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div></li>';
+        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
     };
-    box.innerHTML = '<h2 class="rc-h">' + head + '</h2>' +
-      (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
-      (N.current ? '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' : '<p class="hint">' + N.items.length + ' contacted sponsor' + (N.items.length === 1 ? ' is' : 's are') + ' on the list right now. Nothing sends on its own: once it starts, each one waits for Preview and Send.</p>') +
+    box.innerHTML = '<details class="rc-box"' + (S.ndOpen ? ' open' : '') + '><summary class="rc-h">' + head + '</summary>' +
+      (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') + body() +
       (done.length ? '<details class="rc-more"><summary>Sent or skipped this round (' + done.length + ')</summary><ul class="rc-list">' + done.map(row).join('') + '</ul></details>' : '') +
       '<details class="rc-more"><summary>Schedule</summary><ul class="rc-list">' + N.rounds.map(function (r) {
         return '<li class="rc-item" data-round="' + esc(r.date) + '"><div class="rc-who"><b>' + esc(fmtDay(r.date)) + '</b><span>' + esc(r.label) + '</span></div>' +
-          '<div class="rc-acts"><button class="btn small" data-nd="sample" type="button">Preview</button></div><div class="rc-msg" role="status"></div></li>';
-      }).join('') + '</ul></details>' +
-      '<div id="ndPreview" class="rc-preview hidden"></div>';
+          '<div class="rc-acts"><button class="btn small" data-nd="sample" type="button">Preview</button></div><div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
+      }).join('') + '</ul></details></details>';
+    keepOpen(box, 'ndOpen');
     box.classList.remove('hidden');
   }
 
-  function showNudgePreview(res) {
-    var pv = $('#ndPreview');
-    pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b><button class="btn small" type="button" id="ndPvClose">Close</button></div>';
+  function showNudgePreview(res, li) {
+    var pv = rowPreview(li);
+    pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b><button class="btn small" type="button" data-pv="close">Close</button></div>';
     var f = document.createElement('iframe');
     f.className = 'rc-frame'; f.title = 'Follow-up preview'; f.setAttribute('sandbox', ''); f.srcdoc = res.html;
     pv.appendChild(f); pv.classList.remove('hidden');
-    $('#ndPvClose').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
-    pv.scrollIntoView({ block: 'nearest' });
+    pv.querySelector('[data-pv="close"]').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+    if (pv.scrollIntoView) pv.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Start or turn off this round. Starting asks once more on the button.
+  function nudgeRound(btn, how) {
+    var msg = $('#spNudges .nd-msg');
+    if (how === 'start' && !btn.dataset.armed) {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Tap again to start ' + S.nudges.current.label;
+      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Start this round'; } }, 6000);
+      return;
+    }
+    btn.disabled = true;
+    if (msg) msg.textContent = 'Saving…';
+    A().apiPost({ action: 'nudgeRound', how: how, round: S.nudges.current.date }).then(function (res) {
+      if (!res.ok) { btn.disabled = false; if (msg) msg.textContent = res.error || 'That did not go through.'; return; }
+      $('#spStatus').textContent = res.message || 'Saved.';
+      S.ndOpen = true;
+      loadNudges();
+    }).catch(function () { btn.disabled = false; if (msg) msg.textContent = 'Could not reach the backend. Try again.'; });
   }
 
   function nudgeAct(btn) {
-    var li = btn.closest('.rc-item'), how = btn.dataset.nd, msg = li.querySelector('.rc-msg');
+    var how = btn.dataset.nd;
+    if (how === 'start' || how === 'stop') return nudgeRound(btn, how);
+    var li = btn.closest('.rc-item'), msg = li.querySelector('.rc-msg');
     if (how === 'preview' || how === 'sample') {
       msg.textContent = 'Building the preview…';
       var q = how === 'sample' ? { action: 'nudgePreview', round: li.dataset.round } : { action: 'nudgePreview', key: li.dataset.key };
       return A().apiPost(q).then(function (res) {
         msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
-        if (res.ok) showNudgePreview(res);
+        if (res.ok) showNudgePreview(res, li);
       }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
     }
     var item = S.nudges.items.filter(function (i) { return i.key === li.dataset.key; })[0];
@@ -545,9 +598,15 @@
     e.preventDefault();
     var f = { company: $('#spa_company').value.trim(), contact: $('#spa_contact').value.trim(), phone: $('#spa_phone').value.trim(),
       email: $('#spa_email').value.trim(), owner: $('#spa_owner').value.trim(), notes: $('#spa_notes').value.trim() };
+    var lvl = $('#spa_tier') ? $('#spa_tier').value : '', amt = $('#spa_amount') ? money($('#spa_amount').value) : 0;
+    var how = $('#spa_how') ? $('#spa_how').value : '';
     var msg = $('#spaStatus');
     if (!f.company) { msg.textContent = 'Add the business or person’s name.'; return; }
     if (f.email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(f.email)) { msg.textContent = 'That email doesn’t look right.'; return; }
+    if (lvl && !(amt > 0)) { msg.textContent = 'Add the amount for ' + lvl + '.'; return; }
+    // A level makes it a sponsor for this season: Status follows to "Signed up, not paid".
+    if (lvl) { f.tier = lvl; f.amount = fmtMoney(amt); if (!f.contacted) f.contacted = f.owner || 'Yes'; }
+    if (lvl && how === 'inkind') f.how = PAY_HOW.inkind;
     msg.textContent = 'Saving…';
     $('#spaSave').disabled = true;
     A().apiPost(Object.assign({ action: 'sponsorAdd' }, f)).then(function (res) {
@@ -563,14 +622,56 @@
     }).catch(function () { $('#spaSave').disabled = false; msg.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
   }
 
+  // The levels a new sponsor can pick, with their usual price.
+  var ADD_LEVELS = [['Gameday', 0], ['All-Star', 300], ['MVP', 500], ['Championship', 750], ['Championship+', 1000]];
+  function addLevelPicked() {
+    var lv = ADD_LEVELS.filter(function (l) { return l[0] === $('#spa_tier').value; })[0];
+    if (lv && lv[1] && !money($('#spa_amount').value)) $('#spa_amount').value = fmtMoney(lv[1]);
+    $('#spa_money').classList.toggle('hidden', !$('#spa_tier').value);
+  }
+
+  // Website sponsor forms: paste what the form says (the Registration Details
+  // page, or the email), and the fields fill in for a check before Add.
+  // Only reads the pasted words; nothing is saved until Add sponsor.
+  function readSponsorForm(text) {
+    var t = String(text || '').replace(/\r/g, ''), out = {};
+    var line = function (re) {
+      var m = t.match(new RegExp('^\\s*\\*?\\s*(?:' + re + ')\\s*\\*?\\s*[:\\-\\t]\\s*(.+)$', 'im'));
+      return m ? m[1].replace(/\*+/g, '').trim() : '';
+    };
+    out.company = line('business(?: name)?|company(?: name)?|organi[sz]ation(?: name)?|sponsor(?: name)?');
+    out.contact = line('contact(?: name| person)?|your name|full name|name');
+    if (out.contact && out.company && out.contact === out.company) out.contact = '';
+    var em = t.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i); out.email = em ? em[0] : '';
+    var ph = t.match(/\(?\b\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}\b/); out.phone = ph ? ph[0].trim() : '';
+    var lvTxt = line('sponsorship(?: level| tier| package)?|level|tier|package') || t;
+    var hits = ADD_LEVELS.map(function (l) { return l[0]; }).filter(function (n) {
+      return new RegExp('(^|[^A-Za-z])' + n.replace(/[+]/g, '\\+').replace('-', '[- ]?') + (n === 'Championship' ? '(?!\\s*\\+|\\s*plus)' : '') + '(?![A-Za-z])', 'i').test(lvTxt);
+    });
+    out.tier = hits.length ? hits[hits.length - 1] : '';
+    var am = (line('amount|total|price') || lvTxt).match(/\$\s?([\d,]+(?:\.\d{2})?)/);
+    out.amount = am ? money(am[1]) : 0;
+    if (!out.amount && out.tier) out.amount = (ADD_LEVELS.filter(function (l) { return l[0] === out.tier; })[0] || [0, 0])[1];
+    return out;
+  }
+  function fillFromForm() {
+    var f = readSponsorForm($('#spa_paste').value), said = [];
+    var put = function (id, v, label) { if (v) { $(id).value = v; said.push(label); } };
+    put('#spa_company', f.company, 'business'); put('#spa_contact', f.contact, 'contact'); put('#spa_email', f.email, 'email'); put('#spa_phone', f.phone, 'phone');
+    if (f.tier) { $('#spa_tier').value = f.tier; said.push('level'); }
+    if (f.amount) { $('#spa_amount').value = fmtMoney(f.amount); said.push('amount'); }
+    addLevelPicked();
+    $('#spaStatus').textContent = said.length ? 'Filled in ' + said.join(', ') + '. Check them, then tap Add sponsor.' : 'Couldn’t find anything to fill in. Type it in below.';
+  }
+
   // ---------- record a payment ----------
   // A payment came in (online or a check). Find who it's from on the sheet,
   // the likeliest first: signed up and waiting on money, then people someone
   // reached out to, then walk-ins, then everyone else. Picking one marks them
   // paid and opens their receipt preview; nothing is sent until Send is tapped.
   // How it was paid: the words that go in the sheet's Paid how column and on the receipt.
-  var PAY_HOW = { online: 'Crossbar (online)', check: 'Check', cash: 'Cash', venmo: 'Venmo' };
-  var PAY_SAID = { online: 'online through Crossbar', check: 'by check', cash: 'in cash', venmo: 'by Venmo' };
+  var PAY_HOW = { online: 'Crossbar (online)', check: 'Check', cash: 'Cash', venmo: 'Venmo', inkind: 'In kind' };
+  var PAY_SAID = { online: 'online through Crossbar', check: 'by check', cash: 'in cash', venmo: 'by Venmo', inkind: 'in kind (goods or services)' };
   var PAY_GROUPS = ['Upgrade waiting on payment', 'Signed up, waiting on payment', 'Contacted, not signed up yet', 'Walk-in', 'On the sheet', 'Already marked paid'];
   var PAY_SKIP = /^(the|and|of|inc|llc|co|corp|company|ltd|pc|p c|dba|group)$/;
   function payWords(v) { return norm(v).split(' ').filter(function (w) { return w.length > 1 && !PAY_SKIP.test(w); }); }
@@ -1030,13 +1131,17 @@
     if (!S.book) return;
     var esc = A().esc, badge = A().badge, facts = A().facts;
     var all = sponsors();
-    var inn = all.filter(isIn), paid = inn.filter(function (s) { return s.paid; });
-    var committed = inn.reduce(function (n, s) { return n + s.amount; }, 0);
+    var inn = all.filter(isIn), cash = inn.filter(function (s) { return !s.inKind; });
+    var kind = inn.filter(function (s) { return s.inKind; });
+    var paid = cash.filter(function (s) { return s.paid; });
+    var committed = cash.reduce(function (n, s) { return n + s.amount; }, 0);
     var paidAmt = paid.reduce(function (n, s) { return n + s.amount; }, 0);
+    var kindAmt = kind.reduce(function (n, s) { return n + s.amount; }, 0);
     // Dollar amounts first and wider, so five-digit totals fit as well as three.
     $('#spSummary').innerHTML =
       stat(fmtMoney(committed), 'committed', 'money') +
       stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money') +
+      (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money') : '') +
       stat(inn.length, S.book.season + ' sponsors') +
       stat(all.filter(FILTERS.notContacted).length, 'not contacted') +
       stat(all.filter(FILTERS.lapsed).length, 'past, not back yet') +
@@ -1302,6 +1407,9 @@
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(); });
     $('#spAddForm').addEventListener('submit', addContact);
+    $('#spa_tier').addEventListener('change', addLevelPicked);
+    $('#spaFill').addEventListener('click', fillFromForm);
+    $('#spAddForm').addEventListener('reset', function () { setTimeout(addLevelPicked, 0); });
     $('#spPayForm').addEventListener('submit', findPayer);
     $('#spPayMatches').addEventListener('click', function (e) { var b = e.target.closest('button[data-pay]'); if (b) pickPayer(b); });
     $('#spEditBtn').addEventListener('click', startEdit);

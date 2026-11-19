@@ -419,6 +419,15 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .rc-more { margin-top: 6px; }
 .rc-more summary { cursor: pointer; font-size: 13px; color: var(--ink2); min-height: 28px; }
 .rc-preview { margin-top: 10px; }
+.rc-item .rc-preview { flex: 1 0 100%; margin-top: 4px; }
+.rc-box > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; list-style: none; }
+.rc-box > summary::-webkit-details-marker { display: none; }
+.rc-box > summary::after { content: '▸'; margin-left: auto; color: var(--ink2); }
+.rc-box[open] > summary::after { content: '▾'; }
+.rc-box[open] > summary { margin-bottom: 6px; }
+.rc-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--accent, #2E52E8); color: #fff; font: 700 12.5px 'DM Sans', sans-serif; }
+.nd-off { margin-top: 8px; }
+#spa_money { padding: 0; }
 .rc-pv-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; min-width: 0; }
 .rc-pv-top b { min-width: 0; overflow-wrap: anywhere; }
 .rc-frame { width: 100%; height: 620px; border: 1px solid var(--line); border-radius: 10px; background: #F7F7F7; }

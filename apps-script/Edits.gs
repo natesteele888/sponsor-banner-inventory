@@ -235,9 +235,10 @@ function sponsorAdd(data) {
       if (companyKey_(t.v[r][cCo]) === key) return fail(company + ' is already on the sheet (row ' + (r + 1) + ').');
     }
     var vals = { company: company, contact: data.contact, phone: data.phone, email: data.email, owner: data.owner, contacted: data.contacted, notes: data.notes,
-                 tier: data.tier, amount: data.amount };
+                 tier: data.tier, amount: data.amount, how: /^in kind$/i.test(String(data.how || '').trim()) ? 'In kind' : '' };
     var map = { company: cCo, contact: col(/^contact$/), phone: col(/^phone/), email: col(/^email/), owner: col(/^lybs owner/),
-                contacted: col(/^contacted/), notes: col(/^notes?$/), tier: col(new RegExp('^tier selected ' + SEASON)), amount: col(/^amount/) };
+                contacted: col(/^contacted/), notes: col(/^notes?$/), tier: col(new RegExp('^tier selected ' + SEASON)), amount: col(/^amount/),
+                how: col(/^(paid how|payment method|paid by)/) };
     var row = [];
     for (var i = 0; i < t.head.length; i++) row.push('');
     Object.keys(map).forEach(function (k) { if (map[k] >= 0 && vals[k]) row[map[k]] = clean(String(vals[k]).trim(), k === 'notes' ? 500 : 120); });
