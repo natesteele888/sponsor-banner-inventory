@@ -125,6 +125,10 @@ main { position: relative; z-index: 1; padding: 14px 16px 32px; max-width: 1040p
   width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--panel);
   flex-shrink: 0;
 }
+/* A sponsor's logo: wide, so it sits whole on white rather than cropped. */
+.banner-card img.sp-card-logo {
+  width: 72px; height: 40px; object-fit: contain; background: #fff; padding: 3px; border-radius: 6px;
+}
 .banner-card .thumb-placeholder {
   width: 64px; height: 64px; border-radius: 8px; background: var(--panel); flex-shrink: 0;
 }
@@ -557,3 +561,4 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 }
 /* The narrowest phones: the Dashboard button already goes home, so the logo steps aside. */
 @media (max-width: 360px) { .brand a { display: none; } }
+@media (max-width: 480px) { .banner-card img.sp-card-logo { width: 56px; height: 32px; } }

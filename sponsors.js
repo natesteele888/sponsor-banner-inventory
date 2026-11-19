@@ -191,6 +191,7 @@
       loadNudges();
       loadPackets();
       loadUpgrades();
+      loadLogos();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
@@ -568,6 +569,20 @@
       render();
     }).catch(function () { /* nothing waiting shows */ });
   }
+  // Logos from the league's Sponsor Logos folder in Drive, matched to the
+  // sponsors by name on the backend. A sponsor with one shows it on its card.
+  function loadLogos() {
+    A().apiPost({ action: 'sponsorLogoList' }).then(function (res) {
+      if (!res || !res.ok || !res.logos) return;
+      S.logos = res.logos;
+      render();
+    }).catch(function () { /* the cards show without logos */ });
+  }
+  function logoFor(s) {
+    var img = s && S.logos ? S.logos[s.key] : null;
+    return img && /^image\/(png|jpeg|gif|webp)$/.test(img.mime) && /^[A-Za-z0-9+\/=]+$/.test(img.base64) ? img : null;
+  }
+
   function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
   // What's still owed for an upgrade: the level's price less what the sheet shows paid.
   function upgradeLeft(s, u) { return Math.max(0, (u.price || 0) - (s.paid ? s.amount || 0 : 0)) || u.owed || 0; }
@@ -1239,7 +1254,9 @@
       return (b.amount - a.amount) || a.company.localeCompare(b.company);
     });
     $('#spList').innerHTML = items.map(function (s) {
+      var logo = logoFor(s);
       return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '">' +
+        (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
           facts([
@@ -1472,7 +1489,8 @@
   //
   // The logo Ballclub shows as "Sponsored by" on the team's page. One the
   // board sets here wins; otherwise a PNG/JPG logo the sponsor sent through
-  // their reply form is used. Both stay in Drive, read through the backend.
+  // their reply form, else the one in the league's Sponsor Logos folder whose
+  // name matches. All stay in Drive, read through the backend.
 
   function showLogo(img, from) {
     var el = $('#spLogo');
@@ -1485,6 +1503,7 @@
     }
     $('#spLogoFrom').textContent = from === 'set' ? 'Set here.'
       : from === 'form' ? 'From the logo they sent with their reply form. Choose one to use a different one.'
+      : from === 'library' ? "From the league's Sponsor Logos folder in Drive. Choose one to use a different one."
       : 'No logo yet. The team page shows just the name until one is set.';
     $('#spLogoRemove').classList.toggle('hidden', from !== 'set');
   }

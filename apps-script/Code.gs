@@ -163,6 +163,8 @@ function doPost(e) {
     if (action === 'spotlightCardSave') return spotlightCardSave(data);
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
+    // A small copy of each sponsor's logo from the league's Sponsor Logos folder.
+    if (action === 'sponsorLogoList') return ok(sponsorLogoList());
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.
     if (action === 'sponsorSheet') return ok(sponsorSheet());
     return fail('Unknown action.');
