@@ -144,6 +144,9 @@ function doPost(e) {
     if (action === 'sponsorPackets') return ok(sponsorPackets());
     if (action === 'packetAdd') return packetAdd(data);
     if (action === 'packetLogo') return packetLogo(data);
+    if (action === 'spotlightSponsors') return spotlightSponsors();
+    if (action === 'spotlightLogo') return spotlightLogo(data);
+    if (action === 'spotlightCardSave') return spotlightCardSave(data);
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.

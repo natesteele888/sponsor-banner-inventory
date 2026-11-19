@@ -233,3 +233,17 @@ that sponsor's row, so the sheet shows it too.
 The receipt and the follow-ups carry the LYBS logo as a letterhead, top left
 (`icons/lybs-wordmark.png`, attached inline when sent; `LEAGUE_LOGO_URL`
 overrides it).
+
+## Paid sponsors for the posting plan (Spotlights.gs)
+
+The Sponsors app shows nothing social. Marking a sponsor paid is the trigger
+for the Dashboard's Social Studio, which asks this script for paid sponsors at
+Championship or MVP (`spotlightSponsors`: level, team, jersey name and
+write-up, no contacts or amounts) and their logo (`spotlightLogo`), plans
+their spotlight posts and hands back the card it drew (`spotlightCardSave`).
+The card is filed as `spotlight-<key>.png` in a **Sponsor Spotlight Cards**
+folder in the Drive of the account this script runs as. The folder is made
+private, and nothing is saved there if anyone has been given access to it.
+The three actions answer the league admin only, the one account Social
+Studio opens for. Nothing here posts anywhere. See lybs-reporting
+`docs/social-spotlights.md`.
