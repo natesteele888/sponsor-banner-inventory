@@ -558,7 +558,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 @media (max-width: 760px) {
   .lv-wrap { width: auto; left: 0; transform: none; }
   .lv-swipe { display: block; }
-  .lv-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 12px; padding: 16px 4px 10px; margin: 0 -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
+  .lv-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 12px; padding: 16px 10px 10px; margin: 0 -10px; scrollbar-width: none; }
   .lv-list::-webkit-scrollbar { display: none; }
   .lv { flex: 0 0 78%; scroll-snap-align: center; }
 }
