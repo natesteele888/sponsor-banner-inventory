@@ -227,7 +227,7 @@
     if (!R.items.length) { box.classList.add('hidden'); return; }
     var set = R.settings || {};
     var notes = [];
-    if (set.missing && set.missing.length) notes.push('Not set up yet: ' + set.missing.join(', ') + '.');
+    if (set.missing && set.missing.length) notes.push('Still needed before receipts can go out: ' + setupWords(set.missing) + '.');
     else if (!set.live) notes.push('Test mode: receipts go to the test address, not the sponsor.');
     if (!set.packet) notes.push('No sponsor packet link set, so receipts go without it.');
     var can = canEdit();
@@ -365,15 +365,20 @@
     }).catch(function () { /* the box stays hidden */ });
   }
 
+  // Plain words for the settings a card says are missing.
+  var SETUP_WORDS = { NUDGE_SIGN: 'who the emails are signed from', RECEIPT_ORG_ADDRESS: 'the league’s mailing address',
+    'mailing address': 'the league’s mailing address', EIN: 'the league’s tax ID', 'who issues it': 'who signs the receipts' };
+  function setupWords(list) { return list.map(function (k) { return SETUP_WORDS[k] || k; }).join(', '); }
+
   function renderNudges() {
     var box = $('#spNudges'), esc = A().esc, N = S.nudges;
     if (!N || !N.rounds || !N.rounds.length) { box.classList.add('hidden'); return; }
     var ready = N.items.filter(function (i) { return i.status === 'ready'; });
     var done = N.items.filter(function (i) { return i.status !== 'ready'; });
     var set = N.settings || {}, notes = [];
-    if (set.missing && set.missing.length) notes.push('Not set up yet: ' + set.missing.join(', ') + '.');
+    if (set.missing && set.missing.length) notes.push('Still needed before these can go out: ' + setupWords(set.missing) + '.');
     else if (!set.live) notes.push('Test mode: follow-ups go to the test address, not the sponsor.');
-    if (!set.sender) notes.push('The league email address is not connected yet.');
+    if (!set.sender) notes.push('The league email address is not connected yet, so nothing can go to a sponsor.');
     var head = N.current
       ? (ready.length ? ready.length + ' follow-up' + (ready.length === 1 ? '' : 's') + ' to send' : 'Follow-ups: all caught up') + ' · ' + esc(N.current.label)
       : 'Follow-ups start ' + esc(fmtDay(N.next && N.next.date));
@@ -389,7 +394,7 @@
     };
     box.innerHTML = '<h2 class="rc-h">' + head + '</h2>' +
       (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
-      (N.current ? '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' : '<p class="hint">' + N.items.length + ' contacted sponsor' + (N.items.length === 1 ? '' : 's') + ' would get it today.</p>') +
+      (N.current ? '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' : '<p class="hint">' + N.items.length + ' contacted sponsor' + (N.items.length === 1 ? ' is' : 's are') + ' on the list right now. Nothing sends on its own: once it starts, each one waits for Preview and Send.</p>') +
       (done.length ? '<details class="rc-more"><summary>Sent or skipped this round (' + done.length + ')</summary><ul class="rc-list">' + done.map(row).join('') + '</ul></details>' : '') +
       '<details class="rc-more"><summary>Schedule</summary><ul class="rc-list">' + N.rounds.map(function (r) {
         return '<li class="rc-item" data-round="' + esc(r.date) + '"><div class="rc-who"><b>' + esc(fmtDay(r.date)) + '</b><span>' + esc(r.label) + '</span></div>' +
