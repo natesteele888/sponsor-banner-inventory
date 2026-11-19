@@ -525,6 +525,27 @@
     whenBannersLoaded: function () { return state.loaded ? Promise.resolve() : loadBanners(); }
   };
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  // A new version takes over by itself: check for one each time the app comes
+  // back on screen, and reload once when it has taken over. While someone is
+  // typing in a box, wait until the app is next opened so nothing is lost.
+  if ('serviceWorker' in navigator) try {
+    var hadWorker = !!navigator.serviceWorker.controller, reloaded = false, reloadLater = false;
+    var reloadNow = function () { if (reloaded) return; reloaded = true; location.reload(); };
+    var typing = function () {
+      var a = document.activeElement;
+      return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadWorker) { hadWorker = true; return; } // first install: this page is already the newest
+      if (typing() || document.querySelector('dialog[open]')) reloadLater = true; else reloadNow();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'visible') return;
+        if (reloadLater) return reloadNow();
+        reg.update().catch(function () {});
+      });
+    }).catch(function () {});
+  } catch (e) { } // an old browser without these: it updates on its next open
   document.addEventListener('DOMContentLoaded', init);
 })();

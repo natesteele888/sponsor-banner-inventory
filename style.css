@@ -537,6 +537,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--green); color: #fff; }
 .lv-badge-up { background: var(--blue); }
 .lv-opt { font-size: 12px; color: var(--ink3); }
+.lv-below { opacity: .6; }
 .lv-price { font-size: 20px; font-weight: 700; color: var(--ink); }
 .lv-price span { font-size: 14px; font-weight: 500; color: var(--ink2); }
 .lv-gets { font-size: 13px; color: var(--ink2); }

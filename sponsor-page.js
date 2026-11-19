@@ -47,7 +47,7 @@
 
   function level() {
     var want = pick || P.paid.level;
-    return P.levels.filter(function (l) { return l.name === want; })[0] || P.levels[0];
+    return P.levels.filter(function (l) { return l.name === want; })[0] || level0();
   }
 
   // What each level gets, in plain words, from what it asks for.
@@ -64,6 +64,10 @@
           '<div class="lv-price">' + money(P.paid.amount) + '</div><div class="lv-gets">' + esc(gets(l)) + '</div>' +
           (pick ? '<button type="button" class="btn small" data-keep="1">Keep ' + esc(l.name) + '</button>'
                 : '<div class="lv-lock">This is the level you picked and paid for. Your info goes below.</div>') + '</li>';
+      }
+      if (l.state === 'below') {
+        return '<li class="lv lv-below"><div class="lv-top"><b>' + esc(l.name) + '</b><span class="lv-opt">Below your level</span></div>' +
+          '<div class="lv-price">' + money(l.price) + '</div><div class="lv-gets">' + esc(gets(l)) + '</div></li>';
       }
       var on = pick === l.name;
       return '<li class="lv lv-up' + (on ? ' lv-on' : '') + '"><div class="lv-top"><b>' + esc(l.name) + '</b>' +
