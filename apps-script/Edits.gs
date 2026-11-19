@@ -86,7 +86,12 @@ function sponsorAdd(data) {
     var row = [];
     for (var i = 0; i < t.head.length; i++) row.push('');
     Object.keys(map).forEach(function (k) { if (map[k] >= 0 && vals[k]) row[map[k]] = clean(String(vals[k]).trim(), k === 'notes' ? 500 : 120); });
-    var at = sh.getLastRow() + 1;
+    // The new row goes right after the last sponsor, above a Total row or
+    // anything else below the list.
+    var last = t.h0 + 1;
+    for (var q = t.v.length - 1; q > t.h0; q--) if (String(t.v[q][cCo]).trim()) { last = q + 1; break; }
+    var at = last + 1;
+    if (last < sh.getLastRow()) sh.insertRowAfter(last);
     sh.getRange(at, 1, 1, row.length).setValues([row]);
     // Columns the sheet works out (like "Owed a Banner") get the row above's formula.
     if (at - 1 > t.h0 + 1) {
