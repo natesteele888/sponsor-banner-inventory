@@ -136,6 +136,7 @@
       renderAddBox();
       loadHistory();
       loadReceipts();
+      loadNudges();
       loadPackets();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
@@ -158,7 +159,7 @@
 
   // ---------- receipts ----------
   // Rows marked paid with an email get a donation receipt, sent only when a
-  // board member taps Send. Website payments get theirs from the league site.
+  // board member taps Send. Online and check donors get the same receipt.
 
   function loadReceipts() {
     A().apiPost({ action: 'receiptList' }).then(function (res) {
@@ -172,7 +173,7 @@
     var box = $('#spReceipts'), esc = A().esc, R = S.receipts;
     if (!R) { box.classList.add('hidden'); return; }
     var ready = R.items.filter(function (i) { return i.status === 'ready'; });
-    var web = R.items.filter(function (i) { return i.status === 'website'; });
+    var web = [];
     var sent = R.items.filter(function (i) { return i.status === 'sent' || i.status === 'skip'; });
     if (!R.items.length) { box.classList.add('hidden'); return; }
     var set = R.settings || {};
@@ -184,20 +185,20 @@
       var acts = i.status === 'ready'
         ? '<button class="btn small" data-rc="preview" type="button">Preview</button>' +
           '<button class="btn small primary" data-rc="send" type="button">Send</button>' +
-          '<button class="btn small" data-rc="website" type="button">Website sent it</button>'
-        : i.status === 'website'
-          ? '<span class="rc-state">Website sends its receipt</span><button class="btn small" data-rc="preview" type="button">Preview</button>'
-          : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
+          '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
+        : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
             (i.status === 'sent' ? '' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
-        '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span></div>' +
+        '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
+        (i.online ? '<span class="rc-path">Paid online: send this one, not the website’s receipt</span>' : '') + '</div>' +
         '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div></li>';
     };
     box.innerHTML =
       '<h2 class="rc-h">' + (ready.length ? ready.length + ' receipt' + (ready.length === 1 ? '' : 's') + ' to send' : 'Receipts: all caught up') + '</h2>' +
+      '<p class="hint rc-note">Sponsors get this receipt with the packet link, whether they paid by check or online. Plain donations from people who aren’t sponsors use the website’s receipt button and never show here.</p>' +
       (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
       '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
-      (web.length || sent.length ? '<details class="rc-more"><summary>Done or sent by the website (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
+      (web.length || sent.length ? '<details class="rc-more"><summary>Sent or not needed (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
         web.concat(sent).map(row).join('') + '</ul></details>' : '') +
       '<div id="rcPreview" class="rc-preview hidden"></div>';
     box.classList.remove('hidden');
@@ -235,6 +236,95 @@
       if (how === 'send' && res.status !== 'sent') { btn.disabled = false; delete btn.dataset.armed; btn.textContent = 'Send'; msg.textContent = res.message; return; }
       $('#spStatus').textContent = res.message || 'Saved.';
       loadReceipts();
+    }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
+  }
+
+  // ---------- follow-ups ----------
+  // Contacted, unpaid sponsors who haven't said no get a short follow-up at a
+  // few set dates. Each one waits here for Preview and a tap on Send.
+
+  function fmtDay(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || '');
+    return m ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2]) - 1] + ' ' + Number(m[3]) : d;
+  }
+
+  function loadNudges() {
+    A().apiPost({ action: 'nudgeList' }).then(function (res) {
+      if (!res || !res.ok) return;
+      S.nudges = res;
+      renderNudges();
+    }).catch(function () { /* the box stays hidden */ });
+  }
+
+  function renderNudges() {
+    var box = $('#spNudges'), esc = A().esc, N = S.nudges;
+    if (!N || !N.rounds || !N.rounds.length) { box.classList.add('hidden'); return; }
+    var ready = N.items.filter(function (i) { return i.status === 'ready'; });
+    var done = N.items.filter(function (i) { return i.status !== 'ready'; });
+    var set = N.settings || {}, notes = [];
+    if (set.missing && set.missing.length) notes.push('Not set up yet: ' + set.missing.join(', ') + '.');
+    else if (!set.live) notes.push('Test mode: follow-ups go to the test address, not the sponsor.');
+    if (!set.sender) notes.push('The league email address is not connected yet.');
+    var head = N.current
+      ? (ready.length ? ready.length + ' follow-up' + (ready.length === 1 ? '' : 's') + ' to send' : 'Follow-ups: all caught up') + ' · ' + esc(N.current.label)
+      : 'Follow-ups start ' + esc(fmtDay(N.next && N.next.date));
+    var row = function (i) {
+      var acts = i.status === 'ready'
+        ? '<button class="btn small" data-nd="preview" type="button">Preview</button>' +
+          '<button class="btn small primary" data-nd="send" type="button">Send</button>' +
+          '<button class="btn small" data-nd="skip" type="button">Skip</button>'
+        : '<span class="rc-state">' + (i.status === 'sent' ? 'Sent' : 'Skipped') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
+          (i.status === 'sent' ? '' : '<button class="btn small" data-nd="undo" type="button">Undo</button>');
+      return '<li class="rc-item" data-key="' + esc(i.key) + '"><div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.email) + '</span></div>' +
+        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div></li>';
+    };
+    box.innerHTML = '<h2 class="rc-h">' + head + '</h2>' +
+      (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
+      (N.current ? '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' : '<p class="hint">' + N.items.length + ' contacted sponsor' + (N.items.length === 1 ? '' : 's') + ' would get it today.</p>') +
+      (done.length ? '<details class="rc-more"><summary>Sent or skipped this round (' + done.length + ')</summary><ul class="rc-list">' + done.map(row).join('') + '</ul></details>' : '') +
+      '<details class="rc-more"><summary>Schedule</summary><ul class="rc-list">' + N.rounds.map(function (r) {
+        return '<li class="rc-item" data-round="' + esc(r.date) + '"><div class="rc-who"><b>' + esc(fmtDay(r.date)) + '</b><span>' + esc(r.label) + '</span></div>' +
+          '<div class="rc-acts"><button class="btn small" data-nd="sample" type="button">Preview</button></div><div class="rc-msg" role="status"></div></li>';
+      }).join('') + '</ul></details>' +
+      '<div id="ndPreview" class="rc-preview hidden"></div>';
+    box.classList.remove('hidden');
+  }
+
+  function showNudgePreview(res) {
+    var pv = $('#ndPreview');
+    pv.innerHTML = '<div class="rc-pv-top"><b>' + A().esc(res.subject) + '</b><button class="btn small" type="button" id="ndPvClose">Close</button></div>';
+    var f = document.createElement('iframe');
+    f.className = 'rc-frame'; f.title = 'Follow-up preview'; f.setAttribute('sandbox', ''); f.srcdoc = res.html;
+    pv.appendChild(f); pv.classList.remove('hidden');
+    $('#ndPvClose').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+    pv.scrollIntoView({ block: 'nearest' });
+  }
+
+  function nudgeAct(btn) {
+    var li = btn.closest('.rc-item'), how = btn.dataset.nd, msg = li.querySelector('.rc-msg');
+    if (how === 'preview' || how === 'sample') {
+      msg.textContent = 'Building the preview…';
+      var q = how === 'sample' ? { action: 'nudgePreview', round: li.dataset.round } : { action: 'nudgePreview', key: li.dataset.key };
+      return A().apiPost(q).then(function (res) {
+        msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+        if (res.ok) showNudgePreview(res);
+      }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
+    }
+    var item = S.nudges.items.filter(function (i) { return i.key === li.dataset.key; })[0];
+    if (how === 'send' && !btn.dataset.armed) {
+      btn.dataset.armed = '1';
+      btn.textContent = S.nudges.settings.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
+      setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Send'; } }, 6000);
+      return;
+    }
+    btn.disabled = true;
+    msg.textContent = how === 'send' ? 'Sending…' : 'Saving…';
+    var req = how === 'send' ? { action: 'nudgeSend', key: item.key } : { action: 'nudgeMark', key: li.dataset.key, how: how };
+    A().apiPost(req).then(function (res) {
+      if (!res.ok) { btn.disabled = false; msg.textContent = res.error || 'That did not go through.'; return; }
+      if (how === 'send' && res.status !== 'sent') { btn.disabled = false; delete btn.dataset.armed; btn.textContent = 'Send'; msg.textContent = res.message; return; }
+      $('#spStatus').textContent = res.message || 'Saved.';
+      loadNudges();
     }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
   }
 
@@ -783,6 +873,7 @@
     $('#spContactBtn').addEventListener('click', markContacted);
     $('#spNoBtn').addEventListener('click', markNotSponsoring);
     $('#spReceipts').addEventListener('click', function (e) { var b = e.target.closest('button[data-rc]'); if (b) receiptAct(b); });
+    $('#spNudges').addEventListener('click', function (e) { var b = e.target.closest('button[data-nd]'); if (b) nudgeAct(b); });
     $('#spClose').addEventListener('click', close);
     $('#detailScrim').addEventListener('click', function () { if (S.current) close(); });
     $('#spSave').addEventListener('click', saveTeam);

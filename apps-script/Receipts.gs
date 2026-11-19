@@ -14,10 +14,10 @@
  *        ▼
  *   RECEIPTS_<season> Script Property remembers it as sent, and the day
  *
- * Website payments are left out: the league site already emails its own tax
- * receipt when a donation is accepted. A row counts as a website payment when
- * a "Donation received from" notice matches its contact name and amount, or
- * when someone taps "Website sent it" on the row.
+ * Every paid row on the sponsor list gets this receipt, online and check
+ * payers alike, so for a sponsor the league site's own receipt button is
+ * not used. Plain donations from people who aren't on the sponsor list
+ * never show here: those keep the website's receipt button.
  *
  * What the receipt says about the league comes from Script Properties, so no
  * address, tax ID, name or link is written in this public file:
@@ -68,34 +68,6 @@ function receiptKey_(r) {
   return companyKey_(r.company) + '|' + r.email.toLowerCase() + '|' + Math.round(r.amount * 100);
 }
 
-// Website donations from the league site's own notices: who and how much.
-function websiteDonations_() {
-  var cache = CacheService.getScriptCache(), ck = 'RCPT_WEB_' + SEASON;
-  var hit = cache.get(ck);
-  if (hit) { try { return JSON.parse(hit); } catch (e) { /* read again */ } }
-  var out = [];
-  try {
-    GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' + DONATIONS_SINCE, 0, 100)
-      .forEach(function (t) {
-        t.getMessages().forEach(function (m) {
-          var x = (m.getPlainBody() || '').match(/received a \$([\d,]+(?:\.\d+)?) donation from ([^\.\n]+)/i);
-          if (x) out.push({ name: nameKey_(x[2]), amount: parseAmount_(x[1]) });
-        });
-      });
-  } catch (e) { console.log('website donations not read: ' + e); }
-  cache.put(ck, JSON.stringify(out), 600);
-  return out;
-}
-
-function paidOnline_(r, web) {
-  if (/\b(online|website|crossbar)\b/i.test(r.paidText + ' ' + r.notes)) return true;
-  var who = nameKey_(r.contact);
-  if (!who) return false;
-  var flip = who.split(' ').reverse().join(' ');   // "Camerano Jason" is "Jason Camerano"
-  return web.some(function (d) { return (d.name === who || d.name === flip) && Math.abs(d.amount - r.amount) < 0.01; });
-}
-
-// Paid rows with an email, from the sheet, with what has happened to each.
 function receiptRows_() {
   var tab = bookTab_(sponsorSpreadsheet_(), SPONSOR_TAB);
   if (!tab) return [];
@@ -105,18 +77,16 @@ function receiptRows_() {
             amount: col(/^amount/), paid: col(/^paid/), notes: col(/^notes?$/) };
   if (c.company < 0 || c.amount < 0 || c.paid < 0 || c.email < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
-  var log = receiptLog_(), web = null, out = [];
+  var log = receiptLog_(), out = [];
   tab.rows.forEach(function (r) {
     var row = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), email: firstEmail_(get(r, 'email')),
                 address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes') };
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
+    row.online = /\b(online|website|crossbar|card)\b/i.test(row.paidText + ' ' + row.notes);
     var done = log[row.key];
-    if (done) { row.status = done.how; row.at = done.at; }
-    else {
-      web = web || websiteDonations_();
-      row.status = paidOnline_(row, web) ? 'website' : 'ready';
-    }
+    if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; }
+    else row.status = 'ready';
     out.push(row);
   });
   return out;
@@ -180,9 +150,9 @@ function receiptEmail_(r, s, when) {
 function receiptList() {
   var s = receiptSettings_();
   return {
-    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: !!s.packetUrl },
+    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: !!s.packetUrl, sender: senderSettings_().connected },
     items: receiptRows_().map(function (r) {
-      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.amount), status: r.status, at: r.at || '' };
+      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.amount), status: r.status, at: r.at || '', online: !!r.online };
     })
   };
 }
@@ -210,10 +180,10 @@ function receiptSend(data) {
     var r = findReceiptRow_(data.key);
     if (!r) return fail('That row is no longer marked paid with an email.');
     if (r.status === 'sent') return fail('That receipt was already sent' + (r.at ? ' on ' + r.at : '') + '.');
-    if (r.status === 'website' && !data.anyway) return fail('The website already sent this one its receipt.');
     var m = receiptEmail_(r, s);
     var to = s.live ? r.email : s.testTo;
-    MailApp.sendEmail({ to: to, subject: (s.live ? '' : '[TEST] ') + m.subject, body: m.text, htmlBody: m.html, name: RECEIPT_ORG });
+    var how = leagueSend_({ to: to, subject: m.subject, text: m.text, html: m.html, live: s.live });
+    if (!how.ok) return fail(how.error);
     var log = receiptLog_();
     var at = dayOf_(new Date());
     if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); }
@@ -223,7 +193,7 @@ function receiptSend(data) {
   }
 }
 
-// "Website sent it" (or "Not needed"), and undo for either.
+// "Not needed", and undo.
 function receiptMark(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var key = String(data.key || ''), how = String(data.how || '');
@@ -231,7 +201,7 @@ function receiptMark(data) {
   if (how === 'undo') {
     if (log[key] && log[key].how === 'sent') return fail('A sent receipt stays marked sent.');
     delete log[key];
-  } else if (how === 'website' || how === 'skip') {
+  } else if (how === 'skip') {
     if (!findReceiptRow_(key)) return fail('That row is no longer marked paid with an email.');
     log[key] = { how: how, at: dayOf_(new Date()) };
   } else return fail('Unknown choice.');

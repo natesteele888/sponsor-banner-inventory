@@ -135,6 +135,10 @@ function doPost(e) {
     if (action === 'receiptPreview') return receiptPreview(data);
     if (action === 'receiptSend') return receiptSend(data);
     if (action === 'receiptMark') return receiptMark(data);
+    if (action === 'nudgeList') return ok(nudgeList());
+    if (action === 'nudgePreview') return nudgePreview(data);
+    if (action === 'nudgeSend') return nudgeSend(data);
+    if (action === 'nudgeMark') return nudgeMark(data);
     if (action === 'sponsorPackets') return ok(sponsorPackets());
     if (action === 'packetLogo') return packetLogo(data);
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);

@@ -106,7 +106,7 @@ repo. Needs the Apps Script deploy for this change.
 
 ## Donation receipts for paid sponsors
 
-When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Website payments are left out, because the league site already emails its own receipt: a row counts as one when a "Donation received from" notice matches its contact name and amount, when its Paid? or Notes says online or website, or when someone taps **Website sent it**.
+When the sponsorship lead marks a row **Paid?** and the row has an email and an amount, the Sponsors tab shows it under **Receipts to send**. A board member taps **Preview** to see the email, then **Send** (twice: the second tap sends). Nothing is ever sent on its own; there is no trigger. Sponsors get this receipt from here whether they paid by check or online, so the league site's receipt button is not used for a sponsor (a row whose Paid? or Notes says online, website, Crossbar or card is tagged **Paid online** as a reminder). Plain donations from people who aren't on the sponsor list never show here; those keep the website's receipt button. **Not needed** takes a row off the list (and **Undo** puts it back).
 
 The email is the league's non-profit donation receipt (donor, contact, address, amount, date, the no-goods-or-services line, who issued it, the 501(c)(3) line with the EIN) plus a button to the sponsor packet page. Each sent receipt is remembered in the `RECEIPTS_<season>` Script Property, so it is never sent twice. A changed amount is a new receipt. This never writes to the sponsorship sheet.
 
@@ -146,3 +146,33 @@ reading the sponsorship lead's sheet. Nothing changes until this is switched on.
   the Contacted? column and takes the row off follow-up emails.
 - Each save checks the row still holds the same sponsor, so a sheet that was
   re-sorted since the page loaded is not written to the wrong row.
+
+## Follow-up emails
+
+Sponsors the board has contacted who haven't paid and haven't said no get a
+short follow-up at a few set dates ("rounds"). From a round's date until the
+next one, they show under **Follow-ups to send**. A board member taps
+**Preview**, then **Send** (twice). Nothing is sent on a schedule. **Skip**
+leaves one out for that round. **Schedule** lists the rounds with a sample
+preview of each email.
+
+- Who gets one: Contacted? has a name or "Yes" (not blank, "No" or "Not
+  sponsoring"), Paid? is not yes, and the row has an email.
+- Default rounds: Dec 10 (holiday hello), Jan 14 (new year check-in), Feb 11
+  (before jerseys) and Mar 6 (last call). Change them with `NUDGE_DATES`
+  (e.g. `2026-12-10, 2027-01-14`); the first is the holiday email and the
+  last is the last call.
+- Script Properties: `NUDGE_SIGN` (the sign-off, "Name, Title"),
+  `SPONSOR_DEADLINE` (default "March 20"), `NUDGES_LIVE` ("on" sends to
+  sponsors; otherwise tests go to `RECEIPTS_TEST_TO`), and the shared
+  `RECEIPT_ORG_ADDRESS` for where checks go.
+
+## Sending from the league's address
+
+Receipts and follow-ups both send through `Mail.gs`. Set `SEND_FROM` to the
+league's address. Nothing goes to a sponsor until that address is in the
+"Send mail as" list of the Gmail account that owns this script (Gmail →
+Settings → Accounts and Import → Send mail as → Add another email address,
+then the confirmation link Gmail mails to that address). Until then, live
+sends are refused, and test sends come from the owner's Gmail with the
+league address as reply-to.
