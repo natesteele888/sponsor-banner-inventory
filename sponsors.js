@@ -1206,6 +1206,7 @@
     var paidAmt = paid.reduce(function (n, s) { return n + s.amount; }, 0);
     var kindAmt = kind.reduce(function (n, s) { return n + s.amount; }, 0);
     // Dollar amounts first and wider, so five-digit totals fit as well as three.
+    $('#spSummary').classList.toggle('k3', kind.length > 0);
     $('#spSummary').innerHTML =
       stat(fmtMoney(committed), 'committed', 'money') +
       stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money') +
