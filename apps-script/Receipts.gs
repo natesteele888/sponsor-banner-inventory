@@ -74,16 +74,24 @@ function receiptRows_() {
   var head = tab.headers.map(function (h) { return h.toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), email: col(/^email/), address: col(/^address/),
-            amount: col(/^amount/), paid: col(/^paid/), notes: col(/^notes?$/) };
+            amount: col(/^amount/), paid: col(/^paid\??$/), notes: col(/^notes?$/), how: col(/^(paid how|payment method|paid by)/) };
   if (c.company < 0 || c.amount < 0 || c.paid < 0 || c.email < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
   var log = receiptLog_(), out = [];
   tab.rows.forEach(function (r) {
     var row = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), email: firstEmail_(get(r, 'email')),
-                address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes') };
+                address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes'), how: get(r, 'how') };
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
-    row.online = /\b(online|website|crossbar|card)\b/i.test(row.paidText + ' ' + row.notes);
+    row.online = /\b(online|website|crossbar|card)\b/i.test(row.how || (row.paidText + ' ' + row.notes));
+    // An upgrade paid after an earlier receipt: this receipt is for the new
+    // money only, with the season's total under it, so nothing is counted twice.
+    var pre = companyKey_(row.company) + '|' + row.email.toLowerCase() + '|', before = 0;
+    Object.keys(log).forEach(function (k) {
+      var cents = Number(k.slice(pre.length));
+      if (k.indexOf(pre) === 0 && log[k].how === 'sent' && cents > 0 && cents < Math.round(row.amount * 100)) before = Math.max(before, cents);
+    });
+    if (before) { row.total = row.amount; row.given = row.amount - before / 100; }
     var done = log[row.key];
     if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; }
     else row.status = 'ready';
@@ -97,12 +105,12 @@ function receiptRows_() {
 function receiptEmail_(r, s, when) {
   var e = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); };
   var date = Utilities.formatDate(when || new Date(), 'America/New_York', 'MMMM d, yyyy');
-  var amount = money_(r.amount);
+  var amount = money_(r.given || r.amount);
   var subject = 'Your ' + SEASON + ' donation receipt from ' + RECEIPT_ORG;
   var ein = s.ein || 'EIN NOT SET';
   var taxLine = RECEIPT_ORG + ' is a 501(c)(3) charitable, tax-exempt organization. Our federal EIN number is ' + ein + '.';
   var noGoods = 'The donor received no goods or services in return for this contribution.';
-  var rows = [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation amount', amount], ['Date', date]]
+  var rows = [['Donor', r.company], ['Contact', r.contact], ['Address', r.address], ['Donation amount', amount], ['Season total', r.given ? money_(r.total) : ''], ['Payment method', r.how], ['Date', date]]
     .filter(function (x) { return x[1]; });
 
   var thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for sponsoring ' + RECEIPT_ORG + ' this season!';
@@ -194,9 +202,9 @@ function receiptPdf_(r, s, when) {
 function receiptList() {
   var s = receiptSettings_();
   return {
-    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: !!s.packetUrl, sender: senderSettings_().connected },
+    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().connected },
     items: receiptRows_().map(function (r) {
-      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.amount), status: r.status, at: r.at || '', online: !!r.online };
+      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: money_(r.given || r.amount), status: r.status, at: r.at || '', online: !!r.online };
     })
   };
 }
@@ -210,7 +218,9 @@ function receiptPreview(data) {
   if (!r) return fail('That row is no longer marked paid with an email.');
   // A sent receipt reopens with the day it was sent, ready to print again.
   var when = r.status === 'sent' && /^\d{4}-\d{2}-\d{2}$/.test(r.at || '') ? new Date(r.at + 'T12:00:00') : null;
-  var s = receiptSettings_(), m = receiptEmail_(r, s, when);
+  var s = receiptSettings_();
+  s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
+  var m = receiptEmail_(r, s, when);
   return ok({ subject: m.subject, html: receiptDoc_(m.html, m.subject), to: s.live ? r.email : (s.testTo ? 'test address' : ''), live: s.live, sent: r.status === 'sent' });
 }
 
@@ -227,6 +237,7 @@ function receiptSend(data) {
     var r = findReceiptRow_(data.key);
     if (!r) return fail('That row is no longer marked paid with an email.');
     if (r.status === 'sent') return fail('That receipt was already sent' + (r.at ? ' on ' + r.at : '') + '.');
+    s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
     var m = receiptEmail_(r, s);
     var to = s.live ? r.email : s.testTo;
     var pdf = receiptPdf_(r, s);

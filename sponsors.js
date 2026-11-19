@@ -186,6 +186,7 @@
       loadReceipts();
       loadNudges();
       loadPackets();
+      loadUpgrades();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
@@ -444,6 +445,20 @@
   // ---------- info packets ----------
   // What sponsors sent on the info packet page, read live from its sheet.
 
+  // Upgrades sponsors asked for on their own page. Each waits for the
+  // difference to be paid (Record a payment), and only then counts.
+  function loadUpgrades() {
+    A().apiPost({ action: 'sponsorUpgrades' }).then(function (res) {
+      if (!res || !res.ok) return;
+      S.upgrades = {};
+      (res.upgrades || []).forEach(function (u) { S.upgrades[nameKey(u.company)] = u; });
+      render();
+    }).catch(function () { /* nothing waiting shows */ });
+  }
+  function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
+  // What's still owed for an upgrade: the level's price less what the sheet shows paid.
+  function upgradeLeft(s, u) { return Math.max(0, (u.price || 0) - (s.paid ? s.amount || 0 : 0)) || u.owed || 0; }
+
   function loadPackets() {
     A().apiPost({ action: 'sponsorPackets' }).then(function (res) {
       if (!res || !res.ok || !res.found) return;
@@ -553,7 +568,10 @@
   // the likeliest first: signed up and waiting on money, then people someone
   // reached out to, then walk-ins, then everyone else. Picking one marks them
   // paid and opens their receipt preview; nothing is sent until Send is tapped.
-  var PAY_GROUPS = ['Signed up, waiting on payment', 'Contacted, not signed up yet', 'Walk-in', 'On the sheet', 'Already marked paid'];
+  // How it was paid: the words that go in the sheet's Paid how column and on the receipt.
+  var PAY_HOW = { online: 'Crossbar (online)', check: 'Check', cash: 'Cash', venmo: 'Venmo' };
+  var PAY_SAID = { online: 'online through Crossbar', check: 'by check', cash: 'in cash', venmo: 'by Venmo' };
+  var PAY_GROUPS = ['Upgrade waiting on payment', 'Signed up, waiting on payment', 'Contacted, not signed up yet', 'Walk-in', 'On the sheet', 'Already marked paid'];
   var PAY_SKIP = /^(the|and|of|inc|llc|co|corp|company|ltd|pc|p c|dba|group)$/;
   function payWords(v) { return norm(v).split(' ').filter(function (w) { return w.length > 1 && !PAY_SKIP.test(w); }); }
   function payScore(s, name, email) {
@@ -568,11 +586,12 @@
     return hit * 20;
   }
   function payGroup(s) {
-    if (s.paid) return 4;
-    if (isIn(s)) return 0;
-    if (contactState(s) === 'yes') return 1;
-    if (s.walkIn) return 2;
-    return 3;
+    if (upgradeFor(s)) return 0;
+    if (s.paid) return 5;
+    if (isIn(s)) return 1;
+    if (contactState(s) === 'yes') return 2;
+    if (s.walkIn) return 3;
+    return 4;
   }
   function payMatches(name, email) {
     // A same-name (or same-email) match goes first, whatever its group, so a
@@ -583,8 +602,9 @@
       .slice(0, 8);
   }
   function payForm() {
-    return { name: $('#spp_name').value.trim(), amount: money($('#spp_amount').value), how: $('#spp_how').value,
-      email: $('#spp_email').value.trim() };
+    var how = $('#spp_how').value;
+    return { name: $('#spp_name').value.trim(), amount: money($('#spp_amount').value), how: PAY_HOW[how] ? how : 'online',
+      ref: $('#spp_ref').value.trim(), email: $('#spp_email').value.trim() };
   }
   function findPayer(e) {
     if (e) e.preventDefault();
@@ -599,15 +619,17 @@
     box.innerHTML = '<ul class="rc-list">' + list.map(function (m) {
       var s = m.s, head = m.t !== last ? '<li class="pay-g">' + esc(m.t < 0 ? 'Same name' : PAY_GROUPS[m.g]) + '</li>' : '';
       last = m.t;
-      var said = [s.contact, s.amountText ? 'sheet says ' + s.amountText : '', s.owner ? s.owner + '’s' : ''].filter(Boolean).join(' · ');
+      var u = upgradeFor(s);
+      var said = [u ? 'upgrade to ' + u.to + ': ' + fmtMoney(upgradeLeft(s, u)) + ' to pay' : '', s.contact, s.amountText ? 'sheet says ' + s.amountText : '', s.owner ? s.owner + '’s' : ''].filter(Boolean).join(' · ');
       return head + '<li class="rc-item"><div class="rc-who"><b>' + esc(s.company) + '</b><span>' + esc(said) + '</span></div>' +
-        '<div class="rc-acts"><button class="btn small' + (m.g === 4 ? '' : ' primary') + '" type="button" data-pay="' + s.row + '">This one</button></div></li>';
+        '<div class="rc-acts"><button class="btn small' + (m.g === 5 ? '' : ' primary') + '" type="button" data-pay="' + s.row + '">This one</button></div></li>';
     }).join('') + '<li class="rc-item"><div class="rc-who"><b>Someone new</b><span>Adds ' + esc(f.name) + ' to the sheet as a paid sponsor</span></div>' +
       '<div class="rc-acts"><button class="btn small" type="button" data-pay="new">Add new sponsor</button></div></li></ul>';
   }
   function payNote(f) {
     var d = new Date(), when = MON[d.getMonth()] + ' ' + d.getDate();
-    return (f.how === 'check' ? 'Paid by check ' : 'Paid online ') + when + ' (' + fmtMoney(f.amount) + ')';
+    var ref = f.ref ? (f.how === 'check' && /^\d+$/.test(f.ref) ? 'check #' + f.ref : f.ref) : '';
+    return 'Paid ' + PAY_SAID[f.how] + ' ' + when + ' (' + fmtMoney(f.amount) + (ref ? ', ' + ref : '') + ')';
   }
   // First tap asks; the second marks them paid.
   function pickPayer(btn) {
@@ -619,17 +641,21 @@
       $$('#spPayMatches [data-armed]').forEach(function (b) { delete b.dataset.armed; b.textContent = b.dataset.pay === 'new' ? 'Add new sponsor' : 'This one'; });
       btn.dataset.armed = '1';
       btn.textContent = 'Tap again: ' + fmtMoney(f.amount) + ' paid';
-      msg.textContent = isNew ? 'Adds ' + f.name + ' as a new sponsor, paid ' + fmtMoney(f.amount) + ' ' + (f.how === 'check' ? 'by check' : 'online') + '.'
+      var up = isNew ? null : upgradeFor(s), left = up ? upgradeLeft(s, up) : 0;
+      msg.textContent = isNew ? 'Adds ' + f.name + ' as a new sponsor, paid ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + '.'
+        : up ? (f.amount >= left
+            ? 'Counts ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + ' toward ' + s.company + '’s upgrade to ' + up.to + ': the sheet goes to ' + fmtMoney((s.amount || 0) + f.amount) + ' and ' + up.to + '.'
+            : 'Adds ' + fmtMoney(f.amount) + ' to ' + s.company + '’s total. That’s less than the ' + fmtMoney(left) + ' the upgrade needs, so it stays at ' + (s.tier || 'its level') + ' for now.')
         : s.paid && s.amount > 0
           // A second payment adds a note; it never writes over the amount already on the sheet.
           ? s.company + ' is already marked paid. Tap again to add this ' + fmtMoney(f.amount) + ' payment to its notes. The amount stays ' + s.amountText + '; change it with Edit if this adds to it.'
-          : 'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
+          : 'Marks ' + s.company + ' paid ' + fmtMoney(f.amount) + ' ' + PAY_SAID[f.how] + (s.amount && s.amount !== f.amount ? ' (the sheet said ' + fmtMoney(s.amount) + ')' : '') + '.';
       setTimeout(function () { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = isNew ? 'Add new sponsor' : 'This one'; } }, 8000);
       return;
     }
     delete btn.dataset.armed;
     var t = mainTab(), head = function (re) { var c = colOf(t, re); return c < 0 ? '' : t.headers[c]; };
-    var hPaid = head(/^paid/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/);
+    var hPaid = head(/^paid\??$/), hAmt = head(/^amount/), hNotes = head(/^notes?$/), hEmail = head(/^email/), hHow = head(/^(paid how|payment method|paid by)/);
     if (!hPaid) { msg.textContent = 'The sheet has no Paid? column.'; return; }
     $$('#spPayMatches button').forEach(function (b) { b.disabled = true; });
     msg.textContent = 'Saving…';
@@ -638,6 +664,7 @@
       ? A().apiPost({ action: 'sponsorAdd', company: f.name, email: f.email, amount: String(f.amount), notes: note }).then(function (res) {
           if (!res.ok) throw new Error(res.error || 'That did not save.');
           var v = {}; v[hPaid] = 'Yes';
+          if (hHow) v[hHow] = PAY_HOW[f.how];
           return A().apiPost({ action: 'sponsorEdit', row: res.row, company: f.name, values: v }).then(function (r2) {
             if (!r2.ok) throw new Error(r2.error || 'Added, but not marked paid.');
             return res.row;
@@ -645,18 +672,33 @@
         })
       : (function () {
           var v = {}; v[hPaid] = 'Yes';
-          if (hAmt && !(s.paid && s.amount > 0) && f.amount !== s.amount) v[hAmt] = String(f.amount);
+          if (hHow) v[hHow] = PAY_HOW[f.how];
+          var up = upgradeFor(s), done = up && f.amount >= upgradeLeft(s, up);
+          if (up) {
+            // An upgrade's difference adds to what they already gave. The level
+            // and the banner change only once the whole difference is in.
+            if (hAmt) v[hAmt] = String((s.amount || 0) + f.amount);
+            note += done ? ', upgrade to ' + up.to : ', toward the upgrade to ' + up.to;
+            var hTier = head(new RegExp('^tier selected ' + Number(S.book.season))), hBanner = head(/^owed a banner/);
+            if (done && hTier) v[hTier] = up.to;
+            if (done && up.banner && hBanner && !s.owedBanner) v[hBanner] = 'TRUE';
+          } else if (hAmt && !(s.paid && s.amount > 0) && f.amount !== s.amount) v[hAmt] = String(f.amount);
           if (hNotes) v[hNotes] = s.notes ? s.notes + '; ' + note : note;
           if (hEmail && f.email && !s.email) v[hEmail] = f.email;
           return A().apiPost({ action: 'sponsorEdit', row: s.row, company: s.company, values: v }).then(function (res) {
             if (!res.ok) throw new Error(res.error || 'That did not save.');
-            return s.row;
+            if (!done) return s.row;
+            return A().apiPost({ action: 'sponsorUpgradePaid', company: s.company }).then(function (r2) {
+              if (!r2.ok) throw new Error('The payment saved, but the upgrade did not count: ' + (r2.error || 'try again.'));
+              return s.row;
+            });
           });
         })();
     step.then(function (row) {
       return load().then(function () {
         $('#spPayForm').reset(); $('#spPayMatches').innerHTML = '';
         msg.textContent = 'Recorded.';
+        loadUpgrades();
         open(row);
         receiptAfterPaid(row);
       });
@@ -1039,7 +1081,8 @@
             needsOwner(s) ? 'Needs a new owner' : '',
             String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
             s.team ? 'Team: ' + s.team : '',
-            S.packetKeys && S.packetKeys[s.key] ? 'Info packet in' : ''
+            S.packetKeys && S.packetKeys[s.key] ? 'Info packet in' : '',
+            upgradeFor(s) ? 'Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay' : ''
           ]) +
           (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
           (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +

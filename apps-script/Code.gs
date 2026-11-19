@@ -92,7 +92,18 @@ function doPost(e) {
     }
   }
 
-  // Ballclub team pages are the second door: someone signed in to a team
+  // The sponsor's own info page (sponsor.html), linked from their receipt:
+  // the same kind of door, keyed by that sponsor's own long random token.
+  if (publicAction === 'sponsorPageGet' || publicAction === 'sponsorPageSubmit') {
+    try {
+      return publicAction === 'sponsorPageGet' ? sponsorPageGet(data) : sponsorPageSubmit(data);
+    } catch (err) {
+      console.log('sponsor page failed: ' + err);
+      return fail('Something went wrong on our end. Please try again, or just reply to the email.');
+    }
+  }
+
+  // Ballclub team pages are the next door: someone signed in to a team
   // there gets that team's "Sponsored by" names and logos, nothing else. It
   // has its own sign-in check (authorizeTeamViewer_ in Season.gs).
   if (publicAction === 'teamPageSponsor') {
@@ -143,6 +154,8 @@ function doPost(e) {
     if (action === 'nudgeMark') return nudgeMark(data);
     if (action === 'sponsorPackets') return ok(sponsorPackets());
     if (action === 'packetAdd') return packetAdd(data);
+    if (action === 'sponsorUpgrades') return ok({ upgrades: sponsorUpgrades() });
+    if (action === 'sponsorUpgradePaid') return sponsorUpgradePaid(data);
     if (action === 'packetLogo') return packetLogo(data);
     if (action === 'spotlightSponsors') return spotlightSponsors();
     if (action === 'spotlightLogo') return spotlightLogo(data);
