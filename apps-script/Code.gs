@@ -172,6 +172,7 @@ function route_(action, data) {
     if (action === 'sponsorHistory') return ok(snapRead_('history', false, sponsorHistory));
     if (action === 'receiptList') return ok(snapRead_('receipts', false, receiptList));
     if (action === 'receiptPreview') return receiptPreview(data);
+    if (action === 'receiptCopyGet') return receiptCopyGet(data);
     if (action === 'receiptSend') return receiptSend(data);
     if (action === 'receiptMark') return receiptMark(data);
     if (action === 'nudgeList') return ok(snapRead_('nudges', false, nudgeList));
@@ -213,7 +214,7 @@ function route_(action, data) {
 var SNAP_TTL = 600;            // 10 minutes
 var SNAP_CHUNK = 30000;        // characters per cache entry (each entry holds up to 100 KB)
 var SNAP_READ_ONLY = { list: 1, image: 1, seasonList: 1, sponsorBook: 1, walkInForm: 1, sponsorHistory: 1, receiptList: 1,
-  receiptPreview: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
+  receiptPreview: 1, receiptCopyGet: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
   sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1 };
 
 function snapGen_() { try { return CacheService.getScriptCache().get('snapGen') || '0'; } catch (e) { return '0'; } }
