@@ -182,9 +182,35 @@
 
   // ---------- load ----------
 
+  // Speed: the sheet takes a few seconds to read, so the tab first draws
+  // last time's copy kept on this device (A().kept), then the fresh read
+  // replaces it. The side boxes (receipts, follow-ups, packets, logos...) are
+  // read at the same time as the sheet, not after it, and each draws once
+  // the sponsor list is there.
+  function useBook(res) {
+    S.book = res;
+    S.me = res.me || '';
+    S.former = res.former || [];
+    $('#spStatus').textContent = '';
+    render();
+    renderAddBox();
+  }
+  function side(body, fn) {
+    var early = S.early && A().kept(body.action);
+    if (early && S.book) { try { fn(early); } catch (e) { } }
+    return Promise.all([A().apiPost(body), S.bookReady]).then(function (out) {
+      var res = out[0];
+      A().keep(body.action, res);
+      if (S.book) return fn(res);
+    });
+  }
+
   function load() {
     if (S.loading) return S.loading;
-    $('#spStatus').textContent = 'Reading the sponsorship sheet…';
+    var done, early = !S.book && A().kept('sponsorBook');
+    S.bookReady = new Promise(function (r) { done = r; });
+    if (early) { S.early = true; useBook(early); }
+    else $('#spStatus').textContent = 'Reading the sponsorship sheet…';
     S.loading = A().apiPost({ action: 'sponsorBook' }).then(function (res) {
       if (!res.ok) {
         var msg = String(res.error || '');
@@ -192,23 +218,20 @@
         if (/unknown action/i.test(msg)) msg = 'One setup step left: the Apps Script needs the new Code.gs and Season.gs and a new version deployed (steps in docs/sponsors-tab.md).';
         throw A().backendError(msg || 'Could not read the sponsorship sheet.');
       }
-      S.book = res;
-      S.me = res.me || '';
-      S.former = res.former || [];
-      $('#spStatus').textContent = '';
-      render();
-      renderAddBox();
-      loadHistory();
-      loadReceipts();
-      loadNudges();
-      loadPackets();
-      loadUpgrades();
-      loadLogos();
-      loadWebsite(false);
+      A().keep('sponsorBook', res);
+      S.early = false;
+      useBook(res);
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
-    }).finally(function () { S.loading = null; });
+    }).finally(function () { S.loading = null; done(); });
+    loadHistory();
+    loadReceipts();
+    loadNudges();
+    loadPackets();
+    loadUpgrades();
+    loadLogos();
+    loadWebsite(false);
     loadTeams();
     return S.loading;
   }
@@ -217,7 +240,7 @@
   // backend also keeps today's total so next year has real dates to compare.
   // If the backend doesn't have it yet, the strip just stays hidden.
   function loadHistory() {
-    A().apiPost({ action: 'sponsorHistory' }).then(function (res) {
+    side({ action: 'sponsorHistory' }, function (res) {
       if (!res || !res.ok) return;
       S.history = res;
       renderYoY();
@@ -229,7 +252,7 @@
   // board member taps Send. Online and check donors get the same receipt.
 
   function loadReceipts() {
-    A().apiPost({ action: 'receiptList' }).then(function (res) {
+    side({ action: 'receiptList' }, function (res) {
       if (!res || !res.ok) return;
       S.receipts = res;
       renderReceipts();
@@ -377,7 +400,7 @@
   }
 
   function loadNudges() {
-    A().apiPost({ action: 'nudgeList' }).then(function (res) {
+    side({ action: 'nudgeList' }, function (res) {
       if (!res || !res.ok) return;
       S.nudges = res;
       renderNudges();
@@ -585,7 +608,7 @@
   function loadWebsite(fresh) {
     var box = $('#spWeb');
     if (fresh) box.querySelector('.sp-web-msg') && (box.querySelector('.sp-web-msg').textContent = 'Checking the website…');
-    A().apiPost({ action: 'websiteCheck', fresh: !!fresh }).then(function (res) {
+    side({ action: 'websiteCheck', fresh: !!fresh }, function (res) {
       if (!res || !res.ok) { if (fresh) webLine('Couldn’t check the website just now. Try again in a minute.'); return; }
       S.web = res; renderWebsite();
     }).catch(function () { if (fresh) webLine('Couldn’t reach the backend to check the website. Try again.'); });
@@ -619,7 +642,7 @@
   // Upgrades sponsors asked for on their own page. Each waits for the
   // difference to be paid (Record a payment), and only then counts.
   function loadUpgrades() {
-    A().apiPost({ action: 'sponsorUpgrades' }).then(function (res) {
+    side({ action: 'sponsorUpgrades' }, function (res) {
       if (!res || !res.ok) return;
       S.upgrades = {};
       (res.upgrades || []).forEach(function (u) { S.upgrades[nameKey(u.company)] = u; });
@@ -629,7 +652,7 @@
   // Logos from the league's Sponsor Logos folder in Drive, matched to the
   // sponsors by name on the backend. A sponsor with one shows it on its card.
   function loadLogos() {
-    A().apiPost({ action: 'sponsorLogoList' }).then(function (res) {
+    side({ action: 'sponsorLogoList' }, function (res) {
       if (!res || !res.ok || !res.logos) return;
       S.logos = res.logos;
       render();
@@ -650,7 +673,7 @@
   }
 
   function loadPackets() {
-    A().apiPost({ action: 'sponsorPackets' }).then(function (res) {
+    side({ action: 'sponsorPackets' }, function (res) {
       if (!res || !res.ok || !res.found) return;
       S.packets = res;
       var t = { headers: res.headers }, bc = colOf(t, /^business/);
@@ -1700,7 +1723,7 @@
       if (!S.book) load(); else render();
     },
     reset: function () {
-      S.book = null; S.teams = null; S.current = null; S.history = null; S.committed = null;
+      S.book = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
       $('#spYoY').classList.add('hidden'); $('#spYoY').innerHTML = '';
       $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = ''; $('#spWeb').classList.add('hidden'); S.web = null;
     }

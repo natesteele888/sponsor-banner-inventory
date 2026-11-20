@@ -49,8 +49,39 @@
 
   // The backend checks the Dashboard role (board, director or admin) on every
   // call. When it says no, show one plain screen instead of empty tabs.
+  // ---------- a kept copy, so the app draws at once ----------
+  // The last answer to each read, kept on this device for the board member
+  // signed in here, so opening the app shows the sheet right away while a
+  // fresh read comes in behind it. Cleared when they sign out or lose access.
+  var KEEP_PREFIX = 'lybsKeep_', KEEP_DAYS = 14;
+  function keepKey(action) {
+    var u = typeof firebase !== 'undefined' && firebase.apps.length && firebase.auth().currentUser;
+    return u ? KEEP_PREFIX + u.uid + '_' + action : null;
+  }
+  function kept(action) {
+    try {
+      var k = keepKey(action), o = k && JSON.parse(localStorage.getItem(k) || 'null');
+      return o && o.at > Date.now() - KEEP_DAYS * 864e5 && o.res && o.res.ok ? o.res : null;
+    } catch (e) { return null; }
+  }
+  function keep(action, res) {
+    var k = keepKey(action);
+    if (!k || !res || !res.ok) return;
+    try { localStorage.setItem(k, JSON.stringify({ at: Date.now(), res: res })); }
+    catch (e) { try { localStorage.removeItem(k); } catch (e2) { } }   // too big for this device: no copy
+  }
+  function forgetKept() {
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(KEEP_PREFIX) === 0) localStorage.removeItem(k);
+      }
+    } catch (e) { }
+  }
+
   var NO_ACCESS = /does not have board access/i;
   function lockOut(on) {
+    if (on) forgetKept();
     document.body.classList.toggle('locked', !!on);
     $('#noAccess').classList.toggle('hidden', !on);
   }
@@ -112,6 +143,7 @@
       lockOut(false);
       document.body.classList.remove('no-dash');
       if (!user) {
+        forgetKept();
         state.banners = [];
         state.imageCache = {};
         state.loaded = false;
@@ -133,9 +165,16 @@
   }
 
   function loadBanners() {
-    $('#status').textContent = 'Loading…';
+    var early = !state.loaded && kept('list');
+    if (early) {
+      // Last time's list first; the fresh one replaces it in a moment.
+      state.banners = early.banners; state.loaded = true;
+      renderList();
+      if (!$('#view-fields').classList.contains('hidden') && window.Fields) window.Fields.render();
+    } else $('#status').textContent = 'Loading…';
     $('#loadRetry').classList.add('hidden');
     return apiGet({ action: 'list' }).then(function (res) {
+      if (res.ok) keep('list', res);
       if (!res.ok) {
         var denied = new Error(res.error || 'Could not load banners.');
         denied.fromBackend = true;
@@ -510,6 +549,8 @@
   // The 2027 tab (season.js) shares the sign-in, backend and banner list.
   window.BannerApp = {
     apiPost: apiPost,
+    kept: kept,
+    keep: keep,
     esc: esc,
     badge: badge,
     facts: facts,
