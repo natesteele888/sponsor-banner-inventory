@@ -635,5 +635,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 }
 /* A paid sponsor's receipt on its card. */
 .sp-card-rc { margin-top: 8px; cursor: default; }
-.sp-card-rc .rc-preview { margin-top: 8px; }
+.sp-card-pane { flex: 1 0 100%; min-width: 0; }
+.sp-card-pane:has(.rc-preview.hidden) { display: none; }
+.season-card:has(.sp-card-pane .rc-preview:not(.hidden)) { flex-wrap: wrap; }
 .sp-card-rc .rc-msg:empty { display: none; }

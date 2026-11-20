@@ -716,7 +716,7 @@
     var label = it.status === 'sent' ? 'Open receipt' : canEdit() ? 'Preview and send receipt' : 'Preview receipt';
     return '<div class="sp-card-rc">' +
       '<button class="btn small" type="button" data-card-rc="' + esc(it.key) + '">' + label + '</button>' +
-      '<div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></div>';
+      '<div class="rc-msg" role="status"></div></div>';
   }
 
   function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
@@ -1438,6 +1438,7 @@
           cardReceipt(s) +
         '</div>' +
         cardBadge(s) +
+        (cardReceipt(s) ? '<div class="sp-card-rc sp-card-pane"><div class="rc-preview hidden"></div></div>' : '') +
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
@@ -1445,9 +1446,11 @@
       // The receipt button and its preview stay on the card: no detail opens.
       ['click', 'keydown'].forEach(function (ev) { box.addEventListener(ev, function (e) { e.stopPropagation(); }); });
       var btn = box.querySelector('button[data-card-rc]');
+      if (!btn) return;
       btn.addEventListener('click', function () {
         var key = btn.dataset.cardRc, item = receiptItem(key);
-        showReceipt(rowPreview(box), key, box.querySelector('.rc-msg'), { send: canEdit() && item && item.status === 'ready' });
+        // The preview opens full width under the card's own details.
+        showReceipt(rowPreview(box.closest('.season-card').querySelector('.sp-card-pane')), key, box.querySelector('.rc-msg'), { send: canEdit() && item && item.status === 'ready' });
       });
     });
     $$('#spList .season-card').forEach(function (card) {
