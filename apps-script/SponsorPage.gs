@@ -187,11 +187,12 @@ function pageRecQuick_(token) {
 }
 
 // boardRowsGen_ and forgetBoardRows_ live in Edits.gs, next to the writes.
-function boardRowsFrom_(tab) {
+function boardRowsFrom_(tab, withEmail) {
   var head = tab.headers.map(function (h) { return String(h).toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), amount: col(/^amount/), paid: col(/^paid\??$/),
-            tier: col(new RegExp('^tier selected ' + SEASON)) };
+            tier: col(new RegExp('^tier selected ' + SEASON)),
+            prevTier: col(new RegExp('^tier selected ' + PREV_SEASON)), past: col(/^has sponsored in past/), email: col(/^email/) };
   if (c.tier < 0) c.tier = col(/^tier/);
   if (c.company < 0) return null;
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
@@ -201,6 +202,17 @@ function boardRowsFrom_(tab) {
     if (!key || map[key]) return;
     map[key] = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), amount: parseAmount_(get(r, 'amount')),
                  paid: get(r, 'paid'), tier: get(r, 'tier') };
+    // A paid sponsor's row also keeps last season's level, so a returning
+    // sponsor can keep what we already have from last year.
+    if (isYes_(map[key].paid)) {
+      map[key].prevTier = get(r, 'prevTier'); map[key].past = isYes_(get(r, 'past'));
+      // Only whether an email is on file. The address itself is read live,
+      // on the server, when a returning sponsor keeps last year's info in
+      // one tap (onFileEmail_); it is never cached or sent to the page.
+      var mail = firstEmail_(get(r, 'email'));
+      map[key].hasEmail = !!mail;
+      if (withEmail) map[key].email = mail;
+    }
   });
   return map;
 }
@@ -210,6 +222,14 @@ function cacheBoardRows_(tab) {
 }
 
 // ---------- the sponsor's row on the board's sheet (read only here) ----------
+
+// The email on the board's sheet for one sponsor, read live. Server side only.
+function onFileEmail_(company) {
+  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
+  var map = tab && boardRowsFrom_(tab, true);
+  var hit = map && map[companyKey_(company)];
+  return (hit && hit.email) || '';
+}
 
 function boardSponsorRow_(key, fresh) {
   if (!fresh) {
@@ -259,6 +279,16 @@ function sponsorPageState_(token, quick) {
   return { found: found, row: row, levels: levels, paid: paid, ups: ups };
 }
 
+// A returning sponsor: the level they had last season, or for one marked as
+// a past sponsor with no level on file, the level they have now. Null for a
+// new sponsor. "Same as last year" covers only what that level had.
+function lastYearLevel_(levels, row) {
+  if (!row) return null;
+  var prev = row.prevTier ? levelNamed_(levels, row.prevTier) : null;
+  if (prev) return prev;
+  return row.past ? paidLevel_(levels, row) : null;
+}
+
 // ---------- public: what the page shows ----------
 
 function sponsorPageGet(data) {
@@ -269,8 +299,14 @@ function sponsorPageGet(data) {
     var to = levelNamed_(st.levels, rec.upgradeTo);
     if (to && to.price > st.row.amount) pending = { to: to.name, owed: Math.max(0, to.price - st.row.amount) };
   }
+  var last = lastYearLevel_(st.levels, st.row);
   return ok({
     season: SEASON, company: st.row.company, contactName: st.row.contact, deadline: INFO_DEADLINE,
+    // Returning sponsor: what last season's level had, for "Same as last year".
+    // contact: we have a name and email on file, so "Keep last year's info"
+    // can send in one tap with nothing typed.
+    lastYear: last ? { jersey: !!last.jersey, logo: !!last.logo, writeup: !!last.writeup, banner: !!last.banner,
+                       contact: !!(st.row.contact && st.row.hasEmail) } : null,
     paid: { level: st.paid.name, amount: st.row.amount },
     // Every level, low to high: theirs marked paid, the ones above as
     // upgrades, the ones below shown for reference only.
@@ -316,7 +352,19 @@ function sponsorPageSubmit(data) {
     banner: level.banner ? clean(f.bannerChoice, 80) : '', bannerText: level.banner ? clean(f.bannerText, 600) : '',
     fileLink: clean(f.fileLink, 500), more: clean(f.more, 1000)
   };
+  // "Same as last year": a returning sponsor keeps what we have from last
+  // season for each part last season's level had. A part their level didn't
+  // have (say a banner, after moving up) still needs their answer.
+  var last = f.same ? lastYearLevel_(st.levels, row) : null;
+  // "Keep last year's info" in one tap sends no contact: use the one on file.
+  if (last && !v.contactName) v.contactName = clean(String(row.contact || '').replace(/^(manager|owner)\s*:\s*/i, ''), 200);
+  if (last && !v.email) v.email = onFileEmail_(row.company);
   if (!v.contactName || !v.email) return fail('Please fill in your name and email.');
+  if (last) {
+    if (level.jersey && last.jersey && !v.jersey) v.jersey = 'Same as last year';
+    if (level.banner && last.banner && !v.banner) v.banner = PAGE_BANNER_CHOICES[0];
+    if (level.writeup && last.writeup && !v.writeup) v.writeup = 'Same as last year';
+  }
   if (level.jersey && !v.jersey) return fail('Please add the name for the jersey.');
   if (level.banner && PAGE_BANNER_CHOICES.indexOf(v.banner) < 0) return fail('Please pick what we should do for your banner.');
   if (String(f.writeup || '').length > level.writeup && level.writeup) return fail('Your write-up is longer than ' + level.writeup + ' characters.');
@@ -340,7 +388,8 @@ function sponsorPageSubmit(data) {
     folder.createFile(Utilities.newBlob(bytes, t.mime, nm));
     saved.push(nm);
   }
-  if (level.logo && saved.every(function (n) { return n.indexOf('_logo_') < 0; }) && !v.fileLink && !rec.submittedAt) {
+  var sameLogo = !!(last && last.logo);
+  if (level.logo && saved.every(function (n) { return n.indexOf('_logo_') < 0; }) && !v.fileLink && !rec.submittedAt && !sameLogo) {
     return fail('Please attach your logo, or paste a link to it.');
   }
 
@@ -353,8 +402,9 @@ function sponsorPageSubmit(data) {
     'email': v.email, 'phone': v.phone, 'website': v.website, 'facebook': v.facebook, 'instagram': v.instagram,
     'other social': v.other, 'write-up': v.writeup, 'sponsoring a player/team/division': v.sponsoring,
     'banner': v.banner, 'banner notes': v.bannerText, 'files folder': folder ? folder.getUrl() : '',
-    'files': saved.join(', ') + (v.fileLink ? (saved.length ? '; ' : '') + 'link: ' + v.fileLink : ''),
-    'anything else': v.more
+    'files': (saved.join(', ') + (v.fileLink ? (saved.length ? '; ' : '') + 'link: ' + v.fileLink : '')) ||
+      (level.logo && sameLogo ? 'Same as last year' : ''),
+    'anything else': (last ? 'Same as last year: nothing changed, use what we have from last season.' + (v.more ? ' ' : '') : '') + v.more
   };
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(function (h) { return String(h).toLowerCase().trim(); });
   sh.appendRow(head.map(function (h) { return out[h] == null ? '' : out[h]; }));
@@ -372,6 +422,7 @@ function sponsorPageSubmit(data) {
       to: myEmail_(),
       subject: SEASON + ' sponsor info received: ' + row.company + (upgrade ? ' (upgrade asked)' : ''),
       body: row.company + ' sent their sponsor info from their receipt link.\n\nLevel: ' + levelText +
+        (last ? '\n\nThey picked "Same as last year": nothing changed, so reuse what we have from last season.' : '') +
         (upgrade ? '\n\nThe upgrade counts once their payment for the difference is recorded (Record a payment). No banner change until then.' : '') +
         '\n\nIt is on the Packets tab and in the Sponsors tab:\n' + APP_URL + '#sponsors',
       name: 'LYBS Sponsors app'
