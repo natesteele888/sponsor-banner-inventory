@@ -151,8 +151,8 @@
     if (!lv) { box.classList.add('hidden'); box.innerHTML = ''; return; }
     var p = P.pay || {}, ways = [];
     if (p.venmo) ways.push('<li><b>Venmo:</b> ' + esc(p.venmo) + '. Put your business name in the note.</li>');
-    if (p.online) ways.push('<li><b>Online:</b> <a href="' + esc(p.online) + '" target="_blank" rel="noopener">pay on our website</a>, with your business name.</li>');
-    ways.push('<li><b>Check:</b> payable to ' + esc(p.checkTo || 'the league') + (p.address ? ', mailed to ' + esc(p.address) : '') + '. Put your business name on the memo line.</li>');
+    if (p.online) ways.push('<li><b>Online:</b> <a href="' + esc(p.online) + '" target="_blank" rel="noopener">pay on our website\'s donation page</a>. Put your business name in the note.</li>');
+    ways.push('<li><b>Check or money order:</b> payable to ' + esc(p.checkTo || 'the league') + (p.address ? ', mailed to ' + esc(p.address) : '') + '. Put your business name on the memo line.</li>');
     if (p.cash) ways.push('<li><b>Cash:</b> hand it to any LYBS board member.</li>');
     box.innerHTML = '<h2>Pay the ' + esc(money(lv.owed)) + ' difference</h2>' +
       '<p>Your upgrade to ' + esc(lv.name) + ' counts once we get it. Any of these work:</p><ul class="lv-ways">' + ways.join('') + '</ul>' +
