@@ -31,6 +31,11 @@
  *                         account this script runs as); never a sponsor
  * Without the first three, Send refuses. Without SPONSOR_PACKET_URL the
  * receipt goes out without the packet part.
+ *
+ * Print / Save: the receipt's corner link opens receipt.html with that
+ * sponsor's own page token (?t=...), which shows the receipt on a page of its
+ * own, ready to print or save as a PDF. Nothing about a sponsor is in the link
+ * or on the site: the page asks this backend with the token (sponsorReceiptGet).
  */
 
 var RECEIPTS_PROP = 'RECEIPTS_' + SEASON;
@@ -137,20 +142,29 @@ function receiptEmail_(r, s, when) {
     // The sponsor packet: its own card above the receipt, with clear space
     // between, so a screenshot of the receipt stays clean. Left off the PDF.
     (s.packetUrl ?
-      '<!--pk--><table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'margin-bottom:28px;background:#EEF3FF;border:1px solid #C9D6FF;border-radius:20px;border-collapse:separate">' +
-        '<tr><td style="padding:24px 30px">' +
-          '<div style="font-size:17px;font-weight:bold;margin-bottom:6px;color:#0a1628">One more step: your sponsor info packet</div>' +
-          '<div style="font-size:14px;line-height:1.5;margin-bottom:14px">Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.</div>' +
-          '<a href="' + e(s.packetUrl) + '" style="display:inline-block;background:#2E52E8;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 20px;border-radius:8px">Fill out your sponsor packet</a>' +
+      '<!--pk--><table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'margin-bottom:20px;background:#EEF3FF;border:1px solid #C9D6FF;border-radius:14px;border-collapse:separate">' +
+        '<tr><td style="padding:14px 18px">' +
+          '<div style="font-size:15px;font-weight:bold;margin-bottom:3px;color:#0a1628">One more step: your sponsor info packet</div>' +
+          '<div style="font-size:13px;line-height:1.45;margin-bottom:10px;color:#3B4458">Send us your logo and business details. It takes about five minutes.</div>' +
+          '<a href="' + e(s.packetUrl) + '" style="display:inline-block;background:#2E52E8;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:9px 16px;border-radius:8px">Fill out your sponsor packet</a>' +
         '</td></tr></table><!--/pk-->' : '') +
     '<table role="presentation" class="rc-card" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'background:#ffffff;border-radius:20px 20px 0 0;border-collapse:separate;overflow:hidden">' +
     '<tr><td style="padding:30px 30px 4px">' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse"><tr><td style="vertical-align:top">' +
       '<div style="font-size:12px;letter-spacing:1.5px;color:#5B6478;font-weight:bold;margin-bottom:6px">NON-PROFIT DONATION RECEIPT</div>' +
       '<div style="font-size:18px;font-weight:bold;line-height:1.25;color:#0a1628">' + e(RECEIPT_ORG) + '</div>' +
       (s.address ? '<div style="font-size:13px;color:#5B6478;margin-top:3px">' + e(s.address) + '</div>' : '') +
+      '</td>' +
+      // Top right corner: a small Print / Save link to the receipt's own
+      // page. An email can't run a Print button, so it opens a page that can.
+      // Left off the PDF and the print page.
+      (s.printUrl ? '<!--ps--><td class="rc-ps" style="vertical-align:top;text-align:right;white-space:nowrap;padding-left:12px">' +
+        '<a href="' + e(s.printUrl) + '" style="display:inline-block;font-size:13px;font-weight:bold;color:#2E52E8;text-decoration:none;border:1px solid #C9D6FF;border-radius:8px;padding:6px 10px">Print / Save</a>' +
+        '</td><!--/ps-->' : '') +
+      '</tr></table>' +
     '</td></tr>' +
     '<tr><td style="padding:16px 30px 4px">' +
-      '<p style="margin:0 0 14px;font-size:15px;line-height:1.5">Thank you for supporting ' + e(RECEIPT_ORG) + '. <!--pdf-->Your receipt is attached as a PDF to print or save for your taxes.<!--/pdf--></p>' +
+      '<!--keep--><!--/keep-->' +
       '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">' +
       rows.map(function (x) {
         var big = x[0] === 'Donation amount';
@@ -158,12 +172,6 @@ function receiptEmail_(r, s, when) {
           '<td style="' + cell + (big ? 'font-size:20px;font-weight:bold;color:#1A56DB' : '') + '">' + e(x[1]) + '</td></tr>';
       }).join('') +
       '</table>' +
-      // Right under the amounts: how to print or save. An email can't hold a
-      // working Print button, so this points at the attached PDF by its name.
-      // Left off the PDF itself.
-      '<!--pn--><div class="rc-pn" style="margin:16px 0 0;padding:12px 14px;background:#EEF3FF;border-radius:10px;font-size:14px;line-height:1.5;color:#0a1628">' +
-        '<b>To print or save this receipt:</b> open the attached PDF, <i>' + e(receiptPdfName_(r)) + '</i>, then choose Print or Save.' +
-      '</div><!--/pn-->' +
       '<p style="margin:16px 0 0;font-size:14px;line-height:1.5">' + e(noGoods) + '</p>' +
       '<p style="margin:16px 0 0;font-size:14px;line-height:1.5">Sincerely,<br><b>' + e(RECEIPT_ORG) + '</b><br>' + e(s.issuer || 'NOT SET') + '</p>' +
       '<p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#5B6478">' + e(taxLine) + '</p>' +
@@ -176,10 +184,9 @@ function receiptEmail_(r, s, when) {
     '</div>' +
     '</div>';
 
-  var text = [thanks, ''].concat(s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details so we can put you on your banner, jersey and our social posts. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
-    .concat([RECEIPT_ORG, s.address, '', 'NON-PROFIT DONATION RECEIPT', '', 'Thank you for supporting ' + RECEIPT_ORG + '. Your receipt is attached as a PDF to print or save for your taxes.', ''])
+  var text = [thanks, ''].concat(s.packetUrl ? ['One more step: your sponsor info packet', 'Send us your logo and business details. It takes about five minutes.', 'Fill out your sponsor packet: ' + s.packetUrl, '', '----------', ''] : [])
+    .concat(['NON-PROFIT DONATION RECEIPT', RECEIPT_ORG, s.address].concat(s.printUrl ? ['Print / Save: ' + s.printUrl] : []).concat(['']))
     .concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }))
-    .concat(['', 'To print or save this receipt: open the attached PDF, ' + receiptPdfName_(r) + ', then choose Print or Save.'])
     .concat(['', noGoods, '', 'Sincerely,', RECEIPT_ORG, (s.issuer || 'NOT SET'), '', taxLine])
     .join('\n');
   return { subject: subject, html: html, text: text };
@@ -199,17 +206,24 @@ function receiptDoc_(html, title) {
     html + '</body></html>';
 }
 
+// The receipt alone, for the PDF and the print page: no thank-you line, no
+// packet card, no Print / Save link, on white, with a line to keep it.
+function receiptOnly_(html) {
+  return html
+    .replace(/<!--ty-->[\s\S]*?<!--\/ty-->/, '')
+    .replace(/<!--pk-->[\s\S]*?<!--\/pk-->/, '')
+    .replace(/<!--ps-->[\s\S]*?<!--\/ps-->/, '')
+    .replace(/<!--keep-->[\s\S]*?<!--\/keep-->/, '<p style="margin:0 0 14px;font-size:15px;line-height:1.5">Please keep this receipt for your tax records.</p>')
+    .replace('background:#F7F7F7;padding:30px 12px', 'background:#ffffff;padding:0');
+}
+
 // The same receipt as a PDF, to attach. The logo goes in as data, since the
 // PDF maker doesn't fetch pictures. Returns null if it can't be made.
 function receiptPdf_(r, s, when) {
   try {
     var m = receiptEmail_(r, s, when), logo = logoDataUri_();
-    var html = m.html.split('src="' + leagueLogoUrl_() + '"').join(logo ? 'src="' + logo + '"' : 'src=""')
-      .replace(/<!--ty-->[\s\S]*?<!--\/ty-->/, '')
-      .replace(/<!--pk-->[\s\S]*?<!--\/pk-->/, '')
-      .replace(/<!--pdf-->[\s\S]*?<!--\/pdf-->/, 'Please keep this receipt for your tax records.')
-      .replace(/<!--pn-->[\s\S]*?<!--\/pn-->/, '');
-    var doc = receiptDoc_(html.replace('background:#F7F7F7;padding:30px 12px', 'background:#ffffff;padding:0'), m.subject);
+    var html = receiptOnly_(m.html.split('src="' + leagueLogoUrl_() + '"').join(logo ? 'src="' + logo + '"' : 'src=""'));
+    var doc = receiptDoc_(html, m.subject);
     var name = receiptPdfName_(r);
     return HtmlService.createHtmlOutput(doc).getBlob().getAs(MimeType.PDF).setName(name);
   } catch (e) { console.log('receipt pdf: ' + e); return null; }
@@ -238,6 +252,7 @@ function receiptPreview(data) {
   var when = r.status === 'sent' && /^\d{4}-\d{2}-\d{2}$/.test(r.at || '') ? new Date(r.at + 'T12:00:00') : null;
   var s = receiptSettings_();
   s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
+  s.printUrl = receiptPageLink_(r);
   var m = receiptEmail_(r, s, when);
   return ok({ subject: m.subject, html: receiptDoc_(m.html, m.subject), to: s.live ? r.email : (s.testTo ? 'test address' : ''), live: s.live, sent: r.status === 'sent' });
 }
@@ -256,6 +271,7 @@ function receiptSend(data) {
     if (!r) return fail('That row is no longer marked paid with an email.');
     if (r.status === 'sent') return fail('That receipt was already sent' + (r.at ? ' on ' + r.at : '') + '.');
     s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
+    s.printUrl = receiptPageLink_(r);
     var m = receiptEmail_(r, s);
     var to = s.live ? r.email : s.testTo;
     var pdf = receiptPdf_(r, s);
@@ -268,6 +284,34 @@ function receiptSend(data) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------- public: the receipt's own page, to print or save ----------
+
+var RECEIPT_PAGE_URL = APP_URL + 'receipt.html';
+
+// The Print / Save link for this sponsor: the same private token as their
+// packet link. '' if it can't be made, and the email goes without it.
+function receiptPageLink_(r) {
+  try {
+    var t = sponsorPageToken_(r && r.company);
+    return t ? RECEIPT_PAGE_URL + '?t=' + t : '';
+  } catch (e) { console.log('receipt page link: ' + e); return ''; }
+}
+
+// receipt.html asks for the receipt with the sponsor's token. It gets only
+// that sponsor's receipt, and only once they're marked paid with an email.
+function sponsorReceiptGet(data) {
+  var found = pageByToken_(data && data.t);
+  if (!found) return fail("This link doesn't match a receipt. Please open it from your LYBS receipt email, or just reply to that email.");
+  var key = found.rec.key;
+  var r = receiptRows_().filter(function (x) { return companyKey_(x.company) === key && x.status !== 'skip'; })[0];
+  if (!r) return fail("We can't show this receipt right now. Please use the PDF attached to your receipt email, or just reply to that email.");
+  var s = receiptSettings_();
+  if (s.missing.length) return fail("We can't show this receipt right now. Please use the PDF attached to your receipt email, or just reply to that email.");
+  var when = r.status === 'sent' && /^\d{4}-\d{2}-\d{2}$/.test(r.at || '') ? new Date(r.at + 'T12:00:00') : null;
+  var m = receiptEmail_(r, s, when);
+  return ok({ title: m.subject, html: receiptOnly_(m.html), file: receiptPdfName_(r).replace(/\.pdf$/, '') });
 }
 
 // "Not needed", and undo.

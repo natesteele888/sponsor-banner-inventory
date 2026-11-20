@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>LYBS Donation Receipt</title>
+<meta name="theme-color" content="#F7F7F7">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<style>
+  @page { size: letter; margin: 12mm; }
+  html, body { margin: 0; background: #F7F7F7; font-family: Arial, Helvetica, sans-serif; color: #0B1120; }
+  .rp-bar { max-width: 650px; margin: 0 auto; padding: 16px 12px 0; display: flex; justify-content: flex-end; }
+  .rp-btn { font: bold 15px Arial, Helvetica, sans-serif; color: #fff; background: #2E52E8; border: 0; border-radius: 8px; padding: 11px 18px; cursor: pointer; }
+  .rp-msg { max-width: 650px; margin: 40px auto; padding: 0 16px; font-size: 16px; line-height: 1.5; text-align: center; color: #5B6478; }
+  .rp-body { padding: 16px 12px 30px; }
+  .rp-body .rc-outer { padding: 0 !important; background: transparent !important; }
+  .rp-body img { max-width: 100%; height: auto; }
+  .hidden { display: none; }
+  @media print {
+    html, body { background: #fff; }
+    .rp-bar { display: none; }
+    .rp-body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+<!-- A sponsor's donation receipt on a page of its own, to print or save as a
+     PDF. Opened from the Print / Save link in their receipt email (?t=...);
+     the receipt itself comes from the backend, never from this site. -->
+<div class="rp-bar hidden" id="bar"><button type="button" class="rp-btn" id="printBtn">Print / Save as PDF</button></div>
+<p class="rp-msg" id="msg">Loading your receipt…</p>
+<main class="rp-body" id="receipt"></main>
+<noscript><p class="rp-msg">This page needs to open in its own browser tab. Use the PDF attached to your receipt email, or just reply to that email.</p></noscript>
+<script src="config.js"></script>
+<script src="receipt-page.js"></script>
+</body>
+</html>
