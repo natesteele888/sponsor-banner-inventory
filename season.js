@@ -135,7 +135,15 @@
     A().setBadge($('#ssBadge'), r.tier || '', 'muted');
     $('#ssSource').textContent = 'Came in by: ' + (r.source || 'unknown') + (r.addedAt ? ' · added ' + r.addedAt : '');
     ['company', 'amount', 'contactName', 'contactEmail', 'contactPhone', 'notes'].forEach(function (k) { $('#s_' + k).value = r[k] || ''; });
-    $('#s_tier').value = r.tier || '';
+    // Championship+ was folded into Championship (it is $750 and up now), but
+    // rows filed before that still say Championship+. Show it as Championship,
+    // and keep any other level the list doesn't have, so Save never blanks it.
+    var tier = /^championship\s*(\+|plus)$/i.test(r.tier || '') ? 'Championship' : (r.tier || '');
+    var tierSel = $('#s_tier');
+    if (tier && !Array.prototype.some.call(tierSel.options, function (o) { return o.value === tier; })) {
+      var o = document.createElement('option'); o.textContent = tier; tierSel.appendChild(o);
+    }
+    tierSel.value = tier;
     $('#s_paid').checked = isPaid(r);
     $('#ssPaidVia').textContent = isPaid(r) ? (r.paidVia || '') : 'Not paid yet. Tick this once their payment is in, then Save.';
 
