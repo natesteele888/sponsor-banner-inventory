@@ -205,13 +205,14 @@
     });
   }
 
-  function load() {
+  // fresh: Refresh was pressed, so read the sheet itself, not the quick copy.
+  function load(fresh) {
     if (S.loading) return S.loading;
     var done, early = !S.book && A().kept('sponsorBook');
     S.bookReady = new Promise(function (r) { done = r; });
     if (early) { S.early = true; useBook(early); }
     else $('#spStatus').textContent = 'Reading the sponsorship sheet…';
-    S.loading = A().apiPost({ action: 'sponsorBook' }).then(function (res) {
+    S.loading = A().apiPost(fresh ? { action: 'sponsorBook', fresh: true } : { action: 'sponsorBook' }).then(function (res) {
       if (!res.ok) {
         var msg = String(res.error || '');
         // The backend hasn't got this version yet (Apps Script still on the old code).
@@ -1652,7 +1653,7 @@
     $('#spFilter').addEventListener('change', function (e) { S.filter = e.target.value; render(); });
     $('#spSearch').addEventListener('input', function (e) { S.search = e.target.value; render(); });
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
-    $('#spRefresh').addEventListener('click', function () { load(); });
+    $('#spRefresh').addEventListener('click', function () { load(true); });
     $('#spAddForm').addEventListener('submit', addContact);
     $('#spa_tier').addEventListener('change', addLevelPicked);
     $('#spaFill').addEventListener('click', fillFromForm);
