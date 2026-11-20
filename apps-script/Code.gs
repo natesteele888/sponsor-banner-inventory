@@ -97,7 +97,10 @@ function doPost(e) {
   if (publicAction === 'sponsorPageGet' || publicAction === 'sponsorPageSubmit' || publicAction === 'sponsorReceiptGet') {
     try {
       if (publicAction === 'sponsorReceiptGet') return sponsorReceiptGet(data);
-      return publicAction === 'sponsorPageGet' ? sponsorPageGet(data) : sponsorPageSubmit(data);
+      if (publicAction === 'sponsorPageGet') return sponsorPageGet(data);
+      var sent = sponsorPageSubmit(data);
+      forgetSnaps_();   // packets and upgrades changed
+      return sent;
     } catch (err) {
       console.log('sponsor page failed: ' + err);
       return fail('Something went wrong on our end. Please try again, or just reply to the email.');
@@ -126,9 +129,16 @@ function doPost(e) {
   if (!who.ok) return fail(who.error);
   WHO = who;
 
+  var asked = String(data.action || '');
+  var reply = route_(asked, data);
+  // Anything that may have changed a sheet clears the quick copies of the reads.
+  if (!SNAP_READ_ONLY[asked]) forgetSnaps_();
+  return reply;
+}
+
+function route_(action, data) {
   try {
-    var action = String(data.action || '');
-    if (action === 'list') return ok({ banners: listBanners() });
+    if (action === 'list') return ok(snapRead_('list', false, function () { return { banners: listBanners() }; }));
     if (action === 'image') return ok(getImage(data.id, data.size));
     if (action === 'update') return update(data);
     if (action === 'upload') return upload(data);
@@ -138,25 +148,40 @@ function doPost(e) {
     if (action === 'seasonRequest') return seasonRequest(data);
     if (action === 'seasonScan') return ok({ added: scanForNewSponsors() });
     // The Sponsors tab: the sponsorship sheet, read live, and sponsor-to-team picks.
-    if (action === 'sponsorBook') { var bk = sponsorBook(); bk.changes = sponsorChanges_(sponsorSpreadsheet_(), 1000); return ok(Object.assign(bk, sponsorPerms_())); }
+    if (action === 'sponsorBook') {
+      // The sheet, the change log and the sheet's edit settings, shared by
+      // everyone; then who this person is and whether they may edit.
+      var bk = snapRead_('book', !!data.fresh, function () {
+        var b = sponsorBook(), p = sponsorPerms_();
+        b.changes = sponsorChanges_(sponsorSpreadsheet_(), 1000);
+        ['writable', 'canAdd', 'formulaCols', 'choices', 'former'].forEach(function (k) { b[k] = p[k]; });
+        return b;
+      });
+      // The sponsor pages' small map of the sheet comes from the same copy,
+      // so a sponsor opening their page doesn't wait on a sheet read.
+      if (bk.tabs && bk.tabs[0] && typeof cacheBoardRows_ === 'function') cacheBoardRows_(bk.tabs[0]);
+      bk.me = sponsorMe_();
+      bk.canEdit = !!bk.writable && canEditSponsors_();
+      return ok(bk);
+    }
     if (action === 'sponsorAdd') return sponsorAdd(data);
     if (action === 'sponsorEdit') return sponsorEdit(data);
     if (action === 'sponsorWalkIn') return sponsorWalkIn(data);
     if (action === 'walkInForm') return walkInForm();
     // This season's committed total next to last season's (History.gs). Totals only.
-    if (action === 'sponsorHistory') return ok(sponsorHistory());
-    if (action === 'receiptList') return ok(receiptList());
+    if (action === 'sponsorHistory') return ok(snapRead_('history', false, sponsorHistory));
+    if (action === 'receiptList') return ok(snapRead_('receipts', false, receiptList));
     if (action === 'receiptPreview') return receiptPreview(data);
     if (action === 'receiptSend') return receiptSend(data);
     if (action === 'receiptMark') return receiptMark(data);
-    if (action === 'nudgeList') return ok(nudgeList());
+    if (action === 'nudgeList') return ok(snapRead_('nudges', false, nudgeList));
     if (action === 'nudgePreview') return nudgePreview(data);
     if (action === 'nudgeSend') return nudgeSend(data);
     if (action === 'nudgeMark') return nudgeMark(data);
     if (action === 'nudgeRound') return nudgeRound(data);
-    if (action === 'sponsorPackets') return ok(sponsorPackets());
+    if (action === 'sponsorPackets') return ok(snapRead_('packets', false, sponsorPackets));
     if (action === 'packetAdd') return packetAdd(data);
-    if (action === 'sponsorUpgrades') return ok({ upgrades: sponsorUpgrades() });
+    if (action === 'sponsorUpgrades') return ok(snapRead_('upgrades', false, function () { return { upgrades: sponsorUpgrades() }; }));
     if (action === 'sponsorUpgradePaid') return sponsorUpgradePaid(data);
     if (action === 'packetLogo') return packetLogo(data);
     if (action === 'spotlightSponsors') return spotlightSponsors();
@@ -165,7 +190,7 @@ function doPost(e) {
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
     // A small copy of each sponsor's logo from the league's Sponsor Logos folder.
-    if (action === 'sponsorLogoList') return ok(sponsorLogoList());
+    if (action === 'sponsorLogoList') return ok(snapRead_('logos', false, sponsorLogoList));
     // When the website was last looked at for sponsor payments, and whether each is on the sheet. Read only.
     if (action === 'websiteCheck') return ok(websiteCheck(!!data.fresh));
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.
@@ -177,6 +202,60 @@ function doPost(e) {
   }
 }
 
+
+// ---------- speed: quick copies of the reads ----------
+// Each read took one to three seconds of opening and reading sheets, on
+// every open by every board member. Now the answer is kept in Apps Script's
+// private cache for ten minutes and shared by everyone signed in: any change
+// made through the app clears it at once (doPost), Refresh in the app reads
+// the sheet fresh, and a change typed straight into the sheet shows within
+// ten minutes. Nothing about who is asking is kept in it.
+var SNAP_TTL = 600;            // 10 minutes
+var SNAP_CHUNK = 30000;        // characters per cache entry (each entry holds up to 100 KB)
+var SNAP_READ_ONLY = { list: 1, image: 1, seasonList: 1, sponsorBook: 1, walkInForm: 1, sponsorHistory: 1, receiptList: 1,
+  receiptPreview: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
+  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1 };
+
+function snapGen_() { try { return CacheService.getScriptCache().get('snapGen') || '0'; } catch (e) { return '0'; } }
+function forgetSnaps_() { try { CacheService.getScriptCache().put('snapGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }
+
+function snapRead_(name, fresh, build) {
+  var cache, key = 'snap_' + name + '_' + snapGen_();
+  try { cache = CacheService.getScriptCache(); } catch (e) { return build(); }
+  if (!fresh) {
+    try { var hit = snapGet_(cache, key); if (hit) return JSON.parse(hit); } catch (e) { }
+  }
+  var v = build();
+  try { snapPut_(cache, key, JSON.stringify(v)); } catch (e) { }
+  return v;
+}
+function snapPut_(cache, key, s) {
+  var n = Math.ceil(s.length / SNAP_CHUNK);
+  if (!n || n > 30) return;   // too big to keep: read live each time
+  var o = {};
+  for (var i = 0; i < n; i++) o[key + '_' + i] = s.slice(i * SNAP_CHUNK, (i + 1) * SNAP_CHUNK);
+  cache.putAll(o, SNAP_TTL);
+  cache.put(key, String(n), SNAP_TTL);   // last, so a reader never sees half a copy
+}
+function snapGet_(cache, key) {
+  var n = Number(cache.get(key) || 0);
+  if (!n) return null;
+  var keys = [];
+  for (var i = 0; i < n; i++) keys.push(key + '_' + i);
+  var got = cache.getAll(keys), s = '';
+  for (var j = 0; j < n; j++) { if (got[keys[j]] == null) return null; s += got[keys[j]]; }
+  return s;
+}
+
+// Optional: run every 5 minutes from a time trigger (Triggers, Add Trigger,
+// warmSponsorReads, time-driven, every 5 minutes) so the quick copies are
+// always ready and nobody waits on a cold read. Reads only; sends nothing.
+function warmSponsorReads() {
+  WHO = null;
+  route_('sponsorBook', {});
+  ['sponsorHistory', 'receiptList', 'nudgeList', 'sponsorPackets', 'sponsorUpgrades', 'sponsorLogoList', 'list']
+    .forEach(function (a) { try { route_(a, {}); } catch (e) { console.log('warm ' + a + ': ' + e); } });
+}
 
 // ---------- sign-in ----------
 

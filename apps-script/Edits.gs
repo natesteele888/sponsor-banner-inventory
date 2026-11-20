@@ -219,7 +219,10 @@ function sponsorHead_(sh) {
 // Every write to the board sheet clears the sponsor pages' quick copy of it
 // (SponsorPage.gs), so a sponsor's page never shows an old amount for long.
 function boardRowsGen_() { try { return CacheService.getScriptCache().get('spBoardGen') || '0'; } catch (e) { return '0'; } }
-function forgetBoardRows_() { try { CacheService.getScriptCache().put('spBoardGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }
+function forgetBoardRows_() {
+  try { CacheService.getScriptCache().put('spBoardGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { }
+  if (typeof forgetSnaps_ === 'function') forgetSnaps_();
+}
 
 function sponsorAdd(data) {
   forgetBoardRows_();
