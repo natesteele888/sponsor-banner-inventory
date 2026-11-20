@@ -585,8 +585,8 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-note { font-size: 14px; color: var(--gold); margin: 0; }
 .lv-for { font-size: 14px; font-weight: 600; color: var(--ink); margin: 0; }
 /* Returning sponsors: one tap keeps last season's info. */
-.same { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 4px; padding: 12px 14px; border: 1px solid var(--blue); border-radius: 12px; background: var(--blue-bg); font-size: 14px; line-height: 1.4; color: var(--ink); cursor: pointer; }
-.same.hidden { display: none; }
+.form label.same { flex-direction: row; gap: 10px; align-items: flex-start; margin: 12px 0 4px; padding: 12px 14px; border: 1px solid var(--blue); border-radius: 12px; background: var(--blue-bg); font-size: 14px; font-weight: 400; line-height: 1.4; text-transform: none; letter-spacing: normal; color: var(--ink); cursor: pointer; }
+.form label.same.hidden { display: none; }
 .same input { width: 20px; height: 20px; margin: 1px 0 0; flex: none; accent-color: var(--blue); }
 .same small { display: block; margin-top: 3px; font-size: 12px; color: var(--ink2); }
 .lv-pay { border-color: var(--blue); }
