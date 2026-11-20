@@ -443,6 +443,7 @@ body.locked .scrim, body.locked .sheet { display: none !important; }
 .yoy-bar { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: visible; }
 .yoy-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--blue); }
 .yoy-tick { position: absolute; top: -2px; width: 1px; height: 10px; background: var(--ink2); opacity: .45; }
+.yoy-tre { height: 12px; top: -3px; width: 2px; opacity: .8; background: var(--accent, var(--ink)); }
 .yoy-then { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--ink); }
 .yoy-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .yoy-table th, .yoy-table td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--line); }

@@ -17,6 +17,11 @@
  * version, and the app says so. Worked out once and remembered
  * (SPONSOR_PREV_<season>); run forgetSponsorHistory() to work it out again.
  *
+ * The treasurer's own totals for last season, when given, are added as
+ * points too. They live only in the Script Property
+ * SPONSOR_PREV_WAYPOINTS_<last season>, never in the repo, as JSON:
+ *   [{"date":"YYYY-MM-DD","committed":1234,"note":"optional words"}, ...]
+ *
  * Counted the same way as the Sponsors tab: a row with a company and an
  * amount over $0 is a sponsor; its amount is committed; "Paid?" yes is paid.
  */
@@ -158,6 +163,19 @@ function forgetSponsorHistory() {
   console.log('Forgot ' + PREV_PROP + '. The next Sponsors tab visit works it out again.');
 }
 
+// The treasurer's figures for last season (see the top of this file).
+function treasurerPoints_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('SPONSOR_PREV_WAYPOINTS_' + PREV_SEASON) || '';
+  if (!raw) return [];
+  try {
+    return (JSON.parse(raw) || []).filter(function (p) {
+      return p && /^\d{4}-\d{2}-\d{2}$/.test(String(p.date)) && Number(p.committed) > 0;
+    }).map(function (p) {
+      return { date: String(p.date), committed: Math.round(Number(p.committed)), note: clean(String(p.note || ''), 80), treasurer: true };
+    });
+  } catch (e) { console.log('treasurer points: ' + e); return []; }
+}
+
 // The action the Sponsors tab calls. Also logs today's snapshot.
 function sponsorHistory() {
   var now = currentTotals_();
@@ -165,5 +183,7 @@ function sponsorHistory() {
   var prev;
   try { prev = prevSeasonHistory_(); }
   catch (e) { console.log('prev season history failed: ' + e); prev = { season: PREV_SEASON, points: [], note: 'failed' }; }
+  var tre = treasurerPoints_();
+  if (tre.length) prev = JSON.parse(JSON.stringify(prev)), prev.points = (prev.points || []).concat(tre);
   return { season: SEASON, today: dayOf_(new Date()), now: now, snaps: readSnaps_(), prev: prev };
 }

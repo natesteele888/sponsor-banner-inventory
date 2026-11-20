@@ -1233,11 +1233,21 @@
       return '<tr><td>' + dayLabel(iso) + '</td><td>' + nowCell + '</td><td>' + prevCell + '</td></tr>';
     }).join('');
     if (then && then.amount > 0) ticks += '<i class="yoy-then" style="left:' + pct(then.amount) + '"></i>';
+    // The treasurer's own figures for last season, marked as such.
+    var esc = A().esc, tre = pts.filter(function (p) { return p.treasurer; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    tre.forEach(function (p) {
+      ticks += '<i class="yoy-tick yoy-tre" style="left:' + pct(p.committed) + '" title="' + esc(dayLabel(p.date)) + ' last year: ' + fmtMoney(p.committed) + ' (treasurer\'s figure' + (p.note ? ', ' + esc(p.note) : '') + ')"></i>';
+    });
+    // When last year's drive hadn't started yet, say when last year reached today's total.
+    var reached = tre.concat(pts.filter(function (p) { return !p.treasurer; })).sort(function (a, b) { return a.date < b.date ? -1 : 1; })
+      .filter(function (p) { return now > 0 && p.committed >= now; })[0];
+    if ((!then || !then.amount) && reached) thenText += ' (last year got here by ' + dayLabel(reached.date) + ')';
 
     var est = [];
     if (prev.sheetCreated) est.push('Last year\'s sheet was started ' + dayLabel(prev.sheetCreated) + '.');
     if (pts.length) est.push('Its totals come from the sheet\'s saved versions, the first on ' + dayLabel(pts.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0].date) + ', so "about" means the nearest saved version was more than a week away.');
     else est.push('Its saved versions couldn\'t be read, so only its final total shows.');
+    if (tre.length) est.push('The treasurer\'s figures (' + tre.map(function (p) { return dayLabel(p.date); }).join(', ') + ') are marked on the bar.');
     est.push('This year\'s totals are kept once a day from ' + dayLabel((h.snaps && h.snaps[0] && h.snaps[0].date) || h.today) + ' on.');
 
     box.innerHTML =
