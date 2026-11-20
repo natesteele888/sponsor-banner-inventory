@@ -2,7 +2,7 @@
 const CACHE = "banners-v51";
 // Save the page at install, or the first visit caches nothing and an offline open fails.
 // This site's own files only: sponsor data comes from the Apps Script backend and is never saved here.
-const SHELL = ["./", "index.html", "app.js", "season.js", "sponsors.js", "fields.js", "config.js", "style.css", "logo.svg", "manifest.json", "icons/sponsor-banners-192.png", "icons/sponsor-banners-512.png", "intake.html", "intake.js", "sponsor.html", "sponsor-page.js"];
+const SHELL = ["./", "index.html", "app.js", "season.js", "sponsors.js", "fields.js", "config.js", "style.css", "logo.svg", "manifest.json", "icons/sponsor-banners-192.png", "icons/sponsor-banners-512.png", "intake.html", "intake.js", "sponsor.html", "sponsor-page.js", "receipt.html", "receipt-page.js"];
 self.addEventListener("install", e => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c => Promise.all(SHELL.map(u => c.add(new Request(u, { cache: "reload" })).catch(() => {})))));

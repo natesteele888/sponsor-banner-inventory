@@ -94,8 +94,9 @@ function doPost(e) {
 
   // The sponsor's own info page (sponsor.html), linked from their receipt:
   // the same kind of door, keyed by that sponsor's own long random token.
-  if (publicAction === 'sponsorPageGet' || publicAction === 'sponsorPageSubmit') {
+  if (publicAction === 'sponsorPageGet' || publicAction === 'sponsorPageSubmit' || publicAction === 'sponsorReceiptGet') {
     try {
+      if (publicAction === 'sponsorReceiptGet') return sponsorReceiptGet(data);
       return publicAction === 'sponsorPageGet' ? sponsorPageGet(data) : sponsorPageSubmit(data);
     } catch (err) {
       console.log('sponsor page failed: ' + err);
