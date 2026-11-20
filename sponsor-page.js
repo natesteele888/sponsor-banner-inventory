@@ -119,10 +119,7 @@
     $('formFor').textContent = pick
       ? 'Your info for ' + lv.name + '. It counts once the ' + money(lv.owed) + ' difference is paid; until then you stay at ' + P.paid.level + '.'
       : 'Your info for ' + lv.name + '.';
-    // Only the fields this level uses.
-    Array.prototype.forEach.call(document.querySelectorAll('[data-need]'), function (el) {
-      el.classList.toggle('hidden', !lv[el.getAttribute('data-need')]);
-    });
+    showFields();
     $('writeup').maxLength = lv.writeup || 0;
     $('writeupMax').textContent = lv.writeup || 0;
     if ($('writeup').value.length > lv.writeup) $('writeup').value = $('writeup').value.slice(0, lv.writeup);
@@ -164,6 +161,32 @@
   }
   function level0() { return P.levels.filter(function (l) { return l.state === 'paid'; })[0] || {}; }
 
+  // "Same as last year" (returning sponsors): which parts of this level we
+  // already have from last season. A part last year's level didn't have stays
+  // a normal question.
+  function sameCovers(need) { return !!(P && P.lastYear && $('sameLast').checked && P.lastYear[need]); }
+  function sameOn() { return !!(P && P.lastYear && $('sameLast').checked); }
+
+  // Only the fields this level uses, minus what "Same as last year" covers.
+  function showFields() {
+    var lv = level(), same = sameOn();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-need]'), function (el) {
+      var need = el.getAttribute('data-need');
+      el.classList.toggle('hidden', !lv[need] || sameCovers(need));
+    });
+    // The rest of the listing (business name, website, socials) is last
+    // year's too, so it folds away; the listing shows only what's still asked.
+    var set = $('listingSet');
+    Array.prototype.forEach.call(set.querySelectorAll('label:not([data-need])'), function (el) { el.classList.toggle('hidden', same); });
+    set.classList.toggle('hidden', !Array.prototype.some.call(set.querySelectorAll('label'), function (el) { return !el.classList.contains('hidden'); }));
+    if (P && P.lastYear) {
+      var keep = [lv.logo && P.lastYear.logo ? 'logo' : '', lv.jersey && P.lastYear.jersey ? 'jersey name' : '',
+        lv.banner && P.lastYear.banner ? 'banner' : '', lv.writeup && P.lastYear.writeup ? 'write-up' : '', 'listing'].filter(Boolean);
+      var list = keep.length > 1 ? keep.slice(0, -1).join(', ') + ' and ' + keep[keep.length - 1] : keep[0];
+      $('sameWhat').textContent = 'We\'ll reuse your ' + list + ' from last season. Just check your contact info and tap Send.';
+    }
+  }
+
   function showChoice() {
     var v = $('bannerChoice').value;
     $('designWrap').classList.toggle('hidden', v.indexOf('attaching') < 0);
@@ -193,6 +216,7 @@
       (res.sent ? ' We already have your info; sending again adds an update.' : '');
     if (res.contactName && !$('contactName').value) $('contactName').value = res.contactName.replace(/^(manager|owner)\s*:\s*/i, '');
     if (!$('business').value) $('business').value = res.company;
+    $('sameBox').classList.toggle('hidden', !res.lastYear);
     $('jerseyName').placeholder = res.company;
     if (res.upgrade) {
       $('pending').textContent = 'You asked to upgrade to ' + res.upgrade.to + '. It counts once we get the ' + money(res.upgrade.owed) + ' difference.';
@@ -234,30 +258,37 @@
     e.preventDefault();
     var msg = $('formMsg'), lv = level();
     var need = [['contactName', 'your name'], ['contactEmail', 'your email']];
-    if (lv.jersey) need.push(['jerseyName', 'the name for the jersey']);
-    if (lv.banner) need.push(['bannerChoice', 'a banner choice']);
+    if (lv.jersey && !sameCovers('jersey')) need.push(['jerseyName', 'the name for the jersey']);
+    if (lv.banner && !sameCovers('banner')) need.push(['bannerChoice', 'a banner choice']);
     for (var i = 0; i < need.length; i++) {
       if (!$(need[i][0]).value.trim()) { msg.textContent = 'Please add ' + need[i][1] + '.'; $(need[i][0]).focus(); return; }
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($('contactEmail').value.trim())) {
       msg.textContent = 'Please check your email address.'; $('contactEmail').focus(); return;
     }
-    if (lv.logo && !P.sent && !$('logoFile').files.length && !$('fileLink').value.trim()) {
+    if (lv.logo && !P.sent && !sameCovers('logo') && !$('logoFile').files.length && !$('fileLink').value.trim()) {
       msg.textContent = 'Please attach your logo, or paste a link to it.'; return;
     }
     $('sendBtn').disabled = true;
     msg.textContent = 'Sending… big files can take a minute.';
-    var files = [lv.logo ? readFile($('logoFile'), 'logo') : null, lv.banner ? readFile($('designFile'), 'design') : null];
+    var same = sameOn();
+    var files = [lv.logo && !sameCovers('logo') ? readFile($('logoFile'), 'logo') : null,
+      lv.banner && !sameCovers('banner') ? readFile($('designFile'), 'design') : null];
     Promise.all(files).then(function (got) {
       return call({
         action: 'sponsorPageSubmit',
         upgradeTo: pick,
         fields: {
           contactName: $('contactName').value, contactEmail: $('contactEmail').value, contactPhone: $('contactPhone').value,
-          business: $('business').value, jerseyName: lv.jersey ? $('jerseyName').value : '', website: $('website').value,
-          facebook: $('facebook').value, instagram: $('instagram').value, otherSocial: $('otherSocial').value,
-          writeup: lv.writeup ? $('writeup').value : '', sponsoring: $('sponsoring').value,
-          bannerChoice: lv.banner ? $('bannerChoice').value : '', bannerText: lv.banner ? $('bannerText').value : '',
+          // With "Same as last year" on, a part it covers goes blank and the
+          // league reuses last season's.
+          business: same ? '' : $('business').value, jerseyName: lv.jersey && !sameCovers('jersey') ? $('jerseyName').value : '',
+          website: same ? '' : $('website').value, facebook: same ? '' : $('facebook').value,
+          instagram: same ? '' : $('instagram').value, otherSocial: same ? '' : $('otherSocial').value,
+          writeup: lv.writeup && !sameCovers('writeup') ? $('writeup').value : '', sponsoring: same ? '' : $('sponsoring').value,
+          bannerChoice: lv.banner && !sameCovers('banner') ? $('bannerChoice').value : '',
+          bannerText: lv.banner && !sameCovers('banner') ? $('bannerText').value : '',
+          same: same,
           fileLink: $('fileLink').value, more: $('more').value
         },
         files: got.filter(Boolean)
@@ -285,6 +316,7 @@
     renderLevels();
   });
   $('bannerChoice').addEventListener('change', showChoice);
+  $('sameLast').addEventListener('change', showFields);
   $('writeup').addEventListener('input', function () { $('writeupCount').textContent = $('writeup').value.length; });
   $('pageForm').addEventListener('submit', submit);
   // Lets a tap show the Upgrade button's pressed glow on iPhones too.

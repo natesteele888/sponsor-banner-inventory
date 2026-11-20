@@ -38,6 +38,12 @@
 
   <form id="pageForm" class="form hidden" novalidate>
     <p id="formFor" class="lv-for"></p>
+    <!-- Returning sponsors only: keep last season's info when nothing changed. -->
+    <label id="sameBox" class="same hidden">
+      <input id="sameLast" type="checkbox">
+      <span><b>Nothing changed since last year?</b> Use what we have on file.
+        <small id="sameWhat"></small></span>
+    </label>
     <fieldset>
       <legend>Your contact</legend>
       <label>Your name <span class="req">*</span>
@@ -51,7 +57,7 @@
       </label>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="listingSet">
       <legend>Your sponsor listing</legend>
       <label>Business name as it should show on our website
         <input id="business" type="text" maxlength="200">
