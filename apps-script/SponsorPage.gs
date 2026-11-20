@@ -187,12 +187,12 @@ function pageRecQuick_(token) {
 }
 
 // boardRowsGen_ and forgetBoardRows_ live in Edits.gs, next to the writes.
-function boardRowsFrom_(tab) {
+function boardRowsFrom_(tab, withEmail) {
   var head = tab.headers.map(function (h) { return String(h).toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), amount: col(/^amount/), paid: col(/^paid\??$/),
             tier: col(new RegExp('^tier selected ' + SEASON)),
-            prevTier: col(new RegExp('^tier selected ' + PREV_SEASON)), past: col(/^has sponsored in past/) };
+            prevTier: col(new RegExp('^tier selected ' + PREV_SEASON)), past: col(/^has sponsored in past/), email: col(/^email/) };
   if (c.tier < 0) c.tier = col(/^tier/);
   if (c.company < 0) return null;
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
@@ -206,6 +206,12 @@ function boardRowsFrom_(tab) {
     // sponsor can keep what we already have from last year.
     if (isYes_(map[key].paid)) {
       map[key].prevTier = get(r, 'prevTier'); map[key].past = isYes_(get(r, 'past'));
+      // Only whether an email is on file. The address itself is read live,
+      // on the server, when a returning sponsor keeps last year's info in
+      // one tap (onFileEmail_); it is never cached or sent to the page.
+      var mail = firstEmail_(get(r, 'email'));
+      map[key].hasEmail = !!mail;
+      if (withEmail) map[key].email = mail;
     }
   });
   return map;
@@ -216,6 +222,14 @@ function cacheBoardRows_(tab) {
 }
 
 // ---------- the sponsor's row on the board's sheet (read only here) ----------
+
+// The email on the board's sheet for one sponsor, read live. Server side only.
+function onFileEmail_(company) {
+  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
+  var map = tab && boardRowsFrom_(tab, true);
+  var hit = map && map[companyKey_(company)];
+  return (hit && hit.email) || '';
+}
 
 function boardSponsorRow_(key, fresh) {
   if (!fresh) {
@@ -289,7 +303,10 @@ function sponsorPageGet(data) {
   return ok({
     season: SEASON, company: st.row.company, contactName: st.row.contact, deadline: INFO_DEADLINE,
     // Returning sponsor: what last season's level had, for "Same as last year".
-    lastYear: last ? { jersey: !!last.jersey, logo: !!last.logo, writeup: !!last.writeup, banner: !!last.banner } : null,
+    // contact: we have a name and email on file, so "Keep last year's info"
+    // can send in one tap with nothing typed.
+    lastYear: last ? { jersey: !!last.jersey, logo: !!last.logo, writeup: !!last.writeup, banner: !!last.banner,
+                       contact: !!(st.row.contact && st.row.hasEmail) } : null,
     paid: { level: st.paid.name, amount: st.row.amount },
     // Every level, low to high: theirs marked paid, the ones above as
     // upgrades, the ones below shown for reference only.
@@ -335,11 +352,14 @@ function sponsorPageSubmit(data) {
     banner: level.banner ? clean(f.bannerChoice, 80) : '', bannerText: level.banner ? clean(f.bannerText, 600) : '',
     fileLink: clean(f.fileLink, 500), more: clean(f.more, 1000)
   };
-  if (!v.contactName || !v.email) return fail('Please fill in your name and email.');
   // "Same as last year": a returning sponsor keeps what we have from last
   // season for each part last season's level had. A part their level didn't
   // have (say a banner, after moving up) still needs their answer.
   var last = f.same ? lastYearLevel_(st.levels, row) : null;
+  // "Keep last year's info" in one tap sends no contact: use the one on file.
+  if (last && !v.contactName) v.contactName = clean(String(row.contact || '').replace(/^(manager|owner)\s*:\s*/i, ''), 200);
+  if (last && !v.email) v.email = onFileEmail_(row.company);
+  if (!v.contactName || !v.email) return fail('Please fill in your name and email.');
   if (last) {
     if (level.jersey && last.jersey && !v.jersey) v.jersey = 'Same as last year';
     if (level.banner && last.banner && !v.banner) v.banner = PAGE_BANNER_CHOICES[0];

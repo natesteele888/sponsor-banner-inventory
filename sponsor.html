@@ -26,12 +26,20 @@
     <noscript><p class="hint">This page needs to open in its own browser tab. Open the link from your LYBS email again, or just reply to that email.</p></noscript>
   </header>
 
+  <!-- Returning sponsors: keep last season's info in one tap, or make changes. -->
+  <section id="keepBox" class="form keep hidden" aria-live="polite">
+    <h2>Welcome back!</h2>
+    <p id="keepWhat">Nothing changed since last year? We'll reuse what we have from last season.</p>
+    <button type="button" class="btn primary" id="keepBtn">Keep last year's info</button>
+    <button type="button" class="keep-edit" id="editBtn">Make changes instead</button>
+    <p id="keepMsg" class="status" role="alert"></p>
+  </section>
   <section id="levels" class="lv-wrap hidden" aria-label="Your sponsorship level">
     <h2 class="lv-h">Your sponsorship</h2>
     <p class="lv-swipe">Swipe to see every level.</p>
     <ul id="levelList" class="lv-list"></ul>
     <p id="pending" class="lv-note hidden"></p>
-    <p class="lv-next">Next: fill out your info below <span aria-hidden="true">↓</span></p>
+    <p id="lvNext" class="lv-next">Next: fill out your info below <span aria-hidden="true">↓</span></p>
   </section>
 
   <section id="payBox" class="form lv-pay hidden" aria-live="polite"></section>

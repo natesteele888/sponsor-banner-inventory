@@ -184,7 +184,54 @@
         lv.banner && P.lastYear.banner ? 'banner' : '', lv.writeup && P.lastYear.writeup ? 'write-up' : '', 'listing'].filter(Boolean);
       var list = keep.length > 1 ? keep.slice(0, -1).join(', ') + ' and ' + keep[keep.length - 1] : keep[0];
       $('sameWhat').textContent = 'We\'ll reuse your ' + list + ' from last season. Just check your contact info and tap Send.';
+      $('keepWhat').textContent = 'Nothing changed since last year? We\'ll reuse your ' + list + ' from last season' +
+        (oneTap() ? ', and you\'re done.' : '. We\'ll only ask what\'s new.');
     }
+    syncKeep();
+  }
+
+  // "Keep last year's info": shown to a returning sponsor until they choose
+  // to make changes or pick an upgrade. The form waits behind it.
+  var editing = false;
+  function oneTap() {
+    var lv = level(), y = P && P.lastYear;
+    return !!(y && y.contact && ['jersey', 'logo', 'writeup', 'banner'].every(function (n) { return !lv[n] || y[n]; }));
+  }
+  function syncKeep() {
+    var on = !!(P && P.lastYear && !P.sent && !editing && !pick);
+    $('keepBox').classList.toggle('hidden', !on);
+    $('pageForm').classList.toggle('hidden', on || !P);
+    $('lvNext').classList.toggle('hidden', on);
+  }
+  function openForm(same) {
+    editing = true; $('sameLast').checked = !!same; showFields();
+    var f = $('pageForm'); if (f.scrollIntoView) f.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function keep() {
+    // Something new on their level, or no email on file: the short form,
+    // with only what's still needed.
+    if (!oneTap()) { openForm(true); return; }
+    var msg = $('keepMsg');
+    $('keepBtn').disabled = true; $('editBtn').disabled = true;
+    msg.textContent = 'Sending…';
+    call({ action: 'sponsorPageSubmit', upgradeTo: pick,
+      fields: { same: true, contactName: $('contactName').value, contactEmail: '', more: '' }, files: [] })
+      .then(function (res) {
+        if (!res.ok) throw Object.assign(new Error(res.error), { fromBackend: true });
+        finish(res, true);
+      }).catch(function (err) {
+        msg.textContent = err && err.fromBackend ? err.message : "That didn't go through. Check your connection and tap the button again.";
+      }).finally(function () { $('keepBtn').disabled = false; $('editBtn').disabled = false; });
+  }
+  function finish(res, kept) {
+    ['pageForm', 'levels', 'greet', 'keepBox'].forEach(function (id) { $(id).classList.add('hidden'); });
+    $('doneText').textContent = res.upgrade
+      ? 'We have your info. Your upgrade to ' + res.upgrade.to + ' counts once we get the ' + money(res.upgrade.owed) + ' difference.'
+      : kept ? "We'll use what we have from last season. If anything's missing, we'll reach out by email."
+      : "We have your info. If we need anything else, we'll reach out by email.";
+    if (!res.upgrade) renderPay($('payBox'), null);
+    $('done').classList.remove('hidden');
+    window.scrollTo(0, 0);
   }
 
   function showChoice() {
@@ -223,8 +270,8 @@
       $('pending').classList.remove('hidden');
     } else $('pending').classList.add('hidden');
     $('levels').classList.remove('hidden');
-    $('pageForm').classList.remove('hidden');
     renderLevels();
+    syncKeep();
   }
 
   function load() {
@@ -295,13 +342,7 @@
       });
     }).then(function (res) {
       if (!res.ok) throw Object.assign(new Error(res.error), { fromBackend: true });
-      ['pageForm', 'levels', 'greet'].forEach(function (id) { $(id).classList.add('hidden'); });
-      $('doneText').textContent = res.upgrade
-        ? 'We have your info. Your upgrade to ' + res.upgrade.to + ' counts once we get the ' + money(res.upgrade.owed) + ' difference.'
-        : "We have your info. If we need anything else, we'll reach out by email.";
-      if (!res.upgrade) renderPay($('payBox'), null);
-      $('done').classList.remove('hidden');
-      window.scrollTo(0, 0);
+      finish(res, false);
     }).catch(function (err) {
       msg.textContent = err && (err.fromBackend || /15 MB|read /.test(err.message))
         ? err.message
@@ -317,6 +358,8 @@
   });
   $('bannerChoice').addEventListener('change', showChoice);
   $('sameLast').addEventListener('change', showFields);
+  $('keepBtn').addEventListener('click', keep);
+  $('editBtn').addEventListener('click', function () { openForm(false); });
   $('writeup').addEventListener('input', function () { $('writeupCount').textContent = $('writeup').value.length; });
   $('pageForm').addEventListener('submit', submit);
   // Lets a tap show the Upgrade button's pressed glow on iPhones too.
