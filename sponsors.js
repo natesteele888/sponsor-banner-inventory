@@ -1435,9 +1435,9 @@
           ]) +
           (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
           (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
-          cardReceipt(s) +
         '</div>' +
-        cardBadge(s) +
+        // The receipt button sits on the right, right under the status.
+        (cardReceipt(s) ? '<div class="sp-card-side">' + cardBadge(s) + cardReceipt(s) + '</div>' : cardBadge(s)) +
         (cardReceipt(s) ? '<div class="sp-card-rc sp-card-pane"><div class="rc-preview hidden"></div></div>' : '') +
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
