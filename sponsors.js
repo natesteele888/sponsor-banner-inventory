@@ -713,7 +713,7 @@
     var it = (S.receipts.items || []).filter(function (i) { return i.row === s.row && i.status !== 'skip'; })[0];
     if (!it) return '';
     var esc = A().esc;
-    var label = it.status === 'sent' ? 'Open receipt' : canEdit() ? 'Preview and send receipt' : 'Preview receipt';
+    var label = it.status === 'sent' ? 'Open receipt' : 'Preview Receipt';
     return '<div class="sp-card-rc">' +
       '<button class="btn small" type="button" data-card-rc="' + esc(it.key) + '">' + label + '</button>' +
       '<div class="rc-msg" role="status"></div></div>';
