@@ -13,6 +13,12 @@
  *        │
  *        ▼
  *   RECEIPTS_<season> Script Property remembers it as sent, and the day
+ *        │
+ *        ▼
+ *   a copy of that email goes in the "Sent Receipts <season>" Drive folder
+ *   (inside the Sponsor Banners folder, private), with who it was for, the
+ *   day, amount, level, where it went and who sent it. Test sends too,
+ *   marked test. The Receipts box lists these copies to open and print.
  *
  * Every paid row on the sponsor list gets this receipt, online and check
  * payers alike, so for a sponsor the league site's own receipt button is
@@ -79,13 +85,14 @@ function receiptRows_() {
   var head = tab.headers.map(function (h) { return h.toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), email: col(/^email/), address: col(/^address/),
-            amount: col(/^amount/), paid: col(/^paid\??$/), notes: col(/^notes?$/), how: col(/^(paid how|payment method|paid by)/) };
+            amount: col(/^amount/), paid: col(/^paid\??$/), notes: col(/^notes?$/), how: col(/^(paid how|payment method|paid by)/),
+            tier: col(new RegExp('^tier selected ' + SEASON)) };
   if (c.company < 0 || c.amount < 0 || c.paid < 0 || c.email < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
   var log = receiptLog_(), out = [];
   tab.rows.forEach(function (r) {
     var row = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), email: firstEmail_(get(r, 'email')),
-                address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes'), how: get(r, 'how') };
+                address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes'), how: get(r, 'how'), tier: get(r, 'tier') };
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
     row.online = /\b(online|website|crossbar|card)\b/i.test(row.how || (row.paidText + ' ' + row.notes));
@@ -231,9 +238,68 @@ function receiptPdf_(r, s, when) {
 
 // ---------- the app's actions ----------
 
+// ---------- copies of what went out ----------
+
+var RECEIPT_COPY_FOLDER = 'Sent Receipts ' + SEASON;
+
+function receiptCopyFolder_(make) {
+  var parent = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  var it = parent.getFoldersByName(RECEIPT_COPY_FOLDER);
+  return it.hasNext() ? it.next() : (make ? parent.createFolder(RECEIPT_COPY_FOLDER) : null);
+}
+
+// Keeps the email exactly as sent. A copy that can't be saved never stops
+// the receipt itself; it's logged instead.
+function saveReceiptCopy_(r, m, to, live) {
+  try {
+    var now = new Date();
+    var meta = { company: r.company, at: Utilities.formatDate(now, 'America/New_York', "yyyy-MM-dd'T'HH:mm"),
+      amount: r.inKind ? 'In kind' : money_(r.given || r.amount), level: r.tier || '', to: to,
+      by: WHO && WHO.email ? String(WHO.email) : '', test: !live };
+    var name = meta.at.slice(0, 10) + ' ' + String(r.company).replace(/[^A-Za-z0-9 &'.\-]+/g, ' ').trim().slice(0, 80) + (live ? '' : ' (test)') + ' receipt.html';
+    var file = receiptCopyFolder_(true).createFile(Utilities.newBlob(receiptDoc_(m.html, m.subject), 'text/plain', name));
+    file.setDescription(JSON.stringify(meta));
+  } catch (e) { console.log('receipt copy: ' + e); }
+}
+
+function receiptCopies_() {
+  var out = [];
+  try {
+    var folder = receiptCopyFolder_(false);
+    if (!folder) return out;
+    var it = folder.getFiles();
+    while (it.hasNext() && out.length < 500) {
+      var f = it.next();
+      if (f.isTrashed()) continue;
+      var meta = {};
+      try { meta = JSON.parse(f.getDescription() || '{}'); } catch (e) { }
+      out.push({ id: f.getId(), company: String(meta.company || f.getName()), at: String(meta.at || ''), amount: String(meta.amount || ''),
+        level: String(meta.level || ''), to: String(meta.to || ''), by: String(meta.by || ''), test: !!meta.test });
+    }
+  } catch (e) { console.log('receipt copies: ' + e); }
+  return out.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
+}
+
+// One kept copy, to open and print. Only a file in that folder.
+function receiptCopyGet(data) {
+  var id = String(data && data.id || '');
+  if (!/^[A-Za-z0-9_\-]{10,}$/.test(id)) return fail('No copy given.');
+  var folder = receiptCopyFolder_(false);
+  if (!folder) return fail('No receipts have been sent yet.');
+  var file;
+  try { file = DriveApp.getFileById(id); } catch (e) { return fail('That copy is gone.'); }
+  var inFolder = false, ps = file.getParents();
+  while (ps.hasNext()) if (ps.next().getId() === folder.getId()) inFolder = true;
+  if (!inFolder || file.isTrashed()) return fail('That copy is gone.');
+  var html = file.getBlob().getDataAsString('UTF-8');
+  var t = /<title>([^<]*)<\/title>/.exec(html);
+  return ok({ subject: t ? t[1] : 'Receipt', html: html });
+}
+
 function receiptList() {
   var s = receiptSettings_();
   return {
+    copies: receiptCopies_(),
     settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().connected },
     items: receiptRows_().map(function (r) {
       return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', online: !!r.online, inKind: !!r.inKind };
@@ -277,6 +343,7 @@ function receiptSend(data) {
     var pdf = receiptPdf_(r, s);
     var how = leagueSend_({ to: to, subject: m.subject, text: m.text, html: m.html, live: s.live, attachments: pdf ? [pdf] : null });
     if (!how.ok) return fail(how.error);
+    saveReceiptCopy_(r, m, to, s.live);
     var log = receiptLog_();
     var at = dayOf_(new Date());
     if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); noteOnBoardCopy_(r.company, 'Receipt sent', at); }

@@ -633,3 +633,9 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
   .tabs { display: flex !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -10px !important; padding: 10px 10px 2px !important; scroll-snap-type: x proximity; }
   .tab-btn { flex: 0 0 auto !important; white-space: nowrap !important; padding: 0 12px !important; min-height: 38px; scroll-snap-align: start; }
 }
+/* A paid sponsor's receipt on its card. */
+.sp-card-rc { margin-top: 8px; cursor: default; }
+.sp-card-pane { flex: 1 0 100%; min-width: 0; }
+.sp-card-pane:has(.rc-preview.hidden) { display: none; }
+.season-card:has(.sp-card-pane .rc-preview:not(.hidden)) { flex-wrap: wrap; }
+.sp-card-rc .rc-msg:empty { display: none; }

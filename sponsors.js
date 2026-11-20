@@ -267,7 +267,7 @@
     var ready = R.items.filter(function (i) { return i.status === 'ready'; });
     var web = [];
     var sent = R.items.filter(function (i) { return i.status === 'sent' || i.status === 'skip'; });
-    if (!R.items.length) { box.classList.add('hidden'); return; }
+    if (!R.items.length && !(R.copies || []).length) { box.classList.add('hidden'); return; }
     var set = R.settings || {};
     var notes = [];
     if (set.missing && set.missing.length) notes.push('Still needed before receipts can go out: ' + setupWords(set.missing) + '.');
@@ -294,10 +294,64 @@
       '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
       (web.length || sent.length ? '<details class="rc-more"><summary>Sent or not needed (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
         web.concat(sent).map(row).join('') + '</ul></details>' : '') +
+      copiesHtml(R.copies || []) +
       '</details>';
     keepOpen(box, 'rcOpen');
     box.classList.remove('hidden');
     applyMode();
+  }
+
+  // Every receipt that went out, newest first: a kept copy of the email as
+  // sent, with who it was for, when, how much, the level, where it went and
+  // who sent it. Test sends are marked.
+  function copiesHtml(list) {
+    if (!list.length) return '';
+    var esc = A().esc;
+    var when = function (at) { var d = fmtDay(String(at).slice(0, 10)); var t = String(at).slice(11, 16); return t ? d + ', ' + t : d; };
+    return '<details class="rc-more rc-copies"><summary>Copies of receipts sent (' + list.length + ')</summary><ul class="rc-list">' +
+      list.map(function (c) {
+        return '<li class="rc-item" data-copy="' + esc(c.id) + '">' +
+          '<div class="rc-who"><b>' + esc(c.company) + '</b>' +
+          '<span>' + [when(c.at), c.amount, c.level].filter(Boolean).map(esc).join(' · ') + '</span>' +
+          '<span>' + esc('To ' + (c.test ? 'the test address' : c.to)) + (c.by ? esc(' · sent by ' + c.by) : '') + '</span>' +
+          (c.test ? '<span class="rc-path">Test send</span>' : '') + '</div>' +
+          '<div class="rc-acts"><button class="btn small" data-rc="copy" type="button">Open copy</button></div>' +
+          '<div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
+      }).join('') + '</ul></details>';
+  }
+
+  // A kept copy in the same pane as the preview, to read or print. No Send.
+  function showCopy(pv, id, msg) {
+    msg.textContent = 'Opening the copy…';
+    return A().apiPost({ action: 'receiptCopyGet', id: id }).then(function (res) {
+      msg.textContent = res.ok ? '' : (res.error || 'Could not open that copy.');
+      if (res.ok) framePane(pv, res.subject, res.html, '');
+    }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
+  }
+
+  // The pane: subject, Print / Save as PDF, Close, then the email in a frame
+  // that runs no scripts. extra: buttons that go before Print.
+  function framePane(pv, subject, html, extra, note) {
+    var esc = A().esc;
+    pv.innerHTML = '<div class="rc-pv-top"><b>' + esc(subject) + '</b>' +
+      '<span class="rc-pv-acts">' + (extra || '') +
+      '<button class="btn small" type="button" data-pv="print">Print / Save as PDF</button>' +
+      '<button class="btn small" type="button" data-pv="close">Close</button></span></div>' +
+      (note || '') + '<div class="rc-pv-msg status" role="status"></div>';
+    // No scripts run inside the receipt; same origin only so this page can
+    // print it. A link in it (the sponsor packet) opens in its own tab, where
+    // the page can run: opened inside this frame it would sit on "Loading".
+    var f = document.createElement('iframe');
+    f.className = 'rc-frame'; f.title = 'Receipt';
+    f.setAttribute('sandbox', 'allow-same-origin allow-modals allow-popups allow-popups-to-escape-sandbox');
+    var doc = String(html), base = '<base target="_blank">';
+    f.srcdoc = /<head[^>]*>/i.test(doc) ? doc.replace(/<head[^>]*>/i, function (h) { return h + base; }) : base + doc;
+    pv.appendChild(f); pv.classList.remove('hidden');
+    var said = pv.querySelector('.rc-pv-msg');
+    pv.querySelector('[data-pv="print"]').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { said.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
+    pv.querySelector('[data-pv="close"]').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+    if (pv.scrollIntoView) pv.scrollIntoView({ block: 'nearest' });
+    return said;
   }
 
   // One receipt, as the sponsor will get it, in a preview pane. With send on,
@@ -313,25 +367,9 @@
       var item = ((S.receipts && S.receipts.items) || []).filter(function (i) { return i.key === key; })[0] || {};
       var canSend = !!(opts && opts.send) && !res.sent && item.status === 'ready';
       var to = res.live ? (item.email || res.to) : 'the test address (test mode)';
-      pv.innerHTML = '<div class="rc-pv-top"><b>' + esc(res.subject) + '</b>' +
-        '<span class="rc-pv-acts">' +
-        (canSend ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '') +
-        '<button class="btn small" type="button" data-pv="print">Print / Save as PDF</button>' +
-        '<button class="btn small" type="button" data-pv="close">Close</button></span></div>' +
-        (canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' from the league address, only when you tap Send.</p>' : '') +
-        '<div class="rc-pv-msg status" role="status"></div>';
-      // No scripts run inside the receipt; same origin only so this page can
-      // print it. A link in it (the sponsor packet) opens in its own tab, where
-      // the page can run: opened inside this frame it would sit on "Loading".
-      var f = document.createElement('iframe');
-      f.className = 'rc-frame'; f.title = 'Receipt preview';
-      f.setAttribute('sandbox', 'allow-same-origin allow-modals allow-popups allow-popups-to-escape-sandbox');
-      var doc = String(res.html), base = '<base target="_blank">';
-        f.srcdoc = /<head[^>]*>/i.test(doc) ? doc.replace(/<head[^>]*>/i, function (h) { return h + base; }) : base + doc;
-      pv.appendChild(f); pv.classList.remove('hidden');
-      var said = pv.querySelector('.rc-pv-msg');
-      pv.querySelector('[data-pv="print"]').addEventListener('click', function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { said.textContent = 'This browser would not print it. Try Send, then print the PDF in the email.'; } });
-      pv.querySelector('[data-pv="close"]').addEventListener('click', function () { pv.classList.add('hidden'); pv.innerHTML = ''; });
+      var said = framePane(pv, res.subject, res.html,
+        canSend ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '',
+        canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' from the league address, only when you tap Send.</p>' : '');
       var sendBtn = pv.querySelector('[data-pv="send"]');
       if (sendBtn) sendBtn.addEventListener('click', function () {
         if (!sendBtn.dataset.armed) {
@@ -380,6 +418,7 @@
     var li = btn.closest('.rc-item'), key = li.dataset.key, how = btn.dataset.rc, msg = li.querySelector('.rc-msg');
     var item = S.receipts.items.filter(function (i) { return i.key === key; })[0];
     // Send lives in the preview, so every receipt is seen before it goes.
+    if (how === 'copy') return showCopy(rowPreview(li), li.dataset.copy, msg);
     if (how === 'preview') return showReceipt(rowPreview(li), key, msg, { send: canEdit() && item && item.status === 'ready' });
     if (how !== 'skip' && how !== 'undo') return;
     btn.disabled = true;
@@ -422,7 +461,7 @@
   // A preview opens right under its own sponsor's row; any other one closes.
   function rowPreview(li) {
     var pv = li.querySelector('.rc-preview');
-    document.querySelectorAll('.rc-item .rc-preview').forEach(function (p) {
+    document.querySelectorAll('.rc-item .rc-preview, .sp-card-rc .rc-preview').forEach(function (p) {
       if (p !== pv) { p.classList.add('hidden'); p.innerHTML = ''; }
     });
     pv.innerHTML = '';
@@ -662,6 +701,22 @@
   function logoFor(s) {
     var img = s && S.logos ? S.logos[s.key] : null;
     return img && /^image\/(png|jpeg|gif|webp)$/.test(img.mime) && /^[A-Za-z0-9+\/=]+$/.test(img.base64) ? img : null;
+  }
+
+  // A paid sponsor's receipt, right on its card: Preview opens it there, and
+  // Send (editors, ready ones only) still needs its own tap in the preview.
+  function receiptItem(key) {
+    return ((S.receipts && S.receipts.items) || []).filter(function (i) { return i.key === key; })[0] || null;
+  }
+  function cardReceipt(s) {
+    if (!s || !s.paid || !S.receipts) return '';
+    var it = (S.receipts.items || []).filter(function (i) { return i.row === s.row && i.status !== 'skip'; })[0];
+    if (!it) return '';
+    var esc = A().esc;
+    var label = it.status === 'sent' ? 'Open receipt' : canEdit() ? 'Preview and send receipt' : 'Preview receipt';
+    return '<div class="sp-card-rc">' +
+      '<button class="btn small" type="button" data-card-rc="' + esc(it.key) + '">' + label + '</button>' +
+      '<div class="rc-msg" role="status"></div></div>';
   }
 
   function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
@@ -1380,11 +1435,24 @@
           ]) +
           (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
           (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
+          cardReceipt(s) +
         '</div>' +
         cardBadge(s) +
+        (cardReceipt(s) ? '<div class="sp-card-rc sp-card-pane"><div class="rc-preview hidden"></div></div>' : '') +
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
+    $$('#spList .sp-card-rc').forEach(function (box) {
+      // The receipt button and its preview stay on the card: no detail opens.
+      ['click', 'keydown'].forEach(function (ev) { box.addEventListener(ev, function (e) { e.stopPropagation(); }); });
+      var btn = box.querySelector('button[data-card-rc]');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var key = btn.dataset.cardRc, item = receiptItem(key);
+        // The preview opens full width under the card's own details.
+        showReceipt(rowPreview(box.closest('.season-card').querySelector('.sp-card-pane')), key, box.querySelector('.rc-msg'), { send: canEdit() && item && item.status === 'ready' });
+      });
+    });
     $$('#spList .season-card').forEach(function (card) {
       card.addEventListener('click', function () { open(Number(card.dataset.row)); });
       card.addEventListener('keydown', function (e) {
