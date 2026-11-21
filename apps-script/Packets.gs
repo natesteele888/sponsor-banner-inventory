@@ -64,9 +64,25 @@ function driveIdIn_(range) {
 // The whole Packets tab, as the sheet shows it. Read only.
 function sponsorPackets() {
   var ss = packetSpreadsheet_();
-  if (!ss) return { found: false, headers: [], rows: [] };
+  if (!ss) return { found: false, headers: [], rows: [], received: [] };
   var tab = bookTab_(ss, PACKET_TAB) || { headers: [], rows: [] };
-  return { found: true, sheetName: ss.getName(), headers: tab.headers, rows: tab.rows };
+  return { found: true, sheetName: ss.getName(), headers: tab.headers, rows: tab.rows, received: packetsReceived_() };
+}
+
+// Which sponsors sent their packet from their receipt link, matched to their
+// row by the sponsor, not by the name they typed: the business, the day, the
+// packet's own time stamp and what kind of packet it was. Never the link.
+function packetsReceived_() {
+  try {
+    return readPages_().rows.filter(function (r) { return r.submittedAt; }).map(function (r) {
+      var day = r.submittedAt instanceof Date ? Utilities.formatDate(r.submittedAt, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(r.submittedAt).slice(0, 10);
+      var at = r.packetAt instanceof Date ? Utilities.formatDate(r.packetAt, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : String(r.packetAt || '');
+      return { key: String(r.key), company: String(r.company), at: day, packetAt: at, kind: String(r.packetKind || ''), note: String(r.packetNote || '') };
+    });
+  } catch (e) {
+    console.log('packets received: ' + e);
+    return [];
+  }
 }
 
 // The newest image in one submission's files folder. Only a folder named on

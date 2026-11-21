@@ -41,7 +41,8 @@
 var SPONSOR_PAGE_URL = APP_URL + 'sponsor.html';
 var SPONSOR_PAGE_TAB = SEASON + ' Sponsor pages';
 var SPONSOR_PAGE_COLUMNS = ['token', 'key', 'company', 'createdAt', 'submittedAt',
-  'upgradeTo', 'upgradeOwed', 'upgradeAt', 'upgradeStatus', 'upgradePaidAt', 'updatedAt'];
+  'upgradeTo', 'upgradeOwed', 'upgradeAt', 'upgradeStatus', 'upgradePaidAt', 'updatedAt',
+  'packetAt', 'packetKind', 'packetNote'];
 var UPGRADE_WAITING = 'Waiting on payment';
 var UPGRADE_PAID = 'Paid';
 
@@ -409,7 +410,16 @@ function sponsorPageSubmit(data) {
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(function (h) { return String(h).toLowerCase().trim(); });
   sh.appendRow(head.map(function (h) { return out[h] == null ? '' : out[h]; }));
 
-  var mark = { submittedAt: todayStamp(), updatedAt: todayStamp() };
+  var notice;
+  try {
+    notice = packetNotice_({ row: row, v: v, level: level, last: last || lastYearLevel_(st.levels, row), upgrade: upgrade, saved: saved, levelText: levelText,
+                             folderUrl: folder ? folder.getUrl() : '' });
+  } catch (e) {
+    console.log('packet notice: ' + e);
+    notice = { kind: '', note: '', subject: SEASON + ' sponsor info received: ' + row.company,
+               body: row.company + ' sent their sponsor info. Level: ' + levelText + '\n\n' + APP_URL + '#sponsors' };
+  }
+  var mark = { submittedAt: todayStamp(), updatedAt: todayStamp(), packetAt: out.submitted, packetKind: notice.kind, packetNote: notice.note };
   if (upgrade) {
     mark.upgradeTo = upgrade.name; mark.upgradeOwed = upgrade.price - row.amount;
     mark.upgradeAt = todayStamp(); mark.upgradeStatus = UPGRADE_WAITING; mark.upgradePaidAt = '';
@@ -417,14 +427,146 @@ function sponsorPageSubmit(data) {
   writeFields_(st.found.pages.sheet, st.found.pages.header, rec._row, mark);
   forgetPageRec_(token);
 
-  ownerAlert_(myEmail_(),
-    SEASON + ' sponsor info received: ' + row.company + (upgrade ? ' (upgrade asked)' : ''),
-    row.company + ' sent their sponsor info from their receipt link.\n\nLevel: ' + levelText +
-      (last ? '\n\nThey picked "Same as last year": nothing changed, so reuse what we have from last season.' : '') +
-      (upgrade ? '\n\nThe upgrade counts once their payment for the difference is recorded (Record a payment). No banner change until then.' : '') +
-      '\n\nIt is on the Packets tab and in the Sponsors tab:\n' + APP_URL + '#sponsors');
+  // The 2027 banners tab picks it up: packet in, banner from stock or to order, design needed or file in hand.
+  try { seasonFromPacket_({ row: row, v: v, level: upgrade || level, upgrade: upgrade, notice: notice, folder: folder }); }
+  catch (e) { console.log('packet to banners: ' + e); }
+
+  // Always to the script owner, never to the sponsor.
+  ownerAlert_(myEmail_(), notice.subject, notice.body);
 
   return ok({ message: 'Thank you! We have your info.', upgrade: upgrade ? { to: upgrade.name, owed: upgrade.price - row.amount } : null, pay: upgrade ? payOptions_() : null });
+}
+
+// ---------- the notice Nate gets for each packet ----------
+// One email to the script owner (never the sponsor) saying which of three
+// kinds it is: a returning sponsor with the same info as last year, a
+// returning sponsor with changes (each one listed), or a new sponsor with
+// everything they sent. The banner line says whether last year's banner is
+// on file, their print-ready file came in, or the banner needs making.
+// Last year's level, contact and email come from the board sheet, and
+// whether a logo or banner is on file from the app's logo library and banner
+// list. Jersey names and write-ups weren't kept last year, so those show as
+// sent.
+var PACKET_KIND_NOTE = { same: 'Same as last year, good to go', changes: 'changes from last year', 'new': 'New sponsor' };
+
+function packetNotice_(o) {
+  var row = o.row, v = o.v, level = o.level, key = companyKey_(row.company);
+  var has = function (part) { return o.saved.some(function (n) { return n.indexOf('_' + part + '_') >= 0; }); };
+  var newLogo = has('logo'), newDesign = has('banner-design');
+  var logoOnFile = false, bannerOnFile = false;
+  try { logoOnFile = !!logoPicks_(false)[key]; } catch (e) { console.log('packet notice logos: ' + e); }
+  var bannerIds = [];
+  try { bannerIds = listBanners().filter(function (b) { return companyKey_(b.sponsorName) === key; }).map(function (b) { return String(b.id); }); } catch (e) { console.log('packet notice banners: ' + e); }
+  bannerOnFile = bannerIds.length > 0;
+
+  var banner = '', bannerKind = '';
+  if (level.banner) {
+    if (v.banner === PAGE_BANNER_CHOICES[0]) {
+      banner = bannerOnFile ? 'Reuse last year’s banner. It’s on file.'
+                            : 'They want last year’s banner, but none is on file under this name. Check before you print.';
+      bannerKind = bannerOnFile ? 'reuse' : 'check';
+    } else if (v.banner === PAGE_BANNER_CHOICES[1]) {
+      banner = newDesign ? 'Their print-ready banner file is in the files folder. Use it.'
+             : v.fileLink ? 'They sent a link to their banner file (below).'
+             : 'They said a print-ready design is attached, but no banner file came through. Ask them for it.';
+      bannerKind = newDesign || v.fileLink ? 'file' : 'check';
+    } else {
+      banner = 'You need to make their banner, from their logo.';
+      bannerKind = 'make';
+    }
+  }
+  var logo = '';
+  if (level.logo) {
+    if (newLogo) logo = logoOnFile ? 'New logo sent. It replaces the one on file.' : 'Logo sent. It’s in the files folder.';
+    else if (v.fileLink) logo = 'They sent a link to their logo (below).';
+    else logo = logoOnFile ? 'No new logo. Use the one on file.' : 'No logo sent and none on file. Ask them for one.';
+  }
+
+  var changes = [];
+  if (o.last) {
+    if (o.last.name !== level.name) changes.push('Level: ' + o.last.name + ' last year, ' + level.name + ' now' + (o.upgrade ? ' (upgrade asked, not paid yet)' : '') + '.');
+    if (v.business && companyKey_(v.business) !== key) changes.push('Business name for the website: "' + v.business + '" (the sheet has "' + row.company + '").');
+    var onContact = String(row.contact || '').replace(/^(manager|owner)\s*:\s*/i, '').trim();
+    if (v.contactName && v.contactName.toLowerCase() !== onContact.toLowerCase()) changes.push('Contact: ' + v.contactName + (onContact ? ' (was ' + onContact + ')' : '') + '.');
+    var onEmail = '';
+    try { onEmail = onFileEmail_(row.company); } catch (e) { }
+    if (v.email && v.email.toLowerCase() !== String(onEmail).toLowerCase()) changes.push('Email: ' + v.email + (onEmail ? ' (was ' + onEmail + ')' : '') + '.');
+    if (newLogo && logoOnFile) changes.push('New logo.');
+    if (level.jersey && v.jersey && v.jersey !== 'Same as last year') changes.push('Jersey name: ' + v.jersey + ' (last year’s wasn’t recorded).');
+    if (level.writeup && v.writeup && v.writeup !== 'Same as last year') changes.push('New write-up (below).');
+    if (bannerKind && bannerKind !== 'reuse') changes.push('Banner: ' + banner);
+  }
+  var kind = !o.last ? 'new' : changes.length ? 'changes' : 'same';
+
+  var who = row.company;
+  var subject, head, note;
+  if (kind === 'same') {
+    subject = SEASON + ' packet: ' + who + ' is the same as last year, good to go';
+    head = who + ' is a returning sponsor and kept everything from last year' + (level.banner ? ', including the banner' : '') + '. Good to proceed.';
+    note = PACKET_KIND_NOTE.same;
+  } else if (kind === 'changes') {
+    subject = SEASON + ' packet: ' + who + ' has ' + changes.length + ' change' + (changes.length === 1 ? '' : 's') + ' from last year';
+    head = who + ' is a returning sponsor. These changed from last year:\n' + changes.map(function (c) { return '- ' + c; }).join('\n');
+    note = changes.length + ' ' + (changes.length === 1 ? 'change' : 'changes') + ' from last year';
+  } else {
+    var tail = bannerKind === 'file' ? 'banner file ready' : bannerKind === 'make' ? 'you make the banner' : bannerKind === 'check' ? 'check the banner' : 'everything they sent';
+    subject = SEASON + ' packet: new sponsor ' + who + ', ' + tail;
+    head = who + ' is a new sponsor. Everything they sent is below.';
+    note = PACKET_KIND_NOTE['new'] + (bannerKind === 'file' ? ', banner file ready' : bannerKind === 'make' ? ', you make the banner' : bannerKind === 'check' ? ', check the banner' : '');
+  }
+  if (kind === 'same' && bannerKind === 'check') note = 'Same as last year, check the banner';
+
+  var sent = [
+    ['Level', o.levelText], ['Business name (website)', v.business], ['Name on jersey', v.jersey], ['Contact', v.contactName],
+    ['Email', v.email], ['Phone', v.phone], ['Website', v.website], ['Facebook', v.facebook], ['Instagram', v.instagram],
+    ['Other social', v.other], ['Write-up', v.writeup], ['Sponsoring a player/team/division', v.sponsoring],
+    ['Banner choice', v.banner], ['Banner notes', v.bannerText], ['Files', o.saved.join(', ')], ['File link', v.fileLink],
+    ['Files folder', o.folderUrl], ['Anything else', v.more]
+  ].filter(function (p) { return p[1]; }).map(function (p) { return p[0] + ': ' + p[1]; });
+
+  var body = [head];
+  if (banner) body.push('Banner: ' + banner);
+  if (logo) body.push('Logo: ' + logo);
+  if (o.upgrade) body.push('They asked to upgrade to ' + o.upgrade.name + '. It counts once their payment for the difference is recorded (Record a payment). No banner change until then.');
+  body.push('Everything they sent:\n' + sent.join('\n'));
+  body.push('It’s on their card in the Sponsors app:\n' + APP_URL + '#sponsors');
+  return { kind: kind, note: note, subject: subject, body: body.join('\n\n'), changes: changes,
+           bannerKind: bannerKind, bannerId: bannerIds.length === 1 ? bannerIds[0] : '' };
+}
+
+// What the banner needs, from the packet. Shown on the 2027 banners tab.
+var PACKET_DESIGN = { reuse: 'In stock', file: 'File in hand, ready to order', make: 'Design needed', check: 'Check with sponsor' };
+// The banner status the packet may set. One Nate set himself (Reprint needed,
+// Ordered, Ready to hang) stays as it is.
+var PACKET_MAY_SET = ['', 'Not decided', 'Use banner from stock', 'Order new'];
+
+function seasonFromPacket_(o) {
+  if (!o.level.banner) return;
+  var season = readSeason_();
+  var got = upsertSponsor_(season, {
+    company: o.row.company, tier: o.level.name, amount: o.upgrade ? o.level.price : o.row.amount,
+    paid: !o.upgrade, paidVia: o.upgrade ? '' : 'Paid on the sponsor sheet', source: 'Sponsor page',
+    contactName: o.v.contactName, contactEmail: o.v.email, contactPhone: o.v.phone
+  });
+  if (!got) return;
+  var rec = got.rec, kind = o.notice.bannerKind;
+  var fields = {
+    requestStatus: 'Info received', submittedAt: todayStamp(),
+    jerseyName: clean(o.v.jersey, 120), writeup: clean(o.v.writeup, 2000), website: clean(o.v.website, 300),
+    bannerChoice: clean(o.v.banner, 80), bannerText: clean(o.v.bannerText, 600), fileLink: clean(o.v.fileLink, 500),
+    design: PACKET_DESIGN[kind] || '', packetNote: o.notice.note || ''
+  };
+  if (o.folder) fields.fileFolderId = o.folder.getId();
+  if (kind && PACKET_MAY_SET.indexOf(String(rec.bannerStatus || '')) >= 0) {
+    if (kind === 'reuse') {
+      fields.bannerStatus = 'Use banner from stock';
+      var taken = o.notice.bannerId && season.rows.some(function (r) { return r !== rec && String(r.assignedBannerId) === o.notice.bannerId; });
+      if (o.notice.bannerId && !rec.assignedBannerId && !taken) fields.assignedBannerId = o.notice.bannerId;
+    } else {
+      fields.bannerStatus = 'Order new';
+    }
+  }
+  writeFields_(season.sheet, season.header, rec._row, fields);
 }
 
 // ---------- the board's side ----------
