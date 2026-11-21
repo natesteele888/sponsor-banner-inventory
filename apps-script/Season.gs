@@ -1169,6 +1169,10 @@ function intakeFolders_() {
 
 // The newest logo they sent that a browser can show (not AI, EPS, PDF...).
 function intakeLogo_(folderId) {
+  var best = intakeLogoFile_(folderId);
+  return best ? logoBlob_(best) : null;
+}
+function intakeLogoFile_(folderId) {
   var it = DriveApp.getFolderById(folderId).getFiles();
   var best = null;
   while (it.hasNext()) {
@@ -1177,7 +1181,7 @@ function intakeLogo_(folderId) {
     if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].indexOf(f.getMimeType()) < 0) continue;
     if (!best || f.getLastUpdated() > best.getLastUpdated()) best = f;
   }
-  return best ? logoBlob_(best) : null;
+  return best;
 }
 
 function logoBlob_(file) {
@@ -1209,6 +1213,7 @@ var LOGO_LIBRARY_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 // same way for at least this many letters and neither has a closer match
 // ("Alpha Plumbing HVAC" and "Alpha Plumbing and HVAC").
 var LOGO_MATCH_MIN = 9;
+var LOGO_PREFIX_MIN = 5;
 
 function logoLibraryFolder_() {
   var props = PropertiesService.getScriptProperties();
@@ -1246,10 +1251,27 @@ function logoLibraryFiles_() {
   while (it.hasNext()) {
     var f = it.next();
     if (f.isTrashed() || LOGO_LIBRARY_MIMES.indexOf(f.getMimeType()) < 0) continue;
-    var key = companyKey_(String(f.getName()).replace(/\.[A-Za-z0-9]{2,5}$/, ''));
+    var key = logoFileKey_(f.getName());
     if (key) out.push({ key: key, id: f.getId(), at: f.getLastUpdated().getTime() });
   }
   return out;
+}
+
+// A file's name as a sponsor key: "Example_Co_Sponsor_Logo.png" reads as
+// "Example Co", the same as a sheet name of "Example Company".
+function logoFileKey_(name) {
+  var base = String(name || '').replace(/\.[A-Za-z0-9]{2,5}$/, '')
+    .replace(/[_\-]+/g, ' ')
+    .replace(/\s+(sponsor\s+)?logo\s*$/i, '');
+  return companyKey_(base);
+}
+
+// "Example Gymnastics Center" -> "egc", for a logo file named by the
+// sponsor's initials.
+function initialsOf_(name) {
+  return String(name || '').toLowerCase().replace(/&/g, ' and ')
+    .replace(/\b(inc|llc|co|corp|company|pc|p\.c|the|ltd|and|of)\b\.?/g, ' ')
+    .split(/[^a-z0-9]+/).filter(String).map(function (w) { return w.charAt(0); }).join('');
 }
 
 function commonStart_(a, b) {
@@ -1260,8 +1282,11 @@ function commonStart_(a, b) {
 
 // Sponsor key -> logo file id. An exact name match first; then a close one,
 // only when the sponsor and the logo are each other's one closest match, so
-// "Lunenburg Diner" never borrows another Lunenburg business's logo.
-function matchLogos_(companyKeys, files) {
+// "Lunenburg Diner" never borrows another Lunenburg business's logo. A close
+// match is a long shared start, or the file's whole name starting exactly one
+// sponsor's name ("Sample Co" for "Sample Towing"). Last, a short file name
+// that is exactly one sponsor's initials ("EGC").
+function matchLogos_(companyKeys, files, initials) {
   var out = {}, logos = {};
   files.forEach(function (f) { if (!logos[f.key] || f.at > logos[f.key].at) logos[f.key] = f; });
   var keys = [], seen = {};
@@ -1280,33 +1305,55 @@ function matchLogos_(companyKeys, files) {
   }
   restL.forEach(function (lk) {
     var b = bestOf(lk, restC);
-    if (b.n < LOGO_MATCH_MIN || b.who.length !== 1) return;
+    var whole = b.n === lk.length && lk.length >= LOGO_PREFIX_MIN;
+    if ((b.n < LOGO_MATCH_MIN && !whole) || b.who.length !== 1) return;
     var back = bestOf(b.who[0], restL);
     if (back.who.length !== 1 || back.who[0] !== lk) return;
     out[b.who[0]] = logos[lk].id;
+    used[lk] = 1;
   });
+  if (initials) {
+    var open = keys.filter(function (k) { return !out[k] && initials[k] && initials[k].length >= 2; });
+    Object.keys(logos).forEach(function (lk) {
+      if (used[lk] || lk.length < 2 || lk.length > 5) return;
+      var who = open.filter(function (k) { return initials[k] === lk; });
+      if (who.length === 1 && !out[who[0]]) out[who[0]] = logos[lk].id;
+    });
+  }
   return out;
 }
 
 // The match for every sponsor on the sheet, remembered for ten minutes.
-function logoLibraryMap_() {
+function logoLibraryMap_(fresh) {
   var cache = CacheService.getScriptCache();
-  var hit = cache.get('logoLibraryMap_v1');
-  if (hit) { try { return JSON.parse(hit); } catch (e) { /* rebuild */ } }
-  var map = {};
+  var hit = fresh ? null : cache.get('logoLibraryMap_v2');
+  if (hit) { try { return JSON.parse(hit).map; } catch (e) { /* rebuild */ } }
+  return logoLibraryBuild_().map;
+}
+// The match plus each matched file's id and time, so the board list needs no
+// second trip to Drive per logo.
+function logoLibraryBuild_() {
+  var map = {}, at = {};
   try {
     var files = logoLibraryFiles_();
     if (files.length) {
       var ss = sponsorSpreadsheet_();
-      var names = sheetRows_(ss, sponsorTabName_(ss), { company: /^(company|business)/ }).rows
-        .map(function (r) { return companyKey_(r.company); });
-      map = matchLogos_(names, files);
+      var names = [], initials = {};
+      sheetRows_(ss, sponsorTabName_(ss), { company: /^(company|business)/ }).rows.forEach(function (r) {
+        var k = companyKey_(r.company);
+        if (!k) return;
+        names.push(k);
+        if (!initials[k]) initials[k] = initialsOf_(r.company);
+      });
+      map = matchLogos_(names, files, initials);
+      files.forEach(function (f) { at[f.id] = f.at; });
     }
   } catch (e) {
     console.log('logo folder: ' + e);
   }
-  try { cache.put('logoLibraryMap_v1', JSON.stringify(map), 600); } catch (e) { /* too big to keep: fine */ }
-  return map;
+  var built = { map: map, at: at };
+  try { CacheService.getScriptCache().put('logoLibraryMap_v2', JSON.stringify(built), 600); } catch (e) { /* too big to keep: fine */ }
+  return built;
 }
 
 // One file, only when it is still directly in the logo folder.
@@ -1326,29 +1373,118 @@ function libraryLogo_(key) {
   return file ? logoBlob_(file) : null;
 }
 
-// Board side: a small copy of every matched logo for the sponsor cards,
-// keyed by the sponsor's key. Each small copy is remembered for six hours.
-function sponsorLogoList() {
-  var map = logoLibraryMap_(), cache = CacheService.getScriptCache(), out = {};
-  Object.keys(map).forEach(function (key) {
-    try {
-      var file = libraryFile_(map[key]);
-      if (!file) return;
-      var ck = 'logoThumb_' + file.getId() + '_' + file.getLastUpdated().getTime();
-      var hit = cache.get(ck);
-      if (hit) { out[key] = JSON.parse(hit); return; }
-      var blob = file.getThumbnail() || (file.getSize() <= 60 * 1024 ? file.getBlob() : null);
-      if (!blob) return;
-      var mime = blob.getContentType();
-      if (LOGO_LIBRARY_MIMES.indexOf(mime) < 0) return;
-      var img = { mime: mime, base64: Utilities.base64Encode(blob.getBytes()) };
-      out[key] = img;
-      try { cache.put(ck, JSON.stringify(img), 21600); } catch (e) { /* too big to keep: fine */ }
-    } catch (e) {
-      console.log('logo thumb for ' + key + ': ' + e);
+// Board side: a small copy of each sponsor's logo for the sponsor cards,
+// keyed by the sponsor's key. Same order as the team box and the team page:
+// the logo set in the app (Upload logo) wins, then one the sponsor sent with
+// their reply form, then the Sponsor Logos folder match.
+//
+// The small copies are kept in one private file in the app's Drive folder
+// ("Sponsor logo thumbnails (app).json"), keyed by file and its last change,
+// so a cold read makes only the copies that are new since last time. It all
+// runs in this script, signed in; nothing outside it is asked.
+var LOGO_THUMBS_NAME = 'Sponsor logo thumbnails (app).json';
+var LOGO_THUMBS_PROP = 'LOGO_THUMBS_FILE_ID';
+
+function sponsorLogoList(fresh) {
+  var pick = {};   // key -> { id, at, file? }
+  var lib = fresh ? logoLibraryBuild_() : null;
+  if (!lib) {
+    try { lib = JSON.parse(CacheService.getScriptCache().get('logoLibraryMap_v2') || 'null'); } catch (e) { lib = null; }
+    lib = lib || logoLibraryBuild_();
+  }
+  Object.keys(lib.map).forEach(function (k) { pick[k] = { id: lib.map[k], at: lib.at[lib.map[k]] || 0 }; });
+
+  try {
+    var folders = intakeFolders_();
+    Object.keys(folders).forEach(function (k) {
+      try {
+        var f = intakeLogoFile_(folders[k]);
+        if (f) pick[k] = { id: f.getId(), at: f.getLastUpdated().getTime(), file: f };
+      } catch (e) { console.log('form logo for ' + k + ': ' + e); }
+    });
+  } catch (e) { console.log('form logos: ' + e); }
+
+  try {
+    var setFiles = teamLogoFiles_();
+    sponsorTeams_().rows.forEach(function (t) {
+      var f = t.imageFileId && setFiles[t.imageFileId];
+      if (f) pick[String(t.key)] = f;
+    });
+  } catch (e) { console.log('set logos: ' + e); }
+
+  var store = readThumbStore_(), kept = {}, changed = false, out = {};
+  Object.keys(pick).forEach(function (key) {
+    var p = pick[key], ck = p.id + '_' + p.at;
+    var img = store.data[ck];
+    if (!img) {
+      try {
+        img = smallLogo_(p.file || DriveApp.getFileById(p.id));
+        if (img) changed = true;
+      } catch (e) { console.log('logo thumb for ' + key + ': ' + e); }
     }
+    if (!img) return;
+    kept[ck] = img;
+    out[key] = img;
   });
+  if (changed || Object.keys(kept).length !== Object.keys(store.data).length) writeThumbStore_(store, kept);
   return { logos: out };
+}
+
+// Files in the Team Page Logos folder: id -> { id, at, file }. Only these are
+// used for a logo set in the app.
+function teamLogoFiles_() {
+  var out = {};
+  var it = DriveApp.getFolderById(DRIVE_FOLDER_ID).getFoldersByName(TEAM_LOGO_FOLDER_NAME);
+  while (it.hasNext()) {
+    var files = it.next().getFiles();
+    while (files.hasNext()) {
+      var f = files.next();
+      if (f.isTrashed() || LOGO_LIBRARY_MIMES.indexOf(f.getMimeType()) < 0) continue;
+      out[f.getId()] = { id: f.getId(), at: f.getLastUpdated().getTime(), file: f };
+    }
+  }
+  return out;
+}
+
+function smallLogo_(file) {
+  var blob = file.getThumbnail() || (file.getSize() <= 60 * 1024 ? file.getBlob() : null);
+  if (!blob) return null;
+  var mime = blob.getContentType();
+  if (LOGO_LIBRARY_MIMES.indexOf(mime) < 0) return null;
+  return { mime: mime, base64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+function thumbStoreFile_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty(LOGO_THUMBS_PROP);
+  if (id) {
+    try { var f = DriveApp.getFileById(id); if (!f.isTrashed()) return f; } catch (e) { /* gone: make a new one */ }
+    props.deleteProperty(LOGO_THUMBS_PROP);
+  }
+  var it = DriveApp.getFolderById(DRIVE_FOLDER_ID).getFilesByName(LOGO_THUMBS_NAME);
+  while (it.hasNext()) {
+    var g = it.next();
+    if (!g.isTrashed()) { props.setProperty(LOGO_THUMBS_PROP, g.getId()); return g; }
+  }
+  return null;
+}
+
+function readThumbStore_() {
+  var store = { file: null, data: {} };
+  try {
+    store.file = thumbStoreFile_();
+    if (store.file) store.data = JSON.parse(store.file.getBlob().getDataAsString() || '{}') || {};
+  } catch (e) { console.log('logo thumbs read: ' + e); store.data = {}; }
+  return store;
+}
+
+function writeThumbStore_(store, data) {
+  try {
+    var s = JSON.stringify(data);
+    if (store.file) { store.file.setContent(s); return; }
+    var f = DriveApp.getFolderById(DRIVE_FOLDER_ID).createFile(LOGO_THUMBS_NAME, s, 'application/json');
+    PropertiesService.getScriptProperties().setProperty(LOGO_THUMBS_PROP, f.getId());
+  } catch (e) { console.log('logo thumbs write: ' + e); }
 }
 
 // Board side: the Sponsors tab's team box sets or clears a sponsor's team page

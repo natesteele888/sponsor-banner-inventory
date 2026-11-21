@@ -231,7 +231,7 @@
     loadNudges();
     loadPackets();
     loadUpgrades();
-    loadLogos();
+    loadLogos(fresh);
     loadWebsite(false);
     loadTeams();
     return S.loading;
@@ -691,10 +691,11 @@
       render();
     }).catch(function () { /* nothing waiting shows */ });
   }
-  // Logos from the league's Sponsor Logos folder in Drive, matched to the
-  // sponsors by name on the backend. A sponsor with one shows it on its card.
-  function loadLogos() {
-    side({ action: 'sponsorLogoList' }, function (res) {
+  // Each sponsor's logo for its card, worked out by the backend: the one set
+  // here with Upload logo, else the one they sent with their reply form, else
+  // the league's Sponsor Logos folder match by name. Refresh reads Drive again.
+  function loadLogos(fresh) {
+    side(fresh ? { action: 'sponsorLogoList', fresh: true } : { action: 'sponsorLogoList' }, function (res) {
       if (!res || !res.ok || !res.logos) return;
       S.logos = res.logos;
       render();
@@ -1709,6 +1710,7 @@
       if (!res.ok) throw A().backendError(res.error || 'Save failed.');
       $('#spLogoStatus').textContent = res.message || 'Saved.';
       if (S.current === s) loadLogo(s);
+      loadLogos();   // the card shows the new logo too
       setTimeout(function () { $('#spLogoStatus').textContent = res.message || 'Saved.'; }, 50);
     }).catch(function (err) {
       A().noteProblem('Sponsor logo save failed', err);
