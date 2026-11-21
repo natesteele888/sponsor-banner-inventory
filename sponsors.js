@@ -1844,12 +1844,14 @@
     });
     owners.sort();
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(label) + '</option>'; };
-    var sender = orSender();
+    var sender = orSender(), compose = !!(sender && sender.how === 'compose');
     var shown = orShown(), picked = orPicked();
     var lim = Math.min(O.batchMax, O.dayLeft);
     var html = '<h3>Outreach · ' + notYet.length + ' not contacted yet' + (noMail ? ', ' + noMail + ' with no email' : '') + '</h3>' +
-      '<p class="hint">Each business gets its own email with only its address in To. Nothing goes out until you tap Send twice. ' +
-      'Sent rows are marked Contacted on the sheet.' + (O.packet ? ' The packet PDF is attached.' : ' The packet isn’t attached; the email links to the levels on the league site.') + '</p>' +
+      (compose
+        ? '<p class="hint">Each email opens filled in, in your own Gmail, so it comes from you and is signed by you. Press Send there, then tap I sent it here so the sheet shows Contacted. Your emails link to the levels on the league site.</p>'
+        : '<p class="hint">Each business gets its own email with only its address in To. Nothing goes out until you tap Send twice. ' +
+          'Sent rows are marked Contacted on the sheet.' + (O.packet ? ' The packet PDF is attached.' : ' The packet isn’t attached; the email links to the levels on the league site.') + '</p>') +
       (O.linksOk ? '' : '<p class="or-flag hold">The sponsor page and sign-up links aren’t set, so nothing can go out.</p>') +
       '<div class="or-top">' +
         '<label>From <select data-or="sender">' + O.senders.map(function (x) {
@@ -1859,21 +1861,24 @@
         '<label>Owner <select data-or="owner">' + opt('', 'Anyone', f.owner) + opt('-', 'No owner', f.owner) + owners.map(function (s) { return opt(s, s, f.owner); }).join('') + '</select></label>' +
       '</div>' +
       (sender ? '' : '<p class="or-flag hold">' + esc(O.senders.map(function (x) { return x.why; }).filter(Boolean).join(' ')) + '</p>') +
-      '<div class="rc-acts"><button class="btn small" type="button" data-or="pick">Tick the first ' + lim + ' ready</button>' +
-      '<button class="btn small" type="button" data-or="clear">Untick all</button></div>' +
+      (compose ? '' : '<div class="rc-acts"><button class="btn small" type="button" data-or="pick">Tick the first ' + lim + ' ready</button>' +
+      '<button class="btn small" type="button" data-or="clear">Untick all</button></div>') +
       '<ul class="or-list">' + (shown.length ? shown.map(function (i) {
         var k = orKey(i), held = !!(i.hold.length || i.sent), on = !held && !!O.picked[k];
         return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row">' +
-          '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>' +
+          (compose ? '' : '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>') +
           '<div class="or-main"><b>' + esc(i.company) + '</b>' +
           '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet || 'there') + ',' + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
           (i.sent ? '<p class="or-flag">Emailed ' + esc(fmtDay(i.sent.at)) + '.</p>' : '') +
           i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('') +
           i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('') +
           '</div>' + (i.email && !i.sent ? '<button class="btn small" type="button" data-or="preview">Preview</button>' : '') +
-          '</div><div class="rc-preview hidden"></div></li>';
+          '</div>' + (compose && !held && i.email && O.linksOk ? '<div class="rc-acts">' + (S.orOpen && S.orOpen[k]
+            ? '<button class="btn small primary" type="button" data-or="done">I sent it</button>' + gmailLinks(S.orOpen[k])
+            : '<button class="btn small primary" type="button" data-or="open">' + (i.look.length ? 'Looked, open in Gmail' : 'Open in Gmail') + '</button>') + '</div>' : '') +
+          '<div class="rc-preview hidden"></div></li>';
       }).join('') : '<li class="or-item hint">Nobody matches these filters.</li>') + '</ul>' +
-      '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span></div>' +
+      (compose ? '' : '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span></div>') +
       '<div class="rc-msg or-msg" role="status">' + (S.orLast || '') + '</div>';
     box.innerHTML = html;
     orFoot();
@@ -1937,6 +1942,32 @@
       }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
       return;
     }
+    if (k === 'open' || k === 'done') {
+      var ol = btn.closest('.or-item'), oi = O.items.filter(function (i) { return orKey(i) === ol.dataset.k; })[0], ok2 = ol.dataset.k;
+      if (!oi) return;
+      S.orOpen = S.orOpen || {};
+      if (k === 'open') {
+        var win = gmailWindow();
+        btn.disabled = true; msg.textContent = 'Filling in the email…';
+        A().apiPost({ action: 'outreachCompose', row: oi.row, company: oi.company, email: oi.email, looked: oi.look.length > 0 }).then(function (r) {
+          if (!r.ok) { if (win) win.close(); btn.disabled = false; msg.textContent = r.error || 'Could not fill in the email.'; return; }
+          S.orOpen[ok2] = r;
+          var went = gmailGo(win, r);
+          S.orLast = esc((went ? 'Opened ' + oi.company + ' in your Gmail.' : 'Tap Open in Gmail again for ' + oi.company + '.') + ' Press Send there, then tap I sent it.');
+          renderOutreach();
+        }).catch(function () { if (win) win.close(); btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+        return;
+      }
+      btn.disabled = true; msg.textContent = 'Saving…';
+      A().apiPost({ action: 'outreachSent', row: oi.row, company: oi.company, email: oi.email }).then(function (r) {
+        if (!r.ok) { btn.disabled = false; msg.textContent = r.error || 'That did not save.'; return; }
+        delete S.orOpen[ok2];
+        S.orLast = '<span class="sp-done">✓ ' + esc(r.message) + '</span>';
+        msg.innerHTML = S.orLast;
+        load(true);
+      }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
     if (k === 'send') {
       var list = orPicked(), sd = orSender();
       if (!list.length || !sd) return;
@@ -1996,11 +2027,12 @@
     if (!box) return;
     if (!W || !canEdit()) { box.classList.add('hidden'); syncSpTabs(); return; }
     box.classList.remove('hidden');
-    var f = S.wlFilter || 'needs', sender = welcomeSender();
+    var f = S.wlFilter || 'needs', sender = welcomeSender(), compose = !!(sender && sender.how === 'compose');
     var shown = W.items.filter(function (i) { return f === 'all' || (f === 'needs' ? !i.had : !!i.had); });
     var opt = function (v, label) { return '<option value="' + v + '"' + (v === f ? ' selected' : '') + '>' + label + '</option>'; };
     box.innerHTML = '<h3>Welcome emails · ' + W.needs + ' sponsor' + (W.needs === 1 ? '' : 's') + ' still need' + (W.needs === 1 ? 's' : '') + ' one</h3>' +
-      '<p class="hint">The thank-you and next steps the website sends, for sponsors who signed up any other way. Website signups already got it. Nothing goes out until you tap Send twice.</p>' +
+      '<p class="hint">The thank-you and next steps the website sends, for sponsors who signed up any other way. Website signups already got it. ' +
+        (compose ? 'Each one opens filled in, in your own Gmail, from you and signed by you. Press Send there, then tap I sent it here.' : 'Nothing goes out until you tap Send twice.') + '</p>' +
       (S.wlLast ? '<p class="sp-done">✓ ' + esc(S.wlLast) + '</p>' : '') +
       '<div class="or-top">' +
         '<label>From <select data-wl="sender">' + W.senders.map(function (x) {
@@ -2021,7 +2053,9 @@
           '</div></div>' +
           (i.had ? '' : '<div class="rc-acts">' +
             (i.email ? '<button class="btn small" type="button" data-wl="preview">Preview</button>' : '') +
-            (can ? '<button class="btn small primary" type="button" data-wl="send">' + (i.look.length ? 'Looked, send' : 'Send') + '</button>' : '') +
+            (can && compose && S.wlOpen && S.wlOpen[k] ? '<button class="btn small primary" type="button" data-wl="done">I sent it</button>' + gmailLinks(S.wlOpen[k]) : '') +
+            (can && compose && !(S.wlOpen && S.wlOpen[k]) ? '<button class="btn small primary" type="button" data-wl="open">' + (i.look.length ? 'Looked, open in Gmail' : 'Open in Gmail') + '</button>' : '') +
+            (can && !compose ? '<button class="btn small primary" type="button" data-wl="send">' + (i.look.length ? 'Looked, send' : 'Send') + '</button>' : '') +
             '<button class="btn small" type="button" data-wl="mark">Already had it</button></div>') +
           '<div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
       }).join('') : '<li class="or-item hint">' + (f === 'needs' ? 'Every sponsor has had one.' : 'Nobody here.') + '</li>') + '</ul>';
@@ -2046,6 +2080,27 @@
       }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
       return;
     }
+    if (k === 'open' || k === 'done') {
+      var wk = li.dataset.k, body0 = { action: 'welcomeSend', row: it.row, company: it.company, email: it.email, sender: 'mine', looked: it.look.length > 0 };
+      S.wlOpen = S.wlOpen || {};
+      var win = k === 'open' ? gmailWindow() : null;
+      if (k === 'done') body0.composed = true;
+      btn.disabled = true; msg.textContent = k === 'open' ? 'Filling in the email…' : 'Saving…';
+      A().apiPost(body0).then(function (r) {
+        if (!r.ok || (k === 'open' && !r.compose)) { if (win) win.close(); btn.disabled = false; msg.textContent = r.error || 'That did not go through.'; return; }
+        if (k === 'open') {
+          S.wlOpen[wk] = r.compose;
+          var went = gmailGo(win, r.compose);
+          S.wlLast = (went ? 'Opened ' + it.company + ' in your Gmail.' : 'Tap Open in Gmail again for ' + it.company + '.') + ' Press Send there, then tap I sent it.';
+          renderWelcome();
+          return;
+        }
+        delete S.wlOpen[wk];
+        S.wlLast = r.message;
+        loadWelcome();
+      }).catch(function () { if (win) win.close(); btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
     if (!btn.dataset.armed) {
       $$('#spWelcome [data-armed]').forEach(function (b) { delete b.dataset.armed; b.textContent = b.dataset.was; });
       btn.dataset.armed = '1'; btn.dataset.was = btn.textContent;
@@ -2062,6 +2117,30 @@
       S.wlLast = r.message;
       loadWelcome();
     }).catch(function () { btn.disabled = false; delete btn.dataset.armed; btn.textContent = btn.dataset.was; msg.textContent = 'Could not reach the backend. Refresh before trying again.'; });
+  }
+
+  // ---------- emails sent from your own Gmail ----------
+  // A board member who isn't the script owner sends as themselves: the app
+  // fills the email in, it opens in their own Gmail, and they press Send there.
+  function gmailUrl(c) {
+    return 'https://mail.google.com/mail/?' + (c.from ? 'authuser=' + encodeURIComponent(c.from) + '&' : '') +
+      'view=cm&fs=1&to=' + encodeURIComponent(c.to) + '&su=' + encodeURIComponent(c.subject) + '&body=' + encodeURIComponent(c.text);
+  }
+  function mailtoUrl(c) {
+    return 'mailto:' + encodeURIComponent(c.to) + '?subject=' + encodeURIComponent(c.subject) + '&body=' + encodeURIComponent(c.text);
+  }
+  // Opened on the tap itself, so the browser doesn't block it; filled in once the email is ready.
+  function gmailWindow() {
+    try { var w = window.open('', '_blank'); if (w) w.opener = null; return w || null; } catch (e) { return null; }
+  }
+  function gmailGo(win, c) {
+    if (win && !win.closed) { try { win.location.href = gmailUrl(c); return true; } catch (e) { /* use the link */ } }
+    return false;
+  }
+  function gmailLinks(c) {
+    var esc = A().esc;
+    return '<a class="btn small" target="_blank" rel="noopener" href="' + esc(gmailUrl(c)) + '">Open in Gmail again</a>' +
+      '<a class="btn small" href="' + esc(mailtoUrl(c)) + '">Use my mail app</a>';
   }
 
   // ---------- one-tap jobs ----------
@@ -2242,7 +2321,7 @@
       if (!S.book) load(); else render();
     },
     reset: function () {
-      S.book = null; S.outreach = null; S.welcome = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
+      S.book = null; S.outreach = null; S.welcome = null; S.orOpen = null; S.wlOpen = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
       $('#spYoY').classList.add('hidden'); $('#spYoY').innerHTML = '';
       $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = ''; $('#spWeb').classList.add('hidden'); S.web = null;
     }

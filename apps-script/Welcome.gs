@@ -42,7 +42,7 @@ function welcomeSettings_() {
     donate: /^https:\/\/[^\s"<>]+$/.test(donate) ? donate : '',
     address: String(p.getProperty('RECEIPT_ORG_ADDRESS') || '').replace(/\s*\n\s*/g, ', ').trim(),
     deadline: typeof INFO_DEADLINE === 'string' ? INFO_DEADLINE : 'March 20',
-    sign: outreachSettings_().sign
+    sign: outreachSign_()
   };
 }
 
@@ -93,7 +93,7 @@ function welcomeText_(r, greet, s) {
     if (pay.length) paras.push(pay.join('\n\n'));
   }
   paras.push('For any questions, please reach out to ' + WELCOME_LEAGUE_MAIL + '.');
-  paras.push('Sincerely,\n' + s.sign + '\nLunenburg Youth Baseball & Softball');
+  paras.push('Sincerely,\n' + (s.sign ? s.sign + '\n' : '') + 'Lunenburg Youth Baseball & Softball');
   return paras.join('\n\n');
 }
 
@@ -147,7 +147,8 @@ function welcomeFind_(data) {
 function welcomeList() {
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can send welcome emails.');
   var items = welcomeItems_().map(welcomePublic_);
-  return ok({ items: items, senders: outreachSenders_(), needs: items.filter(function (i) { return !i.had; }).length });
+  return ok({ items: items, senders: outreachSenders_(), needs: items.filter(function (i) { return !i.had; }).length,
+              sign: String(welcomeSettings_().sign || '').split('\n')[0] });
 }
 
 function welcomePreview(data) {
@@ -160,6 +161,9 @@ function welcomePreview(data) {
 }
 
 // data: { row, company, email, sender, looked } sends one; { ..., mark: true } marks it had without sending.
+// For a board member who isn't the script owner, sender 'mine' returns the
+// filled-in email to open in their own Gmail, and { ..., composed: true }
+// records it once they've pressed Send there.
 function welcomeSend(data) {
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can send welcome emails.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
@@ -179,13 +183,19 @@ function welcomeSend(data) {
     if (it.hold.length) return fail(it.hold[0] + ' Nothing was sent.');
     if (String(data.email || '').toLowerCase() !== it.email.toLowerCase()) return fail('The address on the sheet changed. Nothing was sent.');
     if (it.look.length && data.looked !== true) return fail('This one needs a look first. Nothing was sent.');
-    var sender = data.sender === 'league' ? 'league' : data.sender === 'mine' ? 'mine' : '';
-    var pick = outreachSenders_().filter(function (x) { return x.id === sender; })[0];
+    var pick = outreachPick_(data.sender), sender = pick ? pick.id : '';
     if (!pick) return fail('Pick who it’s from.');
     if (!pick.ok) return fail(pick.why);
     var s = welcomeSettings_(), text = welcomeText_(it.r, it.greet, s), o = { htmlBody: welcomeHtml_(text) };
+    if (pick.how === 'compose') {
+      if (data.composed !== true) return ok({ compose: { to: it.email, subject: WELCOME_SUBJECT, text: text, from: pick.email } });
+      log[key] = { how: 'sent', at: today, by: by, via: 'gmail', to: it.email.toLowerCase() };
+      saveWelcomeLog_(log);
+      return ok({ message: it.company + ' is marked as welcomed.' });
+    }
+    if (data.composed === true) return fail('Nothing to mark. Nothing was sent.');
     if (sender === 'league') { var mail = senderSettings_(); o.from = mail.from; o.replyTo = mail.from; o.name = RECEIPT_ORG; }
-    else o.name = String(s.sign.split('\n')[0] || 'Nate Steele');
+    else o.name = String(s.sign.split('\n')[0] || RECEIPT_ORG);
     try { GmailApp.sendEmail(it.email, WELCOME_SUBJECT, text, o); }   // one sponsor, one To, no CC or BCC
     catch (e) { return fail('Gmail refused it: ' + String(e.message || e).slice(0, 120) + ' Nothing was sent.'); }
     log[key] = { how: 'sent', at: today, by: by, via: sender, to: it.email.toLowerCase() };

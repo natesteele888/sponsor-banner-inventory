@@ -307,3 +307,12 @@ Sponsors who sign up on the league website get the website's thank-you and next 
 - **Already had it:** marks a sponsor done without sending.
 
 Nothing runs on a schedule, nothing changes on the sheet, and the record of who's had it lives in the script's own properties.
+
+## Who it's from
+
+Outreach and Welcome emails come from whoever is signed in and are signed by them.
+
+- **The script owner:** the app sends straight from their Gmail, as before, with their sign-off (`OUTREACH_SIGN`).
+- **Any other board member:** each email opens filled in, in their own Gmail (or their phone's mail app), from their own address and signed with their Google account name. They press Send there, then tap **I sent it** in the app so the sheet and the Welcome list catch up. These emails link to the levels on the league site instead of attaching the packet. Nothing to set up: they just need to be signed in to that Gmail in the same browser.
+- **A title under the name:** set `OUTREACH_SIGNS` to JSON like `{"their@email": "Their Name\nTheir title"}`.
+- **The league address:** still in the From list once it's connected; the app sends those, signed by whoever tapped Send.
