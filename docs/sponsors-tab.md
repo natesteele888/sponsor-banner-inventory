@@ -284,3 +284,14 @@ private, and nothing is saved there if anyone has been given access to it.
 The three actions answer the league admin only, the one account Social
 Studio opens for. Nothing here posts anywhere. See lybs-reporting
 `docs/social-spotlights.md`.
+
+## Outreach
+
+The Outreach tab sends the first "would you sponsor us?" email to businesses on the sheet that nobody has reached yet. It lists the rows the sheet still shows as not contacted (filter by the sheet's own Status and LYBS Owner), and each row is checked before it can be picked:
+
+- Held, can't be ticked: no email, an email cell with no address in it, already emailed from here, said no, or walk-in only.
+- Needs a look, starts unticked: the contact's name doesn't match the address (a books person or a front desk can be right), more than one address in the cell, the same address on another row, or the sheet already says contacted.
+
+Pick who it's from (your own Gmail, or the league address once it's connected as "Send mail as"), tick up to 15, preview any of them (To and the greeting side by side), and tap Send twice. Each business gets its own email with only its address in To: never a shared To, CC or BCC. Right before sending, each row is read again and must still have the same business and address. Sent rows get the sender's name in Contacted? and Status moves to Contacted, logged like any other change. Nothing runs on a schedule.
+
+Setup (Apps Script editor): add `apps-script/Outreach.gs` as a new script file named `Outreach`, then deploy a new version. Optional Script Properties: `OUTREACH_PACKET_FILE` (Drive id of the packet PDF to attach), `OUTREACH_LEVELS_URL` and `OUTREACH_SIGNUP_URL` (the league pages the email links to), `OUTREACH_SIGN` (sign-off lines), `OUTREACH_DAY_MAX` (most a day, 40 by default).

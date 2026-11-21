@@ -645,7 +645,8 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 /* The Sponsors tab's own tabs: the list shows without the four job boxes,
    and each job's tab shows only its own box. */
 #view-sponsors:not(.sp-sub) > #spReceipts, #view-sponsors:not(.sp-sub) > #spNudges,
-#view-sponsors:not(.sp-sub) > #spAddBox, #view-sponsors:not(.sp-sub) > #spPayBox { display: none !important; }
+#view-sponsors:not(.sp-sub) > #spAddBox, #view-sponsors:not(.sp-sub) > #spPayBox,
+#view-sponsors:not(.sp-sub) > #spOutreach { display: none !important; }
 #view-sponsors.sp-sub > :not(.sp-on):not(#spStatus):not(#spModeEmpty) { display: none !important; }
 /* Eight tabs: on a phone the bar scrolls sideways instead of squeezing them. */
 @media (max-width: 600px) {
@@ -687,3 +688,23 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-reports > summary .hint { font-weight: 400; margin-left: 6px; }
 .sp-reports[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
 .sp-reports > :not(summary) { margin-left: 12px; margin-right: 12px; }
+
+/* Outreach: first emails to businesses nobody has reached yet. */
+.or-top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 8px; }
+.or-top label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.or-top select { min-height: 32px; }
+.or-list { list-style: none; margin: 0; padding: 0; }
+.or-item { border-top: 1px solid var(--line); padding: 8px 0; }
+.or-row { display: flex; align-items: flex-start; gap: 10px; }
+.or-row input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.or-main { flex: 1 1 auto; min-width: 0; }
+.or-main b { display: block; }
+.or-to { font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
+.or-flag { font-size: 13px; margin: 2px 0 0; }
+.or-flag.hold { color: var(--bad, #c0392b); }
+.or-flag.look { color: var(--warn, #b7791f); }
+.or-side { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 14px; margin: 6px 0; }
+.or-side dt { color: var(--ink2); }
+.or-side dd { margin: 0; overflow-wrap: anywhere; }
+.or-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; position: sticky; bottom: 0; background: var(--card); padding: 8px 0; }
+.or-res { font-size: 13px; }

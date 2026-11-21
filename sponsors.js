@@ -229,6 +229,7 @@
     loadHistory();
     loadReceipts();
     loadNudges();
+    loadOutreach();
     loadPackets();
     loadUpgrades();
     loadLogos(fresh);
@@ -1768,6 +1769,8 @@
     $('#spArea').addEventListener('change', function (e) { S.area = e.target.value; render(); });
     $('#spReceipts').addEventListener('click', function (e) { var b = e.target.closest('button[data-rc]'); if (b) receiptAct(b); });
     $('#spNudges').addEventListener('click', function (e) { var b = e.target.closest('button[data-nd]'); if (b) nudgeAct(b); });
+    $('#spOutreach').addEventListener('click', function (e) { var b = e.target.closest('button[data-or]'); if (b) outreachAct(b); });
+    $('#spOutreach').addEventListener('change', outreachChange);
     $('#spClose').addEventListener('click', close);
     $('#detailScrim').addEventListener('click', function () { if (S.current) close(); });
     $('#spSave').addEventListener('click', saveTeam);
@@ -1778,6 +1781,177 @@
       if (S.skipPop) { S.skipPop = false; return; }
       if (S.entry) { S.entry = false; hide(); }
     });
+  }
+
+  // ---------- outreach ----------
+  // The first "would you sponsor us?" email, to businesses nobody has reached
+  // yet. Pick who it's from, tick up to the batch limit, preview any of them
+  // (To and the greeting side by side), and send on a second tap. Every
+  // sponsor gets its own email with only their address in To. Rows the
+  // server holds can't be ticked; rows that need a look start unticked.
+
+  function loadOutreach() {
+    if (S.book && !canEdit()) { var b = $('#spOutreach'); if (b) b.classList.add('hidden'); return; }
+    side({ action: 'outreachList' }, function (res) {
+      if (!res || !res.ok || !canEdit()) return;
+      var keep = S.outreach ? S.outreach.picked : {};
+      S.outreach = res; S.outreach.picked = keep || {};
+      renderOutreach();
+    }).catch(function () { /* the box stays hidden */ });
+  }
+
+  function orKey(i) { return i.row + '|' + i.company; }
+  function orShown() {
+    var O = S.outreach, f = S.orFilter || { status: 'Not contacted', owner: '' };
+    return O.items.filter(function (i) {
+      if (f.status && i.status !== f.status) return false;
+      if (f.owner === '-') return !i.owner;
+      if (f.owner && i.owner !== f.owner) return false;
+      return true;
+    });
+  }
+  function orPicked() {
+    var O = S.outreach;
+    return O.items.filter(function (i) { return O.picked[orKey(i)] && !i.hold.length && !i.sent; });
+  }
+  function orSender() {
+    var O = S.outreach, ok = O.senders.filter(function (x) { return x.ok; });
+    var cur = O.senders.filter(function (x) { return x.id === S.orSender && x.ok; })[0];
+    return cur || ok[0] || null;
+  }
+
+  function renderOutreach() {
+    var box = $('#spOutreach'), esc = A().esc, O = S.outreach;
+    if (!box) return;
+    if (!O || !canEdit()) { box.classList.add('hidden'); syncSpTabs(); return; }
+    box.classList.remove('hidden');
+    var f = S.orFilter || (S.orFilter = { status: 'Not contacted', owner: '' });
+    var notYet = O.items.filter(function (i) { return i.status === 'Not contacted' && !i.sent; });
+    var noMail = notYet.filter(function (i) { return !i.email; }).length;
+    var statuses = [], owners = [];
+    O.items.forEach(function (i) {
+      if (statuses.indexOf(i.status) < 0) statuses.push(i.status);
+      if (i.owner && owners.indexOf(i.owner) < 0) owners.push(i.owner);
+    });
+    owners.sort();
+    var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    var sender = orSender();
+    var shown = orShown(), picked = orPicked();
+    var lim = Math.min(O.batchMax, O.dayLeft);
+    var html = '<h3>Outreach · ' + notYet.length + ' not contacted yet' + (noMail ? ', ' + noMail + ' with no email' : '') + '</h3>' +
+      '<p class="hint">Each business gets its own email with only its address in To. Nothing goes out until you tap Send twice. ' +
+      'Sent rows are marked Contacted on the sheet.' + (O.packet ? ' The packet PDF is attached.' : ' The packet isn’t attached; the email links to the levels on the league site.') + '</p>' +
+      (O.linksOk ? '' : '<p class="or-flag hold">The sponsor page and sign-up links aren’t set, so nothing can go out.</p>') +
+      '<div class="or-top">' +
+        '<label>From <select data-or="sender">' + O.senders.map(function (x) {
+          return '<option value="' + esc(x.id) + '"' + (sender && x.id === sender.id ? ' selected' : '') + (x.ok ? '' : ' disabled') + '>' + esc(x.label) + (x.ok ? '' : ' (not set up)') + '</option>';
+        }).join('') + '</select></label>' +
+        '<label>Status <select data-or="status">' + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
+        '<label>Owner <select data-or="owner">' + opt('', 'Anyone', f.owner) + opt('-', 'No owner', f.owner) + owners.map(function (s) { return opt(s, s, f.owner); }).join('') + '</select></label>' +
+      '</div>' +
+      (sender ? '' : '<p class="or-flag hold">' + esc(O.senders.map(function (x) { return x.why; }).filter(Boolean).join(' ')) + '</p>') +
+      '<div class="rc-acts"><button class="btn small" type="button" data-or="pick">Tick the first ' + lim + ' ready</button>' +
+      '<button class="btn small" type="button" data-or="clear">Untick all</button></div>' +
+      '<ul class="or-list">' + (shown.length ? shown.map(function (i) {
+        var k = orKey(i), held = !!(i.hold.length || i.sent), on = !held && !!O.picked[k];
+        return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row">' +
+          '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>' +
+          '<div class="or-main"><b>' + esc(i.company) + '</b>' +
+          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet || 'there') + ',' + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
+          (i.sent ? '<p class="or-flag">Emailed ' + esc(fmtDay(i.sent.at)) + '.</p>' : '') +
+          i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('') +
+          i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('') +
+          '</div>' + (i.email && !i.sent ? '<button class="btn small" type="button" data-or="preview">Preview</button>' : '') +
+          '</div><div class="rc-preview hidden"></div></li>';
+      }).join('') : '<li class="or-item hint">Nobody matches these filters.</li>') + '</ul>' +
+      '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span></div>' +
+      '<div class="rc-msg or-msg" role="status">' + (S.orLast || '') + '</div>';
+    box.innerHTML = html;
+    orFoot();
+    syncSpTabs();
+  }
+  function orFoot() {
+    var O = S.outreach, n = orPicked().length, btn = $('#spOutreach [data-or="send"]');
+    if (!btn) return;
+    delete btn.dataset.armed;
+    btn.disabled = !(n && orSender() && O.linksOk);
+    btn.textContent = 'Send ' + n + ' separate email' + (n === 1 ? '' : 's');
+    $('#spOutreach .or-count').textContent = n + ' ticked · up to ' + O.batchMax + ' at a time · ' + O.dayLeft + ' left today';
+  }
+
+  function outreachChange(e) {
+    var t = e.target, O = S.outreach;
+    if (t.matches('select[data-or]')) {
+      var k = t.dataset.or;
+      S.orLast = '';
+      if (k === 'sender') S.orSender = t.value;
+      else S.orFilter[k] = t.value;
+      renderOutreach();
+      return;
+    }
+    if (t.matches('.or-item input[type=checkbox]')) {
+      var li = t.closest('.or-item'), key = li.dataset.k;
+      if (t.checked && orPicked().length >= Math.min(O.batchMax, O.dayLeft)) {
+        t.checked = false;
+        $('#spOutreach .or-msg').textContent = 'That’s the most for one batch. Send these first.';
+        return;
+      }
+      if (t.checked) O.picked[key] = 1; else delete O.picked[key];
+      orFoot();
+    }
+  }
+
+  function outreachAct(btn) {
+    var O = S.outreach, esc = A().esc, msg = $('#spOutreach .or-msg'), k = btn.dataset.or;
+    if (k === 'pick') {
+      var room = Math.min(O.batchMax, O.dayLeft) - orPicked().length;
+      orShown().forEach(function (i) {
+        if (room > 0 && !i.hold.length && !i.look.length && !i.sent && !O.picked[orKey(i)]) { O.picked[orKey(i)] = 1; room--; }
+      });
+      renderOutreach();
+      return;
+    }
+    if (k === 'clear') { O.picked = {}; renderOutreach(); return; }
+    if (k === 'preview') {
+      var li = btn.closest('.or-item'), it = O.items.filter(function (i) { return orKey(i) === li.dataset.k; })[0];
+      var pv = rowPreview(li), sender = orSender();
+      msg.textContent = 'Building the preview…';
+      A().apiPost({ action: 'outreachPreview', row: it.row, company: it.company, sender: sender ? sender.id : 'mine' }).then(function (res) {
+        msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+        if (!res.ok) return;
+        framePane(pv, res.subject, res.html, '',
+          '<dl class="or-side"><dt>To</dt><dd>' + esc(res.to || 'no address') + '</dd>' +
+          '<dt>Greeting</dt><dd>Hi ' + esc(res.greet) + ',</dd>' +
+          '<dt>Contact</dt><dd>' + esc(res.contact || 'none on the sheet') + '</dd>' +
+          '<dt>From</dt><dd>' + esc(sender ? sender.label : 'nobody set up yet') + '</dd></dl>' +
+          res.hold.concat(res.look).map(function (t) { return '<p class="or-flag look">' + esc(t) + '</p>'; }).join(''));
+      }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
+    if (k === 'send') {
+      var list = orPicked(), sd = orSender();
+      if (!list.length || !sd) return;
+      if (!btn.dataset.armed) {
+        btn.dataset.armed = '1';
+        btn.textContent = 'Tap again to send ' + list.length + ' email' + (list.length === 1 ? '' : 's') + ', one per business';
+        msg.textContent = 'From ' + sd.label + ' to: ' + list.map(function (i) { return i.company; }).join(', ') + '.';
+        setTimeout(function () { if (btn.isConnected && !btn.disabled && btn.dataset.armed) { orFoot(); msg.textContent = ''; } }, 8000);
+        return;
+      }
+      btn.disabled = true; msg.textContent = 'Sending, one at a time…';
+      A().apiPost({ action: 'outreachSend', sender: sd.id, items: list.map(function (i) {
+        return { row: i.row, company: i.company, email: i.email, looked: i.look.length > 0 };
+      }) }).then(function (r) {
+        if (!r.ok) { btn.disabled = false; delete btn.dataset.armed; msg.textContent = r.error || 'That did not go through. Nothing was sent.'; return; }
+        O.picked = {};
+        var bad = (r.results || []).filter(function (x) { return !x.sent; });
+        S.orLast = '<span class="sp-done">✓ ' + esc(r.message) + '</span>' +
+          (bad.length ? '<ul class="or-res">' + bad.map(function (x) { return '<li>' + esc(x.company) + ': ' + esc(x.error) + '</li>'; }).join('') + '</ul>' : '');
+        msg.innerHTML = S.orLast;
+        if (r.sent) load(true);
+        else loadOutreach();
+      }).catch(function () { btn.disabled = false; delete btn.dataset.armed; msg.textContent = 'Could not reach the backend. Some may have gone. Refresh before sending again.'; });
+    }
   }
 
   // ---------- one-tap jobs ----------
@@ -1921,7 +2095,7 @@
   // Receipts, Follow-ups, Add sponsor and Record payment sit in the top bar
   // next to Sponsors. Each shows only its own box, opened; Sponsors shows the
   // list without them. A tab shows only when its box can be used.
-  var SP_BOX = { receipts: '#spReceipts', followups: '#spNudges', add: '#spAddBox', pay: '#spPayBox' };
+  var SP_BOX = { receipts: '#spReceipts', followups: '#spNudges', outreach: '#spOutreach', add: '#spAddBox', pay: '#spPayBox' };
   function applyMode() {
     var view = $('#view-sponsors'), mode = SP_BOX[S.mode] ? S.mode : '';
     if (!view) return;
@@ -1958,7 +2132,7 @@
       if (!S.book) load(); else render();
     },
     reset: function () {
-      S.book = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
+      S.book = null; S.outreach = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
       $('#spYoY').classList.add('hidden'); $('#spYoY').innerHTML = '';
       $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = ''; $('#spWeb').classList.add('hidden'); S.web = null;
     }
