@@ -44,13 +44,14 @@ function sponsorTotals_(v, season) {
   var head = v[h0].map(function (h) { return String(h).replace(/\s+/g, ' ').trim().toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var cCo = col(/^(company|business)/), cAmt = col(/^amount/), cPaid = col(/^paid/);
-  var cTier = col(new RegExp('^tier selected ' + season)), cHow = col(/^(paid how|payment method|paid by)/);
+  var cTier = col(new RegExp('^tier selected ' + season)), cHow = col(/^(paid how|payment method|paid by)/), cNotes = col(/^notes?$/);
   if (cCo < 0 || cAmt < 0 || cTier < 0) return null;   // not that season's sponsor tab
   for (var r = h0 + 1; r < v.length; r++) {
     if (!String(v[r][cCo] || '').trim()) continue;
     var amt = amountOf_(v[r][cAmt]);
     if (amt <= 0) continue;
     if (cHow >= 0 && /\bin.?kind\b/i.test(String(v[r][cHow] || ''))) continue;   // goods or services, not dollars
+    if (cNotes >= 0 && /\bpaid in.?kind\b/i.test(String(v[r][cNotes] || ''))) continue;
     out.count++; out.committed += amt;
     if (cPaid >= 0 && isYes_(v[r][cPaid])) { out.paidCount++; out.paid += amt; }
   }

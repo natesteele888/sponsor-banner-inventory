@@ -456,11 +456,22 @@ body.locked .scrim, body.locked .sheet { display: none !important; }
 .yoy summary::-webkit-details-marker { display: none; }
 .yoy-line { display: block; font-size: 12px; color: var(--ink2); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .yoy-line b { color: var(--ink); }
-.yoy-bar { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: visible; }
-.yoy-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--blue); }
-.yoy-tick { position: absolute; top: -2px; width: 1px; height: 10px; background: var(--ink2); opacity: .45; }
-.yoy-tre { height: 12px; top: -3px; width: 2px; opacity: .8; background: var(--accent, var(--ink)); }
-.yoy-then { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--ink); }
+/* Tapped open: two plain bars, the numbers printed on them, nothing to hover. */
+.yoy-open { color: var(--blue); font-weight: 600; white-space: nowrap; }
+.yoy[open] .yoy-open { display: none; }
+.yoy-bars { margin: 8px 0 4px; }
+.yoy-row { margin: 0 0 12px; }
+.yoy-lab { font-size: 12.5px; color: var(--ink2); margin-bottom: 4px; }
+.yoy-lab b { color: var(--ink); }
+.yoy-track { position: relative; height: 26px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
+.yoy-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; display: flex; align-items: center; justify-content: flex-end; min-width: 3px; }
+.yoy-fill.prev { background: #6B7385; }
+.yoy-fill.now { background: var(--blue); }
+.yoy-num { font: 700 14px 'DM Sans', sans-serif; color: #fff; padding: 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.yoy-num.out { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; color: var(--ink); }
+.yoy-then { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); }
+.yoy-thenlab { position: relative; font-size: 12px; font-weight: 600; color: var(--ink); margin: -8px 0 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.yoy-thenlab::before { content: '▲ '; }
 .yoy-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .yoy-table th, .yoy-table td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--line); }
 .yoy-table th:first-child, .yoy-table td:first-child { text-align: left; color: var(--ink2); }
@@ -713,3 +724,30 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .season-order .hint { margin: 2px 0; }
 .sp-packet { margin: 4px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .pk-wait .pk-item { padding: 4px 0; }
+
+/* Every count is a button: tap it to see who's behind it. */
+.stat.stat-tap { font: inherit; color: inherit; cursor: pointer; width: 100%; -webkit-appearance: none; appearance: none; }
+.stat.stat-tap:hover, .stat.stat-tap.on { border-color: var(--blue); }
+.sp-quick-todo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+/* Sponsor cards (Nate, Nov 21): the level in its own color and short status
+   pills under the name, owner and contact in bold, the notes behind a tap. */
+.pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 1.5;
+  color: var(--ink2); background: var(--panel); border: 1px solid var(--line); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pill.lv { font-weight: 800; border-color: transparent; color: #fff; }
+.pill.lv-gameday { background: #0F7C8C; }
+.pill.lv-allstar { background: #2E52E8; }
+.pill.lv-mvp { background: #7A3FD1; }
+.pill.lv-champ { background: #B5800A; }
+.pill.lv-other { background: #5D6478; }
+.pill.kind { color: var(--green); background: var(--green-bg); border-color: transparent; }
+.pill.done { color: var(--green); border-color: var(--green-bg); background: transparent; }
+.pill.todo { color: var(--gold); background: var(--gold-bg); border-color: transparent; }
+.pill.dim, .pill.lv-prev { color: var(--ink3); background: transparent; }
+.sp-who { font-size: 13px; color: var(--ink2); margin-top: 4px; overflow-wrap: anywhere; }
+.sp-who b { color: var(--ink); font-weight: 700; }
+.sp-more { margin-top: 4px; font-size: 13px; color: var(--ink3); }
+.sp-more summary { cursor: pointer; color: var(--blue); font-weight: 600; width: max-content; }
+.sp-note-full { white-space: pre-line; margin-top: 4px; color: var(--ink2); overflow-wrap: anywhere; }
+.yoy-fill.now .yoy-num { color: var(--card); }

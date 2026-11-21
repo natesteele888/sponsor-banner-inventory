@@ -141,7 +141,7 @@
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
         sheetTeam: get('team'), pick: pick, notes: get('notes'),
         address: get('address'), area: townOf(get('address')), walkIn: yes(get('walkIn')),
-        how: get('how'), inKind: IN_KIND.test(get('how')),
+        how: get('how'), inKind: IN_KIND.test(get('how')) || PAID_IN_KIND.test(get('notes')),
         team: hasTeam(pick) ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
@@ -149,8 +149,9 @@
 
   // Signed up for this season: an amount on the sheet ("NONE"/$0 doesn't count).
   function isIn(s) { return s.amount > 0; }
-  // Paid in goods or services (Paid how says "In kind"): counted on its own, never as cash.
-  var IN_KIND = /\bin.?kind\b/i;
+  // Paid in goods or services (Paid how says "In kind", or with no Paid how
+  // column, the notes say "paid in kind"): counted on its own, never as cash.
+  var IN_KIND = /\bin.?kind\b/i, PAID_IN_KIND = /\bpaid in.?kind\b/i;
 
   var FILTERS = {
     all: function () { return true; },
@@ -164,7 +165,13 @@
     mine: function (s) { return isMine(s); },
     needsOwner: function (s) { return needsOwner(s); },
     noTeam: function (s) { return isIn(s) && !s.team; },
-    needsReceipt: function (s) { var r = receiptState(s); return r === 'ready' || r === 'noEmail'; }
+    needsReceipt: function (s) { var r = receiptState(s); return r === 'ready' || r === 'noEmail'; },
+    // Behind the money counts: dollars only, and in kind on its own.
+    committed: function (s) { return isIn(s) && !s.inKind; },
+    paidCash: function (s) { return isIn(s) && s.paid && !s.inKind; },
+    inKind: function (s) { return isIn(s) && s.inKind; },
+    packetWaiting: function (s) { return isIn(s) && s.paid && !!S.packets && !packetFor(s); },
+    needsWelcome: function (s) { var w = welcomeFor(s); return !!(w && !w.had); }
   };
 
   // Where a paid sponsor's receipt stands, from the receipts list: 'sent',
@@ -785,6 +792,8 @@
     if (!rec && !row) return null;
     return { rec: rec, row: row, when: rec ? rec.at : (row && c.when >= 0 ? String(row.cells[c.when]).slice(0, 10) : ''), note: rec ? rec.note : '' };
   }
+  // What their packet said, for the card under the "Packet in" pill.
+  function packetNote(s) { var p = packetFor(s); return p && p.note ? 'Packet: ' + p.note : ''; }
   function packetFact(s) {
     var p = packetFor(s);
     if (p) return 'Info packet in' + (p.when ? ' ' + fmtDay(p.when) : '') + (p.note ? ': ' + p.note : '');
@@ -1379,29 +1388,24 @@
     var then = prevOn(lastYear(h.today));
     var now = S.committed;
     var scale = Math.max(fin, now, 1);
-    var pct = function (v) { return Math.min(100, Math.round(v / scale * 1000) / 10) + '%'; };
+    var pct = function (v) { return Math.min(100, Math.round(v / scale * 1000) / 10); };
     var thenText = then == null ? 'no record this early' : (then.est ? 'about ' : '') + fmtMoney(then.amount);
+    var esc = A().esc;
 
-    // Last year's month-start waypoints as ticks on the bar.
-    var season = Number(h.season), ticks = '';
+    // Last year's month starts, for the table under the bars.
+    var season = Number(h.season);
     var marks = ['11-01', '12-01', '01-01', '02-01', '03-01', '04-01', '05-01'].map(function (md) {
       var y = md >= '07' ? season - 1 : season;
       return y + '-' + md;
     });
     var rows = marks.map(function (iso) {
       var p = prevOn(lastYear(iso));
-      if (p && p.amount > 0) ticks += '<i class="yoy-tick" style="left:' + pct(p.amount) + '" title="' + dayLabel(iso) + ' last year: ' + fmtMoney(p.amount) + '"></i>';
       var n = nowOn(iso);
       var prevCell = p == null ? 'no record' : (p.est ? 'about ' : '') + fmtMoney(p.amount);
       var nowCell = iso > h.today ? '' : (n == null ? 'not kept' : fmtMoney(n));
       return '<tr><td>' + dayLabel(iso) + '</td><td>' + nowCell + '</td><td>' + prevCell + '</td></tr>';
     }).join('');
-    if (then && then.amount > 0) ticks += '<i class="yoy-then" style="left:' + pct(then.amount) + '"></i>';
-    // The treasurer's own figures for last season, marked as such.
-    var esc = A().esc, tre = pts.filter(function (p) { return p.treasurer; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-    tre.forEach(function (p) {
-      ticks += '<i class="yoy-tick yoy-tre" style="left:' + pct(p.committed) + '" title="' + esc(dayLabel(p.date)) + ' last year: ' + fmtMoney(p.committed) + ' (treasurer\'s figure' + (p.note ? ', ' + esc(p.note) : '') + ')"></i>';
-    });
+    var tre = pts.filter(function (p) { return p.treasurer; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
     // When last year's drive hadn't started yet, say when last year reached today's total.
     var reached = tre.concat(pts.filter(function (p) { return !p.treasurer; })).sort(function (a, b) { return a.date < b.date ? -1 : 1; })
       .filter(function (p) { return now > 0 && p.committed >= now; })[0];
@@ -1411,16 +1415,38 @@
     if (prev.sheetCreated) est.push('Last year\'s sheet was started ' + dayLabel(prev.sheetCreated) + '.');
     if (pts.length) est.push('Its totals come from the sheet\'s saved versions, the first on ' + dayLabel(pts.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0].date) + ', so "about" means the nearest saved version was more than a week away.');
     else est.push('Its saved versions couldn\'t be read, so only its final total shows.');
-    if (tre.length) est.push('The treasurer\'s figures (' + tre.map(function (p) { return dayLabel(p.date); }).join(', ') + ') are marked on the bar.');
+    if (tre.length) est.push('The treasurer\'s figures: ' + tre.map(function (p) { return esc(dayLabel(p.date)) + ' ' + fmtMoney(p.committed); }).join(', ') + '.');
     est.push('This year\'s totals are kept once a day from ' + dayLabel((h.snaps && h.snaps[0] && h.snaps[0].date) || h.today) + ' on.');
+
+    // One bar: its number printed on it (inside when there's room, just past
+    // its end when it's short), nothing to hover.
+    var bar = function (cls, v, label, extra) {
+      var w = pct(v), inside = w >= 34;
+      return '<div class="yoy-row">' +
+        '<div class="yoy-lab">' + label + '</div>' +
+        '<div class="yoy-track">' +
+          '<div class="yoy-fill ' + cls + '" style="width:' + w + '%">' + (inside ? '<span class="yoy-num">' + fmtMoney(v) + '</span>' : '') + '</div>' +
+          (inside ? '' : '<span class="yoy-num out" style="left:' + w + '%">' + fmtMoney(v) + '</span>') +
+          (extra || '') +
+        '</div></div>';
+    };
+    var thenMark = '', thenNote = '';
+    if (then && then.amount > 0) {
+      var tl = pct(then.amount);
+      thenMark = '<i class="yoy-then" style="left:' + tl + '%"></i>';
+      thenNote = '<div class="yoy-thenlab" style="left:' + Math.min(tl, 62) + '%">' + (then.est ? 'about ' : '') + fmtMoney(then.amount) + ' by ' + dayLabel(h.today) + ' last year' + '</div>';
+    }
 
     box.innerHTML =
       '<summary>' +
-        '<span class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + prev.season + ' final ' + fmtMoney(fin) + '</span>' +
-        '<span class="yoy-bar" role="img" aria-label="' + h.season + ' committed ' + fmtMoney(now) + ' of last year\'s final ' + fmtMoney(fin) + '">' +
-          '<span class="yoy-fill" style="width:' + pct(now) + '"></span>' + ticks +
-        '</span>' +
+        '<span class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + prev.season + ' final ' + fmtMoney(fin) +
+        ' <span class="yoy-open">Compare years ›</span></span>' +
       '</summary>' +
+      '<div class="yoy-bars" role="img" aria-label="' + prev.season + ' sponsor money ' + fmtMoney(fin) + (then && then.amount > 0 ? ', ' + fmtMoney(then.amount) + ' by this date' : '') + '. ' + h.season + ' so far ' + fmtMoney(now) + '.">' +
+        bar('prev', fin, '<b>' + prev.season + '</b> sponsor money, the whole season' + (then && then.amount > 0 ? '. The line is where it stood on this date.' : ''), thenMark) +
+        thenNote +
+        bar('now', now, '<b>' + h.season + '</b> so far') +
+      '</div>' +
       '<table class="yoy-table"><thead><tr><th></th><th>' + h.season + '</th><th>' + prev.season + '</th></tr></thead><tbody>' + rows +
         '<tr class="yoy-final"><td>Final</td><td></td><td>' + fmtMoney(fin) + '</td></tr></tbody></table>' +
       '<p class="yoy-note">' + est.join(' ') + '</p>';
@@ -1457,6 +1483,34 @@
 
   // ---------- list ----------
 
+  // Under the name: the level in its own color, then short status pills.
+  // The money status stays the colored badge at the card's right.
+  function levelKey(t) {
+    t = String(t || '').toLowerCase();
+    return /champ/.test(t) ? 'champ' : /mvp/.test(t) ? 'mvp' : /all.?star/.test(t) ? 'allstar' : /game.?day/.test(t) ? 'gameday' : 'other';
+  }
+  function pill(text, cls) { return text ? '<span class="pill' + (cls ? ' ' + cls : '') + '">' + A().esc(text) + '</span>' : ''; }
+  function cardPills(s) {
+    var p = packetFor(s), w = welcomeFor(s), out = [];
+    if (s.tier) out.push(pill(s.tier + (s.amountText && !s.inKind ? ' ' + s.amountText : ''), 'lv lv-' + levelKey(s.tier)));
+    else if (s.tierPrev) out.push(pill('Last year: ' + s.tierPrev, 'lv-prev'));
+    if (isIn(s) && s.inKind) out.push(pill('In kind', 'kind'));
+    if (String(s.contacted).trim()) out.push(pill('Contacted' + (/^(y|yes|x|true)$/i.test(String(s.contacted).trim()) ? '' : ': ' + String(s.contacted).trim()), 'done'));
+    else if (!isIn(s)) out.push(pill('Not contacted', 'dim'));
+    if (String(s.prevContact || '').trim()) out.push(pill('Reached out last year: ' + String(s.prevContact).trim(), 'dim'));
+    if (p) out.push(pill('Packet in' + (p.when ? ' ' + fmtDay(p.when) : ''), 'done'));
+    else if (isIn(s) && s.paid && S.packets) out.push(pill('Packet waiting', 'todo'));
+    if (w) out.push(w.had ? pill('Welcomed', 'done') : pill('Needs welcome', 'todo'));
+    if (needsOwner(s)) out.push(pill('Needs a new owner', 'todo'));
+    return out.length ? '<div class="pills">' + out.join('') + '</div>' : '';
+  }
+  function cardWho(s) {
+    var esc = A().esc, bits = [];
+    if (s.owner) bits.push('<b>Owner</b> ' + esc(s.owner));
+    if (s.contact) bits.push('<b>Contact</b> ' + esc(String(s.contact).replace(/^(manager|owner)\s*:\s*/i, '')));
+    return bits.length ? '<div class="sp-who">' + bits.join('<span class="sep"> · </span>') + '</div>' : '';
+  }
+
   // The one thing to know about a sponsor, in color only when money is involved.
   function cardBadge(s) {
     var badge = A().badge;
@@ -1474,7 +1528,30 @@
     return badge('Contacted', 'muted');
   }
 
-  function stat(n, label, cls) { return '<div class="stat' + (cls ? ' ' + cls : '') + '"><b>' + n + '</b><span>' + label + '</span></div>'; }
+  // Every count is a button that shows who's behind it.
+  function stat(n, label, cls, show) {
+    return '<button type="button" class="stat stat-tap' + (cls ? ' ' + cls : '') + '" data-show="' + show + '" aria-label="Show ' + A().esc(n + ' ' + label) + '"><b>' + n + '</b><span>' + label + '</span></button>';
+  }
+  // A count was tapped: the list filtered to them, or the box where they're worked.
+  function showCount(k) {
+    if (k === 'outreach' && canEdit() && S.outreach) { goOutreachReady(); return; }
+    if (k === 'outreach') k = 'notContacted';
+    if (!FILTERS[k]) return;
+    S.filter = k; S.owner = ''; S.area = ''; S.search = '';
+    var sb = $('#spSearch'); if (sb) sb.value = '';
+    if (S.mode) goList(); else render();
+    var list = $('#spList'); if (list && list.scrollIntoView) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function goList() {
+    var b = document.querySelector('.tab-btn[data-view="sponsors"]:not([data-sp])');
+    if (b) b.click(); else if (window.Sponsors) window.Sponsors.show('');
+  }
+  // Not contacted: straight to Outreach, showing the ones ready to send.
+  function goOutreachReady() {
+    S.orFilter = { status: OR_READY, owner: '' };
+    goSub('outreach');
+    renderOutreach();
+  }
 
   function render() {
     if (!S.book) return;
@@ -1489,13 +1566,14 @@
     // Dollar amounts first and wider, so five-digit totals fit as well as three.
     $('#spSummary').classList.toggle('k3', kind.length > 0);
     $('#spSummary').innerHTML =
-      stat(fmtMoney(committed), 'committed', 'money') +
-      stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money') +
-      (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money') : '') +
-      stat(inn.length, S.book.season + ' sponsors') +
-      stat(all.filter(FILTERS.notContacted).length, 'not contacted') +
-      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet') +
-      stat(all.filter(needsOwner).length, 'need a new owner');
+      stat(fmtMoney(committed), 'committed', 'money', 'committed') +
+      stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money', 'paidCash') +
+      (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money', 'inKind') : '') +
+      stat(inn.length, S.book.season + ' sponsors', '', 'signed') +
+      stat(all.filter(FILTERS.notContacted).length, 'not contacted', '', 'outreach') +
+      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet', '', 'lapsed') +
+      stat(all.filter(needsOwner).length, 'need a new owner', '', 'needsOwner');
+    $$('#spSummary [data-show]').forEach(function (b) { b.addEventListener('click', function () { showCount(b.dataset.show); }); });
     S.committed = committed;
     renderYoY();
     $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
@@ -1533,20 +1611,15 @@
         (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
+          cardPills(s) + cardWho(s) +
           facts([
-            s.tier ? s.tier + (s.amountText ? ' ' + s.amountText : '') : (s.tierPrev ? 'Last year: ' + s.tierPrev : ''),
-            s.owner ? 'Owner: ' + s.owner : '',
             s.area || '',
-            String(s.prevContact || '').trim() ? 'Reached out last year: ' + s.prevContact : '',
-            needsOwner(s) ? 'Needs a new owner' : '',
-            String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
             s.team ? 'Team: ' + s.team : '',
-            packetFact(s),
-            welcomeFact(s),
+            packetNote(s),
             upgradeFor(s) ? 'Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay' : ''
           ]) +
           (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
-          (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
+          (s.notes ? '<details class="sp-more"><summary>Notes</summary><div class="sp-note-full">' + esc(s.notes) + '</div></details>' : '') +
         '</div>' +
         // The receipt button sits on the right, right under the status.
         (cardReceipt(s) ? '<div class="sp-card-side">' + cardBadge(s) + cardReceipt(s) + '</div>' : cardBadge(s)) +
@@ -1554,6 +1627,10 @@
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
+    // Opening the notes stays on the card.
+    $$('#spList .sp-more').forEach(function (d) {
+      ['click', 'keydown'].forEach(function (ev) { d.addEventListener(ev, function (e) { e.stopPropagation(); }); });
+    });
     $$('#spList .sp-card-rc').forEach(function (box) {
       // The receipt button and its preview stay on the card: no detail opens.
       ['click', 'keydown'].forEach(function (ev) { box.addEventListener(ev, function (e) { e.stopPropagation(); }); });
@@ -1918,10 +1995,14 @@
   }
 
   function orKey(i) { return i.row + '|' + i.company; }
+  // Not contacted, has an email, nothing holding it, not sent: ready to go.
+  var OR_READY = '__ready';
+  function orReady(i) { return i.status === 'Not contacted' && !!i.email && !i.hold.length && !i.sent; }
   function orShown() {
     var O = S.outreach, f = S.orFilter || { status: 'Not contacted', owner: '' };
     return O.items.filter(function (i) {
-      if (f.status && i.status !== f.status) return false;
+      if (f.status === OR_READY) { if (!orReady(i)) return false; }
+      else if (f.status && i.status !== f.status) return false;
       if (f.owner === '-') return !i.owner;
       if (f.owner && i.owner !== f.owner) return false;
       return true;
@@ -1968,7 +2049,7 @@
         '<label>From <select data-or="sender">' + O.senders.map(function (x) {
           return '<option value="' + esc(x.id) + '"' + (sender && x.id === sender.id ? ' selected' : '') + (x.ok ? '' : ' disabled') + '>' + esc(x.label) + (x.ok ? '' : ' (not set up)') + '</option>';
         }).join('') + '</select></label>' +
-        '<label>Status <select data-or="status">' + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
+        '<label>Status <select data-or="status">' + opt(OR_READY, 'Ready to send', f.status) + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
         '<label>Owner <select data-or="owner">' + opt('', 'Anyone', f.owner) + opt('-', 'No owner', f.owner) + owners.map(function (s) { return opt(s, s, f.owner); }).join('') + '</select></label>' +
       '</div>' +
       (sender ? '' : '<p class="or-flag hold">' + esc(O.senders.map(function (x) { return x.why; }).filter(Boolean).join(' ')) + '</p>') +
@@ -2312,9 +2393,24 @@
       b.setAttribute('aria-pressed', String(S.quick === k));
     });
     var n = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
+    var wl = S.welcome ? S.welcome.items.filter(function (i) { return !i.had; }).length : 0;
+    var pk = S.packets ? sponsors().filter(FILTERS.packetWaiting).length : 0;
+    var or = S.outreach ? S.outreach.items.filter(orReady).length : 0;
+    var plural = function (k, one, many) { return k + ' ' + (k === 1 ? one : many); };
+    var links = [
+      n ? '<button class="linkish" type="button" data-q="receipts">' + plural(n, 'receipt', 'receipts') + ' ready to check and send ›</button>' : '',
+      wl ? '<button class="linkish" type="button" data-q="welcome">' + plural(wl, 'welcome email', 'welcome emails') + ' to send ›</button>' : '',
+      or ? '<button class="linkish" type="button" data-q="outreach">' + plural(or, 'business', 'businesses') + ' ready for outreach ›</button>' : '',
+      pk ? '<button class="linkish" type="button" data-q="packets">' + plural(pk, 'paid sponsor', 'paid sponsors') + ' waiting on their packet ›</button>' : '',
+      S.toOrder ? '<button class="linkish" type="button" data-q="banners">' + plural(S.toOrder, 'banner', 'banners') + ' to order ›</button>' : ''
+    ].filter(Boolean);
     var todo = $('#spQuickTodo');
-    todo.classList.toggle('hidden', !n || !ed);
-    todo.innerHTML = n ? '<button class="linkish" type="button" data-q="receipts">' + n + ' receipt' + (n === 1 ? '' : 's') + ' ready to check and send ›</button>' : '';
+    todo.classList.toggle('hidden', !links.length || !ed);
+    todo.innerHTML = links.join('');
+    if (ed && !S.toOrderAsked && window.Season && window.Season.counts) {
+      S.toOrderAsked = true;
+      window.Season.counts().then(function (c) { if (c && c.order !== S.toOrder) { S.toOrder = c.order; renderQuick(); } }).catch(function () { });
+    }
     if (S.quick && !ed) closeQuick();
   }
   function goSub(sub) {
@@ -2329,6 +2425,16 @@
   function quickTap(k) {
     if (k === 'add') { closeQuick(); goSub('add'); setTimeout(function () { var f = $('#spa_company'); if (f) f.focus(); }, 50); return; }
     if (k === 'receipts') { closeQuick(); goSub('receipts'); return; }
+    if (k === 'welcome') { closeQuick(); S.wlFilter = 'needs'; goSub('welcome'); renderWelcome(); return; }
+    if (k === 'outreach') { closeQuick(); goOutreachReady(); return; }
+    if (k === 'packets') { closeQuick(); showCount('packetWaiting'); return; }
+    if (k === 'banners') {
+      closeQuick();
+      var sb = document.querySelector('.tab-btn[data-view="season"]');
+      if (window.Season && window.Season.filter) window.Season.filter('order');
+      if (sb) sb.click();
+      return;
+    }
     if (S.quick === k) { closeQuick(); return; }
     S.quick = k; S.quickRow = 0; S.quickQ = '';
     $$('#spQuick .sp-q').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.q === k)); });

@@ -81,7 +81,7 @@ var SEASON_COLUMNS = ['key', 'company', 'tier', 'amount', 'source', 'paid', 'pai
   'contactName', 'contactEmail', 'contactPhone',
   'requestStatus', 'requestAt', 'token', 'submittedAt',
   'website', 'jerseyName', 'writeup', 'bannerChoice', 'bannerText', 'fileLink', 'fileFolderId',
-  'bannerStatus', 'assignedBannerId', 'notes', 'addedAt', 'updatedAt', 'design', 'packetNote'];
+  'bannerStatus', 'assignedBannerId', 'notes', 'addedAt', 'updatedAt', 'design', 'packetNote', 'extraOf'];
 
 var BANNER_STATUSES = ['Not decided', 'Use banner from stock', 'Reprint needed', 'Order new', 'Ordered', 'Ready to hang'];
 
@@ -287,9 +287,51 @@ function fromSponsorSheet_(ss) {
       contactPhone: String(r['Phone'] || '').trim(),
       source: 'Sponsorship sheet',
       paid: /^\s*(y|true|x|paid)/i.test(String(r['Paid?'] || '')),
-      paidVia: 'Marked paid on the sponsorship sheet'
+      paidVia: 'Marked paid on the sponsorship sheet',
+      extraBanner: secondBannerWording_(r['Banner needed?'])
     };
   }).filter(Boolean);
+}
+
+// A second banner written on the sheet's "Banner needed?" cell, like
+// 2 banners: the standard one, plus a second banner reading "Some Words".
+// Returns the quoted wording, or '' when there's no second banner.
+function secondBannerWording_(cell) {
+  var t = String(cell || '');
+  if (!/\b(2|two) banners\b|\bsecond banner\b/i.test(t)) return '';
+  var q = t.match(/["“”]([^"“”]{2,120})["“”]/g);
+  return q ? q[q.length - 1].replace(/["“”]/g, '').trim() : '';
+}
+
+// The second banner gets its own row on the 2027 banners list, so it has its
+// own wording, design and order status. It shares the sponsor's level and
+// payment (no banner before payment) and adds no money and no sponsor.
+function upsertExtraBanner_(season, parent, wording) {
+  if (!parent || !wording || parent.extraOf) return null;
+  var company = parent.company + ' (second banner)', key = companyKey_(company);
+  var hit = findSeasonRow_(season, key);
+  if (hit) {
+    var fill = {};
+    if (isPaid_(parent) && !isPaid_(hit)) { fill.paid = 'TRUE'; fill.paidVia = 'With ' + parent.company + '’s sponsorship'; }
+    if (!hit.bannerText) fill.bannerText = clean(wording, 300);
+    if (Object.keys(fill).length) { writeFields_(season.sheet, season.header, hit._row, fill); Object.keys(fill).forEach(function (k) { hit[k] = fill[k]; }); }
+    return { rec: hit, isNew: false };
+  }
+  var rec = {};
+  SEASON_COLUMNS.forEach(function (c) { rec[c] = ''; });
+  rec.key = key; rec.company = clean(company, 300); rec.tier = parent.tier; rec.amount = '';
+  rec.source = 'Sponsorship sheet (second banner)';
+  rec.paid = isPaid_(parent) ? 'TRUE' : 'FALSE';
+  rec.paidVia = isPaid_(parent) ? 'With ' + parent.company + '’s sponsorship' : '';
+  rec.contactName = parent.contactName; rec.contactEmail = parent.contactEmail;
+  rec.requestStatus = 'Second banner'; rec.bannerText = clean(wording, 300);
+  rec.bannerStatus = 'Order new'; rec.design = 'Design needed'; rec.extraOf = parent.key;
+  rec.notes = 'Second banner for ' + parent.company + '.';
+  rec.addedAt = todayStamp(); rec.updatedAt = todayStamp();
+  season.sheet.appendRow(season.header.map(function (h) { return rec[h] !== undefined ? rec[h] : ''; }));
+  rec._row = season.sheet.getLastRow();
+  season.rows.push(rec);
+  return { rec: rec, isNew: true };
 }
 
 // The website sponsorship form's submissions, as logged on the OnlineLogs tab.
@@ -472,13 +514,16 @@ function scanForNewSponsors() {
       var res = upsertSponsor_(season, c);
       if (res && res.isNew) added.push(res.rec);
       else if (res && res.newlyPaid && added.indexOf(res.rec) < 0) paidNow.push(res.rec);
+      if (res && c.extraBanner) {
+        try { upsertExtraBanner_(season, res.rec, c.extraBanner); } catch (e) { console.log('second banner: ' + e); }
+      }
     });
 
     // Paid, with an email, and not asked yet: make the info email as a draft.
     // No payment, no email (and no banner).
     var drafted = [];
     season.rows.forEach(function (r) {
-      if (!r.requestStatus && isPaid_(r) && r.contactEmail && String(r.company).indexOf('Needs a match') !== 0) {
+      if (!r.extraOf && !r.requestStatus && isPaid_(r) && r.contactEmail && String(r.company).indexOf('Needs a match') !== 0) {
         try { prepareRequest_(season, r); drafted.push(r); }
         catch (e) { console.log('request email for row ' + r._row + ': ' + e); }
       }

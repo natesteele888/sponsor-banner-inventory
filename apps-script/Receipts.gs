@@ -96,7 +96,8 @@ function receiptRows_() {
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
     row.online = /\b(online|website|crossbar|card)\b/i.test(row.how || (row.paidText + ' ' + row.notes));
-    row.inKind = /\bin.?kind\b/i.test(row.how || '');
+    // In kind: Paid how says so, or with no such column the notes say "paid in kind".
+    row.inKind = /\bin.?kind\b/i.test(row.how || '') || /\bpaid in.?kind\b/i.test(row.notes || '');
     // An upgrade paid after an earlier receipt: this receipt is for the new
     // money only, with the season's total under it, so nothing is counted twice.
     var pre = companyKey_(row.company) + '|' + row.email.toLowerCase() + '|', before = 0;
