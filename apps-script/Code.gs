@@ -130,14 +130,27 @@ function doPost(e) {
   WHO = who;
 
   var asked = String(data.action || '');
+  // Board members other than the sponsorship leads (the editors: the league
+  // admin and SPONSOR_EDITORS) get the board view only: who's in, who's paid,
+  // and how outreach stands. Every other call is refused for them here, so no
+  // contact, note, amount or email ever reaches their device.
+  if (!canEditSponsors_() && !BOARD_VIEW_ACTIONS[asked]) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, boardView: true,
+      error: 'You have the board view of sponsors.' })).setMimeType(ContentService.MimeType.JSON);
+  }
   var reply = route_(asked, data);
   // Anything that may have changed a sheet clears the quick copies of the reads.
   if (!SNAP_READ_ONLY[asked]) forgetSnaps_();
   return reply;
 }
 
+// What a board member outside the sponsorship leads may ask for: the board
+// view, and the Dashboard's Uniforms and Jersey Order pages (no contact columns).
+var BOARD_VIEW_ACTIONS = { sponsorBoardView: 1, sponsorSheet: 1 };
+
 function route_(action, data) {
   try {
+    if (action === 'sponsorBoardView') return ok(snapRead_('boardview', !!data.fresh, sponsorBoardView_));
     if (action === 'list') return ok(snapRead_('list', false, function () { return { banners: listBanners() }; }));
     if (action === 'image') return ok(getImage(data.id, data.size));
     if (action === 'update') return update(data);
@@ -227,7 +240,7 @@ var SNAP_TTL = 600;            // 10 minutes
 var SNAP_CHUNK = 30000;        // characters per cache entry (each entry holds up to 100 KB)
 var SNAP_READ_ONLY = { list: 1, image: 1, seasonList: 1, sponsorBook: 1, walkInForm: 1, sponsorHistory: 1, receiptList: 1,
   receiptPreview: 1, receiptCopyGet: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
-  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, outreachList: 1, outreachPreview: 1, outreachCompose: 1, welcomeList: 1, welcomePreview: 1 };
+  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, sponsorBoardView: 1, outreachList: 1, outreachPreview: 1, outreachCompose: 1, welcomeList: 1, welcomePreview: 1 };
 
 function snapGen_() { try { return CacheService.getScriptCache().get('snapGen') || '0'; } catch (e) { return '0'; } }
 function forgetSnaps_() { try { CacheService.getScriptCache().put('snapGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }
@@ -564,6 +577,37 @@ function underRateLimit() {
   times.push(now);
   props.setProperty(key, JSON.stringify(times));
   return true;
+}
+
+// ---------- the board view ----------
+// For board members outside the sponsorship leads: this season's sponsors by
+// name and level, which have paid, and outreach as counts. No contact, email,
+// phone, note, amount or owner ever goes in this answer.
+function sponsorBoardView_() {
+  var out = { season: SEASON, sponsors: [], counts: { sponsors: 0, paid: 0, inKind: 0, waiting: 0, toContact: 0 } };
+  var ss = sponsorSpreadsheet_(), tab = bookTab_(ss, sponsorTabName_(ss));
+  if (!tab) return out;
+  var head = tab.headers.map(function (h) { return h.toLowerCase(); });
+  var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
+  var c = { company: col(/^(company|business)/), status: col(/^status$/), tier: col(new RegExp('^tier selected ' + SEASON)),
+            amount: col(/^amount/), paid: col(/^paid\??$/), how: col(/^(paid how|payment method|paid by)/), notes: col(/^notes?$/) };
+  if (c.company < 0) return out;
+  var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
+  tab.rows.forEach(function (r) {
+    var company = get(r, 'company'), status = get(r, 'status');
+    if (!company || /^total/i.test(company)) return;
+    var amount = Number(get(r, 'amount').replace(/[^0-9.]/g, '')) || 0;
+    var inKind = /\bin.?kind\b/i.test(get(r, 'how')) || /\bpaid in.?kind\b/i.test(get(r, 'notes'));
+    if (amount > 0) {   // the same test the full app uses for "in"
+      var paid = isYes_(get(r, 'paid')) || /^paid/i.test(status);
+      out.sponsors.push({ company: company.slice(0, 80), level: get(r, 'tier').slice(0, 30), paid: paid && !inKind, inKind: inKind });
+      out.counts.sponsors++;
+      if (inKind) out.counts.inKind++; else if (paid) out.counts.paid++;
+    } else if (/^contacted/i.test(status)) out.counts.waiting++;
+    else if (/^not contacted/i.test(status)) out.counts.toContact++;
+  });
+  out.sponsors.sort(function (a, b) { return a.company.toLowerCase() < b.company.toLowerCase() ? -1 : 1; });
+  return out;
 }
 
 // Who this request is for, so every answer can tell the page to hide the

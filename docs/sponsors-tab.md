@@ -110,6 +110,10 @@ them are the month-by-month totals. In kind is left out of both years' dollars.
   between the sheet starting and its first saved version show "no record".
   Run `forgetSponsorHistory` from the editor to read them again.
 
+## The board view
+
+Only the sponsorship leads (the league admin plus the addresses in `SPONSOR_EDITORS`) get the full app. Any other board member who signs in sees one screen: this season's sponsors by name and level, which have paid (or are in kind), how many businesses have been reached out to and are waiting to hear back, and how many are still to contact. No contacts, emails, phones, notes, amounts or owners, no tabs and no buttons. The backend refuses every other call from them (`BOARD_VIEW_ACTIONS` in `Code.gs`), so nothing else reaches their device; the Dashboard's Uniforms and Jersey Order pages still read `sponsorSheet` as before.
+
 ## Letting someone in without the Dashboard
 
 For someone who should see this app but has no Dashboard role, add their

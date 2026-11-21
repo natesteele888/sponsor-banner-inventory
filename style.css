@@ -430,6 +430,18 @@ select, input[type=url] {
 body.locked .tabs, body.locked .view, body.locked #status, body.locked #loadRetry,
 body.locked .scrim, body.locked .sheet { display: none !important; }
 
+/* The board view: one summary, no tabs. */
+body.board-view .tabs, body.board-view .view, body.board-view #status, body.board-view #loadRetry,
+body.board-view .scrim, body.board-view .sheet { display: none !important; }
+.board-view-box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 8px 0 16px; }
+.board-view-box h2 { margin: 0 0 10px; font: 600 20px 'DM Sans', sans-serif; color: var(--ink); }
+.bv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+.bv-line { color: var(--ink2); margin: 12px 0; line-height: 1.45; }
+.bv-list { list-style: none; margin: 0; padding: 0; }
+.bv-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+.bv-list li b { flex: 1 1 auto; color: var(--ink); }
+.bv-lv { color: var(--ink2); font-size: 14px; }
+
 /* Sponsors tab counts: the two dollar amounts get the room (4-5 digits fit). */
 /* The money totals, then the four counts, all on one row on wider screens.
    On phones the money gets its own row and the four counts share the next
