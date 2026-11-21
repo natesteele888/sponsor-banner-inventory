@@ -601,7 +601,8 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-pay { border-color: var(--blue); }
 .lv-ways { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .lv-check { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
-.lv-check span { display: inline-block; min-width: 82px; color: var(--ink2); font-weight: 600; }
+.lv-check > div { display: grid; grid-template-columns: 84px 1fr; column-gap: 8px; }
+.lv-check > div > span:first-child { color: var(--ink2); font-weight: 600; }
 
 /* Small phones: the title stays on two lines next to a compact Dashboard
    button, and the four tabs share the width with nothing hidden off the side. */

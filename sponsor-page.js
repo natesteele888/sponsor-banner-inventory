@@ -154,9 +154,9 @@
     // where it goes, and what to put on the memo line. Cash isn't offered.
     var addr = String(p.address || '').split(/,\s*/), street = addr.shift() || '', city = addr.join(', ');
     ways.push('<li><b>Check or money order</b><div class="lv-check">' +
-      '<div><span>Payable to:</span> ' + esc(p.checkTo || 'the league') + '</div>' +
-      (street ? '<div><span>Mail to:</span> ' + esc(street) + (city ? '<br>' + esc(city) : '') + '</div>' : '') +
-      '<div><span>Memo:</span> your business name</div></div></li>');
+      '<div><span>Payable to:</span><span>' + esc(p.checkTo || 'the league') + '</span></div>' +
+      (street ? '<div><span>Mail to:</span><span>' + esc(street) + (city ? '<br>' + esc(city) : '') + '</span></div>' : '') +
+      '<div><span>Memo:</span><span>Your business name</span></div></div></li>');
     box.innerHTML = '<h2>Pay the ' + esc(money(lv.owed)) + ' difference</h2>' +
       '<p>' + esc(thanks(lv.name, lv.owed)) + '</p><ul class="lv-ways">' + ways.join('') + '</ul>';
     box.classList.remove('hidden');
