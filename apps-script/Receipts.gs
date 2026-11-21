@@ -86,13 +86,13 @@ function receiptRows_() {
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), email: col(/^email/), address: col(/^address/),
             amount: col(/^amount/), paid: col(/^paid\??$/), notes: col(/^notes?$/), how: col(/^(paid how|payment method|paid by)/),
-            tier: col(new RegExp('^tier selected ' + SEASON)) };
+            tier: col(new RegExp('^tier selected ' + SEASON)), cc: col(/^(receipt )?cc$/) };
   if (c.company < 0 || c.amount < 0 || c.paid < 0 || c.email < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
   var log = receiptLog_(), out = [];
   tab.rows.forEach(function (r) {
     var row = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), email: firstEmail_(get(r, 'email')),
-                address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes'), how: get(r, 'how'), tier: get(r, 'tier') };
+                address: get(r, 'address'), amount: parseAmount_(get(r, 'amount')), paidText: get(r, 'paid'), notes: get(r, 'notes'), how: get(r, 'how'), tier: get(r, 'tier'), ccCol: get(r, 'cc') };
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
     row.online = /\b(online|website|crossbar|card)\b/i.test(row.how || (row.paidText + ' ' + row.notes));
@@ -311,6 +311,39 @@ function findReceiptRow_(key) {
   return receiptRows_().filter(function (r) { return r.key === String(key || ''); })[0] || null;
 }
 
+// ---------- CC on a receipt ----------
+// Some sponsors want a copy to a second person, like the owner when the
+// books person is on the row. The CC lives on the sheet when it has a CC
+// column, else it is remembered here per sponsor once a board member types
+// it on the preview and sends. Up to 2 addresses, never the To address.
+var RECEIPT_CC_PROP = 'RECEIPT_CC';
+var RECEIPT_CC_MAX = 2;
+function receiptCcMap_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(RECEIPT_CC_PROP) || '{}'); } catch (e) { return {}; }
+}
+// '' or 'a@x.com, b@y.com'. Throws a plain sentence when it can't be used.
+function cleanCc_(raw, to) {
+  var parts = String(raw || '').split(/[,;\s]+/).map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
+  var out = [];
+  parts.forEach(function (a) {
+    if (!/^[^@\s<>"(),;:]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(a)) throw new Error('"' + a + '" is not an email address.');
+    if (a === String(to || '').toLowerCase()) return;
+    if (out.indexOf(a) < 0) out.push(a);
+  });
+  if (out.length > RECEIPT_CC_MAX) throw new Error('A receipt can CC ' + RECEIPT_CC_MAX + ' people at most.');
+  return out.join(', ');
+}
+function receiptCcFor_(r) {
+  if (r.ccCol) { try { return cleanCc_(r.ccCol, r.email); } catch (e) { return ''; } }
+  return receiptCcMap_()[companyKey_(r.company)] || '';
+}
+function rememberReceiptCc_(r, cc) {
+  if (r.ccCol) return;   // the sheet's own CC column is the record
+  var m = receiptCcMap_(), k = companyKey_(r.company);
+  if (cc) m[k] = cc; else delete m[k];
+  PropertiesService.getScriptProperties().setProperty(RECEIPT_CC_PROP, JSON.stringify(m));
+}
+
 function receiptPreview(data) {
   var r = findReceiptRow_(data.key);
   if (!r) return fail('That row is no longer marked paid with an email.');
@@ -320,7 +353,7 @@ function receiptPreview(data) {
   s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
   s.printUrl = receiptPageLink_(r);
   var m = receiptEmail_(r, s, when);
-  return ok({ subject: m.subject, html: receiptDoc_(m.html, m.subject), to: s.live ? r.email : (s.testTo ? 'test address' : ''), live: s.live, sent: r.status === 'sent' });
+  return ok({ subject: m.subject, html: receiptDoc_(m.html, m.subject), to: s.live ? r.email : (s.testTo ? 'test address' : ''), cc: receiptCcFor_(r), ccFixed: !!r.ccCol, live: s.live, sent: r.status === 'sent' });
 }
 
 // One tap from a board member sends one receipt. Never called on a schedule.
@@ -340,14 +373,19 @@ function receiptSend(data) {
     s.printUrl = receiptPageLink_(r);
     var m = receiptEmail_(r, s);
     var to = s.live ? r.email : s.testTo;
+    var cc = '';
+    try { cc = r.ccCol ? receiptCcFor_(r) : cleanCc_(data.cc == null ? receiptCcFor_(r) : data.cc, r.email); }
+    catch (e) { return fail(e.message + ' Nothing was sent.'); }
     var pdf = receiptPdf_(r, s);
-    var how = leagueSend_({ to: to, subject: m.subject, text: m.text, html: m.html, live: s.live, attachments: pdf ? [pdf] : null });
+    // In test mode the CC is left off: a test only ever goes to the test address.
+    var how = leagueSend_({ to: to, cc: s.live ? cc : '', subject: m.subject, text: m.text, html: m.html, live: s.live, attachments: pdf ? [pdf] : null });
     if (!how.ok) return fail(how.error);
-    saveReceiptCopy_(r, m, to, s.live);
+    saveReceiptCopy_(r, m, to + (s.live && cc ? ' (cc ' + cc + ')' : ''), s.live);
+    if (!r.ccCol) rememberReceiptCc_(r, cc);
     var log = receiptLog_();
     var at = dayOf_(new Date());
     if (s.live) { log[r.key] = { how: 'sent', at: at }; saveReceiptLog_(log); noteOnBoardCopy_(r.company, 'Receipt sent', at); }
-    return ok({ message: s.live ? 'Receipt sent to ' + r.email + '.' : 'Test receipt sent to the test address. The row stays ready.', status: s.live ? 'sent' : 'ready', at: at });
+    return ok({ message: s.live ? 'Receipt sent to ' + r.email + (cc ? ', CC ' + cc : '') + '.' : 'Test receipt sent to the test address' + (cc ? ' (the CC is left off tests)' : '') + '. The row stays ready.', status: s.live ? 'sent' : 'ready', at: at });
   } finally {
     lock.releaseLock();
   }
@@ -409,6 +447,7 @@ function receiptPing() {
   var p = PropertiesService.getScriptProperties();
   var to = firstEmail_(p.getProperty('RECEIPTS_PING_TO') || '') || Session.getEffectiveUser().getEmail();
   if (!to) return;
+  try { roundPing_(to); } catch (e) { console.log('round reminder: ' + e); }
   var pinged = {};
   try { pinged = JSON.parse(p.getProperty(RECEIPTS_PINGED_PROP) || '{}'); } catch (e) { pinged = {}; }
   var fresh = receiptRows_().filter(function (r) { return r.status === 'ready' && !pinged[r.key]; });
@@ -420,6 +459,32 @@ function receiptPing() {
       '\n\nOpen the Sponsors tab to preview and send:\n' + APP_URL + '#sponsors\n\nNothing goes to a sponsor until someone taps Send.')) return;
   fresh.forEach(function (r) { pinged[r.key] = dayOf_(new Date()); });
   p.setProperty(RECEIPTS_PINGED_PROP, JSON.stringify(pinged));
+}
+
+// The same hourly run also says when a follow-up round is due: one email
+// per round, on its day or within a week after it, and only while nobody has
+// started that round in the app. It goes to the board member, never a
+// sponsor, and nothing goes to a sponsor until someone taps Send.
+var ROUNDS_PINGED_PROP = 'ROUNDS_PINGED_' + SEASON;
+var ROUND_PING_DAYS = 7;
+function roundPing_(to, today) {
+  var p = PropertiesService.getScriptProperties();
+  var now = today || dayOf_(new Date());
+  var round = currentNudgeRound_(now).current;
+  if (!round || roundStarted_(round)) return false;
+  var late = (new Date(now + 'T12:00:00') - new Date(round.date + 'T12:00:00')) / 864e5;
+  if (late < 0 || late > ROUND_PING_DAYS) return false;
+  var pinged = {};
+  try { pinged = JSON.parse(p.getProperty(ROUNDS_PINGED_PROP) || '{}'); } catch (e) { pinged = {}; }
+  if (pinged[round.date]) return false;
+  var n = nudgeRows_(round).filter(function (r) { return r.status === 'ready'; }).length;
+  if (!ownerAlert_(to, 'Sponsor follow-up round due: ' + round.label,
+    'The "' + round.label + '" follow-up round is due' + (late ? ' (it started ' + round.date + ')' : ' today') + '. ' +
+      (n ? n + ' sponsor' + (n === 1 ? ' is' : 's are') + ' on the list.' : 'Nobody is on the list right now.') +
+      '\n\nOpen Sponsors > Follow-ups to start the round, check each email and send:\n' + APP_URL + '#sponsors\n\nNothing goes to a sponsor until someone taps Send.')) return false;
+  pinged[round.date] = now;
+  p.setProperty(ROUNDS_PINGED_PROP, JSON.stringify(pinged));
+  return true;
 }
 
 // Run once from the editor to start the hourly heads-up; run again to keep just one.
