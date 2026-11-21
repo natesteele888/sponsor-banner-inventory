@@ -67,14 +67,28 @@
 
   <!-- SPONSORS VIEW: the season's sponsorship sheet, read live (sponsors.js) -->
   <section id="view-sponsors" class="view hidden">
-    <div id="spSummary" class="season-summary"></div>
-    <!-- This year's committed total next to last year's at the same date (sponsors.js, History.gs). -->
-    <details id="spYoY" class="yoy hidden"></details>
+    <!-- The everyday jobs first, one tap each (sponsors.js "one-tap jobs"). -->
+    <div id="spQuick" class="sp-quick hidden">
+      <div class="sp-quick-btns">
+        <button class="btn sp-q" data-q="add" type="button"><span aria-hidden="true">＋</span> Add a sponsor</button>
+        <button class="btn sp-q" data-q="paid" type="button"><span aria-hidden="true">✓</span> Mark paid</button>
+        <button class="btn sp-q" data-q="note" type="button"><span aria-hidden="true">✎</span> Add a note</button>
+      </div>
+      <p id="spQuickTodo" class="sp-quick-todo hidden"></p>
+      <div id="spQuickPanel" class="sp-quick-panel hidden" aria-live="polite"></div>
+    </div>
+    <!-- The numbers, tucked away until wanted. -->
+    <details id="spReports" class="sp-reports">
+      <summary id="spReportsSum">Numbers and reports</summary>
+      <div id="spSummary" class="season-summary"></div>
+      <!-- This year's committed total next to last year's at the same date (sponsors.js, History.gs). -->
+      <details id="spYoY" class="yoy hidden"></details>
+      <!-- When the website was last looked at for sponsor payments (sponsors.js, Season.gs websiteCheck). -->
+      <div id="spWeb" class="sp-web hidden" aria-live="polite"></div>
+    </details>
     <!-- Paid rows with an email: a receipt to send with one tap (sponsors.js, Receipts.gs). -->
     <section id="spReceipts" class="rcpt hidden" aria-live="polite"></section>
     <section id="spNudges" class="rcpt hidden" aria-live="polite"></section>
-    <!-- When the website was last looked at for sponsor payments (sponsors.js, Season.gs websiteCheck). -->
-    <div id="spWeb" class="sp-web hidden" aria-live="polite"></div>
     <div class="toolbar">
       <input id="spSearch" type="search" placeholder="Search sponsor, contact, owner, team…">
       <div class="filters">
