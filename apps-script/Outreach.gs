@@ -126,14 +126,17 @@ function outreachFor_(how) {
 }
 
 // "Hi Sam," from the contact cell when it reads as a person's name, else
-// "Hi Alpha Bakery team," (outreachGreet_). Never "Hi there".
+// "Hi Alpha Bakery," (outreachGreet_). Never "Hi there".
 function outreachGreet_(r) {
   var n = outreachFirstName_(r.contact);
   if (n) return n;
-  // "Example Insurance (Leominster)" greets "Example Insurance team": no town in brackets.
+  // "Example Insurance (Leominster)" greets "Example Insurance": no town in brackets.
   var b = String(r.company || '').replace(/\s*\([^)]*\)/g, ' ').replace(/\s{2,}/g, ' ').trim();
   b = b.replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
-  return (b || 'Lunenburg') + ' team';
+  // "Example Team-Pretend Realty" greets "Example Team", not "... Realty team".
+  var t = b.match(/^(.*?\bteam)\b/i);
+  if (t && t[1].trim().split(/\s+/).length > 1) return t[1].trim();
+  return b || 'friends';
 }
 // Which email they get, from the sheet alone:
 //   'last'     a level in last season's tier column: thanked for last season
