@@ -170,6 +170,11 @@ function route_(action, data) {
     if (action === 'outreachList') return outreachList(data);
     if (action === 'outreachPreview') return outreachPreview(data);
     if (action === 'outreachSend') return outreachSend(data);
+    if (action === 'outreachCompose') return outreachCompose(data);
+    if (action === 'outreachSent') return outreachSent(data);
+    if (action === 'welcomeList') return welcomeList(data);
+    if (action === 'welcomePreview') return welcomePreview(data);
+    if (action === 'welcomeSend') return welcomeSend(data);
     if (action === 'sponsorWalkIn') return sponsorWalkIn(data);
     if (action === 'walkInForm') return walkInForm();
     // This season's committed total next to last season's (History.gs). Totals only.
@@ -219,7 +224,7 @@ var SNAP_TTL = 600;            // 10 minutes
 var SNAP_CHUNK = 30000;        // characters per cache entry (each entry holds up to 100 KB)
 var SNAP_READ_ONLY = { list: 1, image: 1, seasonList: 1, sponsorBook: 1, walkInForm: 1, sponsorHistory: 1, receiptList: 1,
   receiptPreview: 1, receiptCopyGet: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
-  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, outreachList: 1, outreachPreview: 1 };
+  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, outreachList: 1, outreachPreview: 1, outreachCompose: 1, welcomeList: 1, welcomePreview: 1 };
 
 function snapGen_() { try { return CacheService.getScriptCache().get('snapGen') || '0'; } catch (e) { return '0'; } }
 function forgetSnaps_() { try { CacheService.getScriptCache().put('snapGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }
@@ -284,7 +289,8 @@ function authorize(idToken) {
   var hit = cache.get(cacheKey);
   if (hit) {
     var hp = hit.split('|');
-    if (hp[0] === 'yes') return hp[1] ? { ok: true, email: hp[1] } : { ok: true };
+    var hn = hp[2] ? decodeURIComponent(hp[2]) : '';
+    if (hp[0] === 'yes') return hp[1] ? (hn ? { ok: true, email: hp[1], name: hn } : { ok: true, email: hp[1] }) : { ok: true };
     if (hp[0] === 'sponsors') return hp[1] ? { ok: true, sponsorsOnly: true, email: hp[1] } : { ok: true, sponsorsOnly: true };
   }
 
@@ -309,9 +315,11 @@ function authorize(idToken) {
   }
   // Only an address Google has verified is kept; it decides who may edit sponsor rows.
   var mail = user.emailVerified ? String(user.email || '').toLowerCase() : '';
+  // Their Google account name, for the sign-off on emails they send from the app.
+  var name = String(user.displayName || '').replace(/\s+/g, ' ').trim().slice(0, 60);
   if (allowed) {
-    cache.put(cacheKey, 'yes' + (mail ? '|' + mail : ''), 300);
-    return mail ? { ok: true, email: mail } : { ok: true };
+    cache.put(cacheKey, 'yes' + (mail ? '|' + mail + (name ? '|' + encodeURIComponent(name) : '') : ''), 300);
+    return mail ? (name ? { ok: true, email: mail, name: name } : { ok: true, email: mail }) : { ok: true };
   }
   if (mail && sponsorsOnlyEmails_().indexOf(mail) >= 0) {
     cache.put(cacheKey, 'sponsors|' + mail, 300);
