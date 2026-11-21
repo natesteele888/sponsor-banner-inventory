@@ -272,6 +272,8 @@
     var notes = [];
     if (set.missing && set.missing.length) notes.push('Still needed before receipts can go out: ' + setupWords(set.missing) + '.');
     else if (!set.live) notes.push('Test mode: receipts go to the test address, not the sponsor.');
+    if (!set.sender) notes.push('The league email address is not set up yet, so nothing can go to a sponsor.');
+    else if (set.live && set.via === 'mine') notes.push('Receipts go out under the league name from the app owner\'s Gmail, and replies go to the league address.');
     if (!set.packet) notes.push('No sponsor packet link set, so receipts go without it.');
     var can = canEdit();
     var row = function (i) {
@@ -369,7 +371,7 @@
       var to = res.live ? (item.email || res.to) : 'the test address (test mode)';
       var said = framePane(pv, res.subject, res.html,
         canSend ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '',
-        canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' from the league address, only when you tap Send.</p>' : '');
+        canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + (set.via === 'mine' ? ' under the league name (replies go to the league address)' : ' from the league address') + ', only when you tap Send.</p>' : '');
       var sendBtn = pv.querySelector('[data-pv="send"]');
       if (sendBtn) sendBtn.addEventListener('click', function () {
         if (!sendBtn.dataset.armed) {

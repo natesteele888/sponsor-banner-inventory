@@ -417,17 +417,12 @@ function sponsorPageSubmit(data) {
   writeFields_(st.found.pages.sheet, st.found.pages.header, rec._row, mark);
   forgetPageRec_(token);
 
-  try {
-    MailApp.sendEmail({
-      to: myEmail_(),
-      subject: SEASON + ' sponsor info received: ' + row.company + (upgrade ? ' (upgrade asked)' : ''),
-      body: row.company + ' sent their sponsor info from their receipt link.\n\nLevel: ' + levelText +
-        (last ? '\n\nThey picked "Same as last year": nothing changed, so reuse what we have from last season.' : '') +
-        (upgrade ? '\n\nThe upgrade counts once their payment for the difference is recorded (Record a payment). No banner change until then.' : '') +
-        '\n\nIt is on the Packets tab and in the Sponsors tab:\n' + APP_URL + '#sponsors',
-      name: 'LYBS Sponsors app'
-    });
-  } catch (e) { console.log('sponsor page heads-up: ' + e); }
+  ownerAlert_(myEmail_(),
+    SEASON + ' sponsor info received: ' + row.company + (upgrade ? ' (upgrade asked)' : ''),
+    row.company + ' sent their sponsor info from their receipt link.\n\nLevel: ' + levelText +
+      (last ? '\n\nThey picked "Same as last year": nothing changed, so reuse what we have from last season.' : '') +
+      (upgrade ? '\n\nThe upgrade counts once their payment for the difference is recorded (Record a payment). No banner change until then.' : '') +
+      '\n\nIt is on the Packets tab and in the Sponsors tab:\n' + APP_URL + '#sponsors');
 
   return ok({ message: 'Thank you! We have your info.', upgrade: upgrade ? { to: upgrade.name, owed: upgrade.price - row.amount } : null, pay: upgrade ? payOptions_() : null });
 }

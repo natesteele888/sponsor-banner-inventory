@@ -300,7 +300,7 @@ function receiptList() {
   var s = receiptSettings_();
   return {
     copies: receiptCopies_(),
-    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().connected },
+    settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().ready, via: senderSettings_().via },
     items: receiptRows_().map(function (r) {
       return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', online: !!r.online, inKind: !!r.inKind };
     })
@@ -415,13 +415,9 @@ function receiptPing() {
   if (!fresh.length) return;
   var n = fresh.length;
   var lines = fresh.map(function (r) { return '- ' + r.company + ', ' + money_(r.amount); });
-  MailApp.sendEmail({
-    to: to,
-    subject: n + ' sponsor receipt' + (n === 1 ? '' : 's') + ' ready to send',
-    body: (n === 1 ? 'A sponsor receipt is' : n + ' sponsor receipts are') + ' waiting for your tap:\n\n' + lines.join('\n') +
-      '\n\nOpen the Sponsors tab to preview and send:\n' + APP_URL + '#sponsors\n\nNothing goes to a sponsor until someone taps Send.',
-    name: 'LYBS Sponsors app'
-  });
+  if (!ownerAlert_(to, n + ' sponsor receipt' + (n === 1 ? '' : 's') + ' ready to send',
+    (n === 1 ? 'A sponsor receipt is' : n + ' sponsor receipts are') + ' waiting for your tap:\n\n' + lines.join('\n') +
+      '\n\nOpen the Sponsors tab to preview and send:\n' + APP_URL + '#sponsors\n\nNothing goes to a sponsor until someone taps Send.')) return;
   fresh.forEach(function (r) { pinged[r.key] = dayOf_(new Date()); });
   p.setProperty(RECEIPTS_PINGED_PROP, JSON.stringify(pinged));
 }

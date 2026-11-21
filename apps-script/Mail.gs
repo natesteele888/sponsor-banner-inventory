@@ -3,13 +3,18 @@
  * goes through leagueSend_, so it comes from the league's own address.
  * Lives next to Code.gs (Files → + → Script, name it "Mail").
  *
- *   SEND_FROM   the league's address. It must be set up as a "Send mail as"
- *               address in the Gmail of the account that owns this script.
+ *   SEND_FROM         the league's address. Best set up as a "Send mail as"
+ *                     address in the Gmail of the account that owns this
+ *                     script, so mail comes from it.
+ *   SEND_AS_MY_GMAIL  "on" lets mail to sponsors go out before that is set
+ *                     up: it comes from the owner's own Gmail under the
+ *                     league's name, and replies go to SEND_FROM.
  *
- * Until that address shows up in this Gmail's "Send mail as" list, nothing
- * goes to a sponsor: live sends are refused, and test sends (only ever to
- * the test address) come from the owner's own Gmail with the league address
- * as the reply-to. No address is written in this public file.
+ * With neither, nothing goes to a sponsor: live sends are refused, and test
+ * sends (only ever to the test address) come from the owner's own Gmail with
+ * the league address as the reply-to. Everything goes through GmailApp, so a
+ * copy of each email sits in the owner's Sent folder. No address is written
+ * in this public file.
  */
 
 // The league logo for letterheads. It's the public league logo the app's own
@@ -47,13 +52,16 @@ function senderSettings_() {
       connected = GmailApp.getAliases().map(function (a) { return String(a).toLowerCase(); }).indexOf(from) >= 0;
     } catch (e) { console.log('aliases: ' + e); }
   }
-  return { from: from, connected: connected };
+  var mine = String(PropertiesService.getScriptProperties().getProperty('SEND_AS_MY_GMAIL') || '').trim().toLowerCase() === 'on';
+  // ready: something may go to a sponsor. via: how it would go out.
+  var ready = connected || (mine && !!from);
+  return { from: from, connected: connected, mine: mine, ready: ready, via: connected ? 'league' : ready ? 'mine' : '' };
 }
 
 // m: { to, subject, text, html, live }. Returns { ok, from } or { ok: false, error }.
 function leagueSend_(m) {
   var s = senderSettings_();
-  if (m.live && !s.connected) {
+  if (m.live && !s.ready) {
     return { ok: false, error: s.from
       ? 'The league address is not connected to this Gmail yet ("Send mail as"), so nothing was sent.'
       : 'Set SEND_FROM to the league address before anything goes to a sponsor.' };
@@ -67,10 +75,23 @@ function leagueSend_(m) {
     GmailApp.sendEmail(m.to, subject, m.text, g);
     return { ok: true, from: s.from };
   }
-  var o = { to: m.to, subject: subject, body: m.text, htmlBody: lg.html, name: RECEIPT_ORG };
+  // The owner's own Gmail, under the league's name, replies to the league.
+  var o = { htmlBody: lg.html, name: RECEIPT_ORG };
   if (lg.images) o.inlineImages = lg.images;
   if (m.attachments) o.attachments = m.attachments;
   if (s.from) o.replyTo = s.from;
-  MailApp.sendEmail(o);
+  GmailApp.sendEmail(m.to, subject, m.text, o);
   return { ok: true, from: '' };
+}
+
+// A heads-up to the board member who owns this script (never a sponsor).
+// GmailApp, not MailApp: it also keeps a copy in Sent, and the run's log says
+// whether it went, so a missing alert can be traced.
+function ownerAlert_(to, subject, body) {
+  if (!to) { console.log('alert not sent, no address: ' + subject); return false; }
+  try {
+    GmailApp.sendEmail(to, subject, body, { name: 'LYBS Sponsors app' });
+    console.log('alert sent: ' + subject);
+    return true;
+  } catch (e) { console.log('alert failed: ' + subject + ': ' + e); return false; }
 }
