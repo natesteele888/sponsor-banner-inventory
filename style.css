@@ -646,7 +646,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
    and each job's tab shows only its own box. */
 #view-sponsors:not(.sp-sub) > #spReceipts, #view-sponsors:not(.sp-sub) > #spNudges,
 #view-sponsors:not(.sp-sub) > #spAddBox, #view-sponsors:not(.sp-sub) > #spPayBox,
-#view-sponsors:not(.sp-sub) > #spOutreach { display: none !important; }
+#view-sponsors:not(.sp-sub) > #spOutreach, #view-sponsors:not(.sp-sub) > #spWelcome { display: none !important; }
 #view-sponsors.sp-sub > :not(.sp-on):not(#spStatus):not(#spModeEmpty) { display: none !important; }
 /* Eight tabs: on a phone the bar scrolls sideways instead of squeezing them. */
 @media (max-width: 600px) {
