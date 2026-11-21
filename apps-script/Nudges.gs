@@ -191,7 +191,7 @@ function editedNudge_(data) {
 function nudgeList() {
   var s = nudgeSettings_(), r = currentNudgeRound_();
   return {
-    settings: { missing: s.missing, live: s.live, testTo: !!s.testTo, sender: senderSettings_().connected },
+    settings: { missing: s.missing, live: s.live, testTo: !!s.testTo, sender: senderSettings_().ready, via: senderSettings_().via },
     current: r.current, next: r.next, rounds: r.rounds, started: roundStarted_(r.current),
     items: nudgeRows_(r.current).map(function (x) { return { key: x.key, row: x.row, company: x.company, email: x.email, status: x.status, at: x.at }; })
   };
