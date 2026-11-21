@@ -23,6 +23,11 @@
  *   the difference (Record a payment): then the sheet's amount and level go
  *   up, and the banner is owed only then. No payment, no banner.
  *
+ * In kind: a sponsor whose row says in kind (Paid how, or "paid in kind" in
+ * the notes) gets the same page for the level on their row, labeled as an
+ * in-kind donation (credited at the row's amount), with no upgrades. A sponsorship editor gets
+ * the link from the sponsor's card in the app (sponsorPacketLink).
+ *
  * This door has no sign-in: the token in the link is the key, and it shows
  * that one sponsor's business, contact name, level and amount, nothing else.
  * It never writes to the sponsor sheet; only the board's own Record a
@@ -79,8 +84,10 @@ function levelNamed_(levels, name) {
 }
 
 // The level they paid for: the sheet's level when the amount covers it, else
-// the highest level the amount reaches. Null when the row isn't paid.
+// the highest level the amount reaches. Null when the row isn't paid. An
+// in-kind sponsor's level is the one on their row: the donation earns it.
 function paidLevel_(levels, row) {
+  if (row && row.inKind) return levelNamed_(levels, row.tier);
   if (!row || !isYes_(row.paid)) return null;
   var named = levelNamed_(levels, row.tier);
   if (named && row.amount >= named.price) return named;
@@ -192,6 +199,7 @@ function boardRowsFrom_(tab, withEmail) {
   var head = tab.headers.map(function (h) { return String(h).toLowerCase(); });
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), amount: col(/^amount/), paid: col(/^paid\??$/),
+            how: col(/^(paid how|payment method|paid by)/), notes: col(/^notes?$/),
             tier: col(new RegExp('^tier selected ' + SEASON)),
             prevTier: col(new RegExp('^tier selected ' + PREV_SEASON)), past: col(/^has sponsored in past/), email: col(/^email/) };
   if (c.tier < 0) c.tier = col(/^tier/);
@@ -202,10 +210,11 @@ function boardRowsFrom_(tab, withEmail) {
     var key = companyKey_(get(r, 'company'));
     if (!key || map[key]) return;
     map[key] = { row: r.row, company: get(r, 'company'), contact: get(r, 'contact'), amount: parseAmount_(get(r, 'amount')),
-                 paid: get(r, 'paid'), tier: get(r, 'tier') };
+                 paid: get(r, 'paid'), tier: get(r, 'tier'),
+                 inKind: /\bin.?kind\b/i.test(get(r, 'how')) || /\bpaid in.?kind\b/i.test(get(r, 'notes')) };
     // A paid sponsor's row also keeps last season's level, so a returning
     // sponsor can keep what we already have from last year.
-    if (isYes_(map[key].paid)) {
+    if (isYes_(map[key].paid) || map[key].inKind) {
       map[key].prevTier = get(r, 'prevTier'); map[key].past = isYes_(get(r, 'past'));
       // Only whether an email is on file. The address itself is read live,
       // on the server, when a returning sponsor keeps last year's info in
@@ -276,7 +285,8 @@ function sponsorPageState_(token, quick) {
   // Never trust a cached "not paid": look again live.
   if (!paid && quick) { row = boardSponsorRow_(found.rec.key, true); paid = paidLevel_(levels, row); }
   if (!paid) return { error: "We don't have your payment marked yet. Once we do, this page shows your sponsorship. Questions? Just reply to the email." };
-  var ups = levels.filter(function (l) { return l.price > row.amount && l.price > paid.price; });
+  // In kind: no upgrades; the donation earns the level on their row.
+  var ups = row.inKind ? [] : levels.filter(function (l) { return l.price > row.amount && l.price > paid.price; });
   return { found: found, row: row, levels: levels, paid: paid, ups: ups };
 }
 
@@ -296,7 +306,7 @@ function sponsorPageGet(data) {
   var st = sponsorPageState_(data.t, true);
   if (st.error) return fail(st.error);
   var rec = st.found.rec, pending = null;
-  if (rec.upgradeStatus === UPGRADE_WAITING && rec.upgradeTo) {
+  if (rec.upgradeStatus === UPGRADE_WAITING && rec.upgradeTo && !st.row.inKind) {
     var to = levelNamed_(st.levels, rec.upgradeTo);
     if (to && to.price > st.row.amount) pending = { to: to.name, owed: Math.max(0, to.price - st.row.amount) };
   }
@@ -308,11 +318,12 @@ function sponsorPageGet(data) {
     // can send in one tap with nothing typed.
     lastYear: last ? { jersey: !!last.jersey, logo: !!last.logo, writeup: !!last.writeup, banner: !!last.banner,
                        contact: !!(st.row.contact && st.row.hasEmail) } : null,
-    paid: { level: st.paid.name, amount: st.row.amount },
+    paid: { level: st.paid.name, amount: st.row.amount, inKind: !!st.row.inKind },
     // Every level, low to high: theirs marked paid, the ones above as
-    // upgrades, the ones below shown for reference only.
-    levels: st.levels.map(function (l) { return levelView_(l, st.row.amount, st.paid); }),
-    upgrade: pending, sent: !!rec.submittedAt, pay: payOptions_()
+    // upgrades, the ones below shown for reference only. In kind: only theirs.
+    levels: st.levels.filter(function (l) { return !st.row.inKind || l === st.paid; })
+      .map(function (l) { return levelView_(l, st.row.amount, st.paid); }),
+    upgrade: pending, sent: !!rec.submittedAt, pay: st.row.inKind ? null : payOptions_()
   });
 }
 
@@ -396,7 +407,7 @@ function sponsorPageSubmit(data) {
 
   var levelText = upgrade
     ? upgrade.name + ' (upgrade from ' + st.paid.name + ', ' + money_(upgrade.price - row.amount) + ' more owed)'
-    : st.paid.name + ' (paid)';
+    : st.paid.name + (row.inKind ? ' (in-kind donation)' : ' (paid)');
   var out = {
     'submitted': Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), 'status': 'New',
     'level': levelText, 'business name (website)': v.business, 'name on jersey': v.jersey, 'contact name': v.contactName,
@@ -428,7 +439,7 @@ function sponsorPageSubmit(data) {
   forgetPageRec_(token);
 
   // The 2027 banners tab picks it up: packet in, banner from stock or to order, design needed or file in hand.
-  try { seasonFromPacket_({ row: row, v: v, level: upgrade || level, upgrade: upgrade, notice: notice, folder: folder }); }
+  try { seasonFromPacket_({ row: row, v: v, level: upgrade || level, upgrade: upgrade, notice: notice, folder: folder, inKind: !!row.inKind }); }
   catch (e) { console.log('packet to banners: ' + e); }
 
   // Always to the script owner, never to the sponsor.
@@ -545,7 +556,7 @@ function seasonFromPacket_(o) {
   var season = readSeason_();
   var got = upsertSponsor_(season, {
     company: o.row.company, tier: o.level.name, amount: o.upgrade ? o.level.price : o.row.amount,
-    paid: !o.upgrade, paidVia: o.upgrade ? '' : 'Paid on the sponsor sheet', source: 'Sponsor page',
+    paid: !o.upgrade, paidVia: o.upgrade ? '' : o.inKind ? 'In-kind donation' : 'Paid on the sponsor sheet', source: 'Sponsor page',
     contactName: o.v.contactName, contactEmail: o.v.email, contactPhone: o.v.phone
   });
   if (!got) return;
@@ -570,6 +581,20 @@ function seasonFromPacket_(o) {
 }
 
 // ---------- the board's side ----------
+
+// An in-kind sponsor's packet link, for a sponsorship editor to send them
+// (paid sponsors get theirs in the receipt). Read from the sheet live; the
+// row must still be that business and in kind.
+function sponsorPacketLink(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can get a packet link.');
+  var key = companyKey_(data && data.company);
+  var row = key ? boardSponsorRow_(key, true) : null;
+  if (!row || Number(row.row) !== Number(data.row)) return fail('That row changed. Refresh and try again.');
+  if (!row.inKind) return fail('Paid sponsors get their packet link in their receipt.');
+  if (!paidLevel_(sponsorLevels_(), row)) return fail('Pick their level on the sheet first.');
+  var link = sponsorPageLink_(row);
+  return link ? ok({ link: link, level: levelNamed_(sponsorLevels_(), row.tier).name }) : fail('The link couldn’t be made just now. Try again.');
+}
 
 // Upgrades sponsors asked for, for the Sponsors tab. Signed-in board only.
 function sponsorUpgrades() {

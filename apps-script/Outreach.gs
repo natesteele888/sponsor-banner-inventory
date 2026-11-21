@@ -133,10 +133,16 @@ function outreachGreet_(r) {
   var b = String(r.company || '').replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
   return (b || 'Lunenburg') + ' team';
 }
-// Sponsored with us before: a level last season, or the sheet's "has sponsored in past".
-function outreachPast_(r) {
-  return !!((r.prevTier && !/^none/i.test(r.prevTier)) || isYes_(r.past));
+// Which email they get, from the sheet alone:
+//   'last'     a level in last season's tier column: thanked for last season
+//   'earlier'  "Has sponsored in past?" says yes but last season's column is
+//              empty: thanked for their past support, no year named
+//   ''         new: who's writing and why
+function outreachWhen_(r) {
+  if (r.prevTier && !/^none/i.test(r.prevTier)) return 'last';
+  return isYes_(r.past) ? 'earlier' : '';
 }
+function outreachPast_(r) { return !!outreachWhen_(r); }
 
 function outreachFirstName_(contact) {
   var c = String(contact || '').trim();
@@ -224,13 +230,13 @@ function outreachText_(r, greet, s) {
                             : 'Our ' + SEASON + ' sponsorship levels are on our site here:';
   var name = String(s.sign || '').split('\n')[0].trim();
   var me = name ? 'My name is ' + name + ', and I’m on the board.' : 'I’m on the board.';
-  var past = outreachPast_(r);
+  var when = outreachWhen_(r), past = !!when;
   var paras = [
     hi,
     past
-      ? 'Thank you for sponsoring Lunenburg Youth Baseball & Softball last season. Having ' + r.company + ' behind our kids made a real difference, and I’m reaching out about the ' + SEASON + ' season.'
+      ? 'Thank you for sponsoring Lunenburg Youth Baseball & Softball ' + (when === 'last' ? 'last season' : 'in the past') + '. Having ' + r.company + ' behind our kids made a real difference, and I’m reaching out about the ' + SEASON + ' season.'
       : 'I’m reaching out from Lunenburg Youth Baseball & Softball about sponsoring our ' + SEASON + ' season.',
-    me + ' We’re a volunteer run, nonprofit league for kids in Lunenburg, and we’re starting to plan for the ' + SEASON + ' season.',
+    me + ' We’re a volunteer run, nonprofit league for kids in Lunenburg.',
     (past ? 'We’d love to have ' + r.company + ' back with us this year.' : 'I wanted to see if ' + r.company + ' would have any interest in sponsoring the league this year.') +
       ' Sponsors help us cover uniforms, equipment and field upkeep, and this year we’re working on new dugouts at Powell Field and fixing the scoreboard at McNally Field. ' + packet + '\n' + s.levels,
     'If it’s a fit, the sign-up form is here:\n' + s.signup,
@@ -256,7 +262,7 @@ function outreachList() {
   var items = all.map(function (r) {
     var ck = outreachCheck_(r, all, log, s), sent = log[companyKey_(r.company)] || null;
     return { row: r.row, company: r.company, contact: r.contact, email: ck.email, status: r.status || 'Not contacted',
-             owner: r.owner, greet: outreachGreet_(r), past: outreachPast_(r), hold: ck.hold, look: ck.look,
+             owner: r.owner, greet: outreachGreet_(r), past: outreachWhen_(r), hold: ck.hold, look: ck.look,
              sent: sent ? { at: sent.at, by: sent.by } : null };
   });
   return ok({ items: items, senders: outreachSenders_(), packet: !!s.packetFile, linksOk: s.linksOk,
@@ -278,7 +284,7 @@ function outreachPreview(data) {
   var pick = outreachPick_(data.sender === 'allow' ? 'allow' : 'mine');
   var s = outreachFor_(pick && pick.how), ck = outreachCheck_(f.r, f.all, outreachLog_(), s);
   var greet = outreachGreet_(f.r), text = outreachText_(f.r, greet, s);
-  return ok({ subject: OUTREACH_SUBJECT, text: text, html: outreachHtml_(text), to: ck.email, greet: greet, past: outreachPast_(f.r),
+  return ok({ subject: OUTREACH_SUBJECT, text: text, html: outreachHtml_(text), to: ck.email, greet: greet, past: outreachWhen_(f.r),
               company: f.r.company, contact: f.r.contact, hold: ck.hold, look: ck.look, packet: !!s.packetFile,
               sign: s.sign.split('\n')[0] || '' });
 }

@@ -816,6 +816,34 @@
       }).join('') + '</ul>';
   }
 
+  // An in-kind sponsor never gets a receipt, so their packet link comes from
+  // here: the same page, showing their level paid by an in-kind donation, with
+  // no upgrades. Editors only; nothing is sent from here.
+  function inKindLinkBox(s) {
+    if (!canEdit() || !s.inKind || !s.tier) return '';
+    return '<div class="sp-packet sp-pklink"><h3 class="ss-h">In-kind packet link</h3>' +
+      '<p class="hint">Their page shows ' + A().esc(s.tier) + ', with their in-kind donation where the payment would be, no upgrades, and the usual form for their info.</p>' +
+      '<div class="sheet-acts"><button class="btn small" type="button" data-pklink>Get their packet link</button></div>' +
+      '<div class="pk-link" aria-live="polite"></div></div>';
+  }
+  function getPacketLink(s, btn) {
+    var out = $('#spFields .pk-link'), esc = A().esc;
+    btn.disabled = true; out.textContent = 'Making their link…';
+    A().apiPost({ action: 'sponsorPacketLink', row: s.row, company: s.company }).then(function (res) {
+      btn.disabled = false;
+      if (!res.ok || !/^https:\/\/[^\s"'<>]+$/.test(res.link || '')) { out.textContent = res.error || 'The link couldn’t be made.'; return; }
+      out.innerHTML = '<input class="pk-url" type="text" readonly value="' + esc(res.link) + '" aria-label="Their packet link">' +
+        '<button class="btn small" type="button" data-pkcopy>Copy link</button>';
+      var inp = out.querySelector('.pk-url');
+      out.querySelector('[data-pkcopy]').addEventListener('click', function (e) {
+        var b = e.currentTarget;
+        var done = function () { b.textContent = 'Copied'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(res.link).then(done, function () { inp.select(); });
+        else { inp.select(); try { document.execCommand('copy'); done(); } catch (x) { } }
+      });
+    }).catch(function () { btn.disabled = false; out.textContent = 'Could not reach the backend. Try again.'; });
+  }
+
   // The packet on the sponsor's own detail: what they sent, and their logo.
   function renderPacketDetail(s) {
     var p = packetFor(s), esc = A().esc;
@@ -1713,11 +1741,12 @@
     });
     key.sort(function (a, b) { return a.k - b.k; });
     var fact = function (f) { return '<div class="sp-fact' + (/^notes?$/i.test(f.h) || f.v.length > 60 ? ' full' : '') + '"><dt>' + esc(f.h) + '</dt><dd>' + linkify(f.h, f.v) + '</dd></div>'; };
-    $('#spFields').innerHTML = renderPacketDetail(s) + (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
+    $('#spFields').innerHTML = inKindLinkBox(s) + renderPacketDetail(s) + (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
       '<details class="sp-all"><summary>Everything on the sheet (' + (key.length + rest.length) + ')</summary>' +
       (rest.length ? '<dl class="sp-facts">' + rest.map(fact).join('') + '</dl>' : '') +
       '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p></details>';
     loadPacketLogo();
+    var lb = $('#spFields [data-pklink]'); if (lb) lb.addEventListener('click', function () { getPacketLink(s, lb); });
     renderMarks(s, []);
     renderBanner(s);
     showEditActs(s);
@@ -2060,7 +2089,7 @@
         return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row">' +
           (oneByOne ? '' : '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>') +
           '<div class="or-main"><b>' + esc(i.company) + '</b>' +
-          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet) + ',' + (i.past ? ' · past sponsor' : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
+          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet) + ',' + (i.past === 'last' ? ' · sponsored last season' : i.past ? ' · past sponsor' : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
           (i.sent ? '<p class="or-flag">Emailed ' + esc(fmtDay(i.sent.at)) + '.</p>' : '') +
           i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('') +
           i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('') +

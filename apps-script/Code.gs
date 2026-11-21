@@ -174,6 +174,7 @@ function route_(action, data) {
     if (action === 'outreachSent') return outreachSent(data);
     if (action === 'outreachTicket') return outreachTicket(data);
     if (action === 'allowSent') return allowSent(data);
+    if (action === 'sponsorPacketLink') return sponsorPacketLink(data);
     if (action === 'welcomeList') return welcomeList(data);
     if (action === 'welcomePreview') return welcomePreview(data);
     if (action === 'welcomeSend') return welcomeSend(data);

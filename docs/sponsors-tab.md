@@ -158,6 +158,8 @@ What they send goes on the **LYBS Sponsor Info Packets** sheet's Packets tab, wi
 
 An upgrade only counts once the difference is paid. Until then the sheet keeps the old level and amount, the sponsor's card says "Upgrade to ... asked, $N to pay", and **Record a payment** lists them first under "Upgrade waiting on payment". Recording a payment for them adds it to their amount. Once the whole difference is in, it sets the new level, ticks Owed a Banner when the new level has one, and marks the upgrade counted. Their next receipt is for the new money only, with the season total under it.
 
+**In kind:** an in-kind sponsor gets the same page and the same form. Their level shows as **Your level · In-kind donation**, credited at the row's amount (for example "Credited at $750 for the 2027 season"), with no other levels, no upgrades and nothing to pay. They get no receipt, so a sponsorship editor opens their card in the app and taps **Get their packet link**, then copies it into their email. The level comes from the row even while Paid? is empty. Their packet's Level says "(in-kind donation)".
+
 The levels and prices are the defaults in `apps-script/SponsorPage.gs` (Gameday any amount, All-Star $300, MVP $500, Championship $750 and up, as on the league's Become a Sponsor page). Set `SPONSOR_LEVELS` in Script Properties to change them without new code.
 
 Setup: add `apps-script/SponsorPage.gs` as a script file named `SponsorPage` and deploy a new version.
@@ -335,7 +337,13 @@ Outreach and Welcome emails come from whoever is signed in and are signed by the
 
 ### The greeting
 
-"Hi" and the contact's first name, or "Hi [Business] team" when there's no name (LLC, Inc and the like left off), never "Hi there". A past sponsor (last season's level, or "Has sponsored in past") is thanked for last season first; a new one hears who's writing and why in the first line.
+"Hi" and the contact's first name, or "Hi [Business] team" when there's no name (LLC, Inc and the like left off), never "Hi there". The script picks one of three versions from the sheet alone, every time:
+
+- **Sponsored last season** (a level in last season's tier column): thanked for last season first, then invited back.
+- **Sponsored before that** ("Has sponsored in past?" says yes, last season's column empty): thanked for their past support, no year named, then invited back.
+- **New:** who's writing and why in the first line, then asked if they'd be interested.
+
+The list shows "sponsored last season" or "past sponsor" beside each one.
 
 ## One-time Allow (apps-script-sender/)
 
