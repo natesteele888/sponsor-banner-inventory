@@ -72,6 +72,7 @@ function leagueSend_(m) {
     var g = { htmlBody: lg.html, name: RECEIPT_ORG, from: s.from, replyTo: s.from };
     if (lg.images) g.inlineImages = lg.images;
     if (m.attachments) g.attachments = m.attachments;
+    if (m.cc) g.cc = m.cc;
     GmailApp.sendEmail(m.to, subject, m.text, g);
     return { ok: true, from: s.from };
   }
@@ -79,6 +80,7 @@ function leagueSend_(m) {
   var o = { htmlBody: lg.html, name: RECEIPT_ORG };
   if (lg.images) o.inlineImages = lg.images;
   if (m.attachments) o.attachments = m.attachments;
+  if (m.cc) o.cc = m.cc;
   if (s.from) o.replyTo = s.from;
   GmailApp.sendEmail(m.to, subject, m.text, o);
   return { ok: true, from: '' };

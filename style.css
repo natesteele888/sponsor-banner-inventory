@@ -662,3 +662,5 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-card-pane:has(.rc-preview.hidden) { display: none; }
 .season-card:has(.sp-card-pane .rc-preview:not(.hidden)) { flex-wrap: wrap; }
 .sp-card-rc .rc-msg:empty { display: none; }
+.rc-pv-cc { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 14px; }
+.rc-pv-cc input { flex: 1 1 auto; min-width: 0; font-size: 16px; }

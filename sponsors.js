@@ -371,17 +371,24 @@
       var to = res.live ? (item.email || res.to) : 'the test address (test mode)';
       var said = framePane(pv, res.subject, res.html,
         canSend ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '',
-        canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + (set.via === 'mine' ? ' under the league name (replies go to the league address)' : ' from the league address') + ', only when you tap Send.</p>' : '');
+        canSend ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + (set.via === 'mine' ? ' under the league name (replies go to the league address)' : ' from the league address') + ', only when you tap Send.</p>' +
+          (res.live ? (res.ccFixed
+            ? '<p class="hint rc-pv-cc">CC: ' + esc(res.cc || 'nobody') + ' (from the sheet’s CC column)</p>'
+            : '<label class="rc-pv-cc">CC <input type="email" multiple autocomplete="off" placeholder="Optional, e.g. the owner" value="' + esc(res.cc || '') + '"></label>')
+            : '<p class="hint rc-pv-cc">CC is left off test receipts.</p>') : '');
       var sendBtn = pv.querySelector('[data-pv="send"]');
       if (sendBtn) sendBtn.addEventListener('click', function () {
         if (!sendBtn.dataset.armed) {
           sendBtn.dataset.armed = '1';
-          sendBtn.textContent = set.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
+          var ccNow = pv.querySelector('.rc-pv-cc input'), ccv = ccNow ? ccNow.value.trim() : (res.ccFixed ? res.cc : '');
+          sendBtn.textContent = set.live ? 'Tap again to send to ' + item.email + (ccv ? ' + CC' : '') : 'Tap again to send a test';
           setTimeout(function () { if (sendBtn.isConnected && !sendBtn.disabled) { delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; } }, 6000);
           return;
         }
         sendBtn.disabled = true; said.textContent = 'Sending…';
-        A().apiPost({ action: 'receiptSend', key: key }).then(function (r) {
+        var ccBox = pv.querySelector('.rc-pv-cc input'), post = { action: 'receiptSend', key: key };
+        if (ccBox) post.cc = ccBox.value.trim();
+        A().apiPost(post).then(function (r) {
           if (!r.ok) { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; said.textContent = r.error || 'That did not go through.'; return; }
           said.innerHTML = '<span class="sp-done">✓ ' + esc(r.message || 'Sent.') + '</span>';
           if (r.status === 'sent') sendBtn.remove();
