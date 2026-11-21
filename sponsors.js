@@ -20,6 +20,15 @@
  */
 (function () {
   'use strict';
+  // Back from the sender page after a one-time-Allow send: "#sent=…" says it
+  // went. Read it once, put the address back to #sponsors, and mark the row
+  // once the sheet is in.
+  var SENT_BACK = (function () {
+    var m = /^#sent=([a-f0-9]{32}\.[A-Za-z0-9_\-]{20,80})$/.exec(String(location.hash || ''));
+    if (!m) return '';
+    try { history.replaceState(null, '', location.pathname + location.search + '#sponsors'); } catch (e) { location.hash = 'sponsors'; }
+    return m[1];
+  })();
 
   var A = function () { return window.BannerApp; };
   var $ = function (sel) { return document.querySelector(sel); };
@@ -132,7 +141,7 @@
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
         sheetTeam: get('team'), pick: pick, notes: get('notes'),
         address: get('address'), area: townOf(get('address')), walkIn: yes(get('walkIn')),
-        how: get('how'), inKind: IN_KIND.test(get('how')),
+        how: get('how'), inKind: IN_KIND.test(get('how')) || PAID_IN_KIND.test(get('notes')),
         team: hasTeam(pick) ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
@@ -140,8 +149,9 @@
 
   // Signed up for this season: an amount on the sheet ("NONE"/$0 doesn't count).
   function isIn(s) { return s.amount > 0; }
-  // Paid in goods or services (Paid how says "In kind"): counted on its own, never as cash.
-  var IN_KIND = /\bin.?kind\b/i;
+  // Paid in goods or services (Paid how says "In kind", or with no Paid how
+  // column, the notes say "paid in kind"): counted on its own, never as cash.
+  var IN_KIND = /\bin.?kind\b/i, PAID_IN_KIND = /\bpaid in.?kind\b/i;
 
   var FILTERS = {
     all: function () { return true; },
@@ -155,7 +165,13 @@
     mine: function (s) { return isMine(s); },
     needsOwner: function (s) { return needsOwner(s); },
     noTeam: function (s) { return isIn(s) && !s.team; },
-    needsReceipt: function (s) { var r = receiptState(s); return r === 'ready' || r === 'noEmail'; }
+    needsReceipt: function (s) { var r = receiptState(s); return r === 'ready' || r === 'noEmail'; },
+    // Behind the money counts: dollars only, and in kind on its own.
+    committed: function (s) { return isIn(s) && !s.inKind; },
+    paidCash: function (s) { return isIn(s) && s.paid && !s.inKind; },
+    inKind: function (s) { return isIn(s) && s.inKind; },
+    packetWaiting: function (s) { return isIn(s) && s.paid && !!S.packets && !packetFor(s); },
+    needsWelcome: function (s) { var w = welcomeFor(s); return !!(w && !w.had); }
   };
 
   // Where a paid sponsor's receipt stands, from the receipts list: 'sent',
@@ -222,6 +238,7 @@
       A().keep('sponsorBook', res);
       S.early = false;
       useBook(res);
+      if (SENT_BACK) markSentBack();
     }).catch(function (err) {
       A().noteProblem('Sponsorship sheet did not load', err);
       $('#spStatus').textContent = A().sendErrorText(err, "Can't reach the sponsorship sheet. Check your signal, then tap Refresh.");
@@ -230,6 +247,7 @@
     loadReceipts();
     loadNudges();
     loadOutreach();
+    loadWelcome();
     loadPackets();
     loadUpgrades();
     loadLogos(fresh);
@@ -259,6 +277,7 @@
       S.receipts = res;
       renderReceipts();
       render();
+      if (S.packets) renderPackets();
     }).catch(function () { /* the box stays hidden */ });
   }
 
@@ -747,14 +766,129 @@
       var t = { headers: res.headers }, bc = colOf(t, /^business/);
       S.packetKeys = {};
       res.rows.forEach(function (r) { if (bc >= 0 && r.cells[bc]) S.packetKeys[nameKey(r.cells[bc])] = true; });
+      // Sent from their own receipt link: matched to the sponsor, whatever name they typed.
+      S.packetRecv = {};
+      (res.received || []).forEach(function (p) { S.packetRecv[nameKey(p.company)] = p; });
       renderPackets();
       render();
     }).catch(function () { /* the box stays hidden */ });
   }
 
+  // A sponsor's info packet: the record of the one they sent from their
+  // receipt link (when, and what kind), and its row on the Packets sheet.
+  function packetFor(s) {
+    if (!s || !S.packets) return null;
+    var P = S.packets, t = { headers: P.headers };
+    var c = { when: colOf(t, /^submitted/), biz: colOf(t, /^business/) };
+    var rec = S.packetRecv ? S.packetRecv[s.key] || null : null;
+    var row = null;
+    if (rec && rec.packetAt && c.when >= 0) row = P.rows.filter(function (r) { return String(r.cells[c.when]) === rec.packetAt; }).pop() || null;
+    if (!row && c.biz >= 0) {
+      row = P.rows.filter(function (r) {
+        var k = nameKey(r.cells[c.biz]);
+        return k && (k === s.key || (k.length >= 6 && s.key.length >= 6 && (k.indexOf(s.key) === 0 || s.key.indexOf(k) === 0)));
+      }).pop() || null;
+    }
+    if (!rec && !row) return null;
+    return { rec: rec, row: row, when: rec ? rec.at : (row && c.when >= 0 ? String(row.cells[c.when]).slice(0, 10) : ''), note: rec ? rec.note : '' };
+  }
+  // What their packet said, for the card under the "Packet in" pill.
+  function packetNote(s) { var p = packetFor(s); return p && p.note ? 'Packet: ' + p.note : ''; }
+  function packetFact(s) {
+    var p = packetFor(s);
+    if (p) return 'Info packet in' + (p.when ? ' ' + fmtDay(p.when) : '') + (p.note ? ': ' + p.note : '');
+    return isIn(s) && s.paid && S.packets ? 'Waiting on info packet' : '';
+  }
+  // Paid, but no packet back yet. The receipt carries their packet link, so
+  // one whose receipt hasn't gone out hasn't got the link yet.
+  function packetWaiting() {
+    if (!S.book || !S.packets) return '';
+    var esc = A().esc;
+    var list = sponsors().filter(function (s) { return isIn(s) && s.paid && !packetFor(s); })
+      .sort(function (a, b) { return a.company.localeCompare(b.company); });
+    if (!list.length) return '';
+    return '<h2 class="rc-h">Paid, waiting on their info packet (' + list.length + ')</h2><ul class="rc-list pk-wait">' +
+      list.map(function (s) {
+        var rc = receiptItem(s.key);
+        var how = rc && rc.status === 'sent' ? 'Receipt with their packet link sent' + (rc.at ? ' ' + fmtDay(String(rc.at).slice(0, 10)) : '')
+          : 'Receipt not sent yet, so they don’t have the packet link';
+        return '<li class="pk-item"><b>' + esc(s.company) + '</b> <span class="hint">' + esc((s.tier ? s.tier + '. ' : '') + how + '.') + '</span></li>';
+      }).join('') + '</ul>';
+  }
+
+  // An in-kind sponsor never gets a receipt, so their packet link comes from
+  // here: the same page, showing their level paid by an in-kind donation, with
+  // no upgrades. Editors only; nothing is sent from here.
+  function inKindLinkBox(s) {
+    if (!canEdit() || !s.inKind || !s.tier) return '';
+    return '<div class="sp-packet sp-pklink"><h3 class="ss-h">In-kind packet link</h3>' +
+      '<p class="hint">Their page shows ' + A().esc(s.tier) + ', with their in-kind donation where the payment would be, no upgrades, and the usual form for their info.</p>' +
+      '<div class="sheet-acts"><button class="btn small" type="button" data-pklink>Get their packet link</button></div>' +
+      '<div class="pk-link" aria-live="polite"></div></div>';
+  }
+  function getPacketLink(s, btn) {
+    var out = $('#spFields .pk-link'), esc = A().esc;
+    btn.disabled = true; out.textContent = 'Making their link…';
+    A().apiPost({ action: 'sponsorPacketLink', row: s.row, company: s.company }).then(function (res) {
+      btn.disabled = false;
+      if (!res.ok || !/^https:\/\/[^\s"'<>]+$/.test(res.link || '')) { out.textContent = res.error || 'The link couldn’t be made.'; return; }
+      out.innerHTML = '<input class="pk-url" type="text" readonly value="' + esc(res.link) + '" aria-label="Their packet link">' +
+        '<button class="btn small" type="button" data-pkcopy>Copy link</button>';
+      var inp = out.querySelector('.pk-url');
+      out.querySelector('[data-pkcopy]').addEventListener('click', function (e) {
+        var b = e.currentTarget;
+        var done = function () { b.textContent = 'Copied'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(res.link).then(done, function () { inp.select(); });
+        else { inp.select(); try { document.execCommand('copy'); done(); } catch (x) { } }
+      });
+    }).catch(function () { btn.disabled = false; out.textContent = 'Could not reach the backend. Try again.'; });
+  }
+
+  // The packet on the sponsor's own detail: what they sent, and their logo.
+  function renderPacketDetail(s) {
+    var p = packetFor(s), esc = A().esc;
+    if (!p) {
+      return isIn(s) && s.paid && S.packets ? '<div class="sp-packet"><h3 class="ss-h">Info packet</h3><p class="hint">Not in yet.</p></div>' : '';
+    }
+    var html = '<div class="sp-packet"><h3 class="ss-h">Info packet in' + (p.when ? ' ' + esc(fmtDay(p.when)) : '') + '</h3>' +
+      (p.note ? '<p><b>' + esc(p.note) + '</b></p>' : '');
+    if (p.row) {
+      var P = S.packets, t = { headers: P.headers };
+      var want = [/^level/, /^business/, /^name on jersey/, /^contact name/, /^email/, /^phone/, /^website/, /^facebook/, /^instagram/,
+        /^other social/, /^banner$/, /^banner notes/, /^sponsoring/, /^write up/, /^anything else/];
+      html += '<div class="pk-logo" data-row="' + p.row.row + '" aria-live="polite"></div>' + want.map(function (re) {
+        var i = colOf(t, re), v = i < 0 ? '' : String(p.row.cells[i] || '');
+        return v ? '<p class="ss-row"><span>' + esc(P.headers[i]) + '</span>' + linkify(P.headers[i], v) + '</p>' : '';
+      }).join('');
+      var fi = colOf(t, /^files folder/), f = fi < 0 ? '' : String(p.row.cells[fi] || '');
+      if (/^https:\/\/drive\.google\.com\//.test(f)) html += '<p><a class="btn small" target="_blank" rel="noopener" href="' + esc(f) + '">Open their files in Drive</a></p>';
+    }
+    return html + '</div>';
+  }
+  function loadPacketLogo() {
+    var spot = $('#spFields .sp-packet .pk-logo');
+    if (!spot || spot.dataset.done) return;
+    spot.dataset.done = '1';
+    spot.textContent = 'Loading logo…';
+    A().apiPost({ action: 'packetLogo', row: Number(spot.dataset.row) }).then(function (res) {
+      spot.textContent = '';
+      if (!res.ok || !res.logo) { spot.textContent = res.ok ? 'No logo image in their files.' : (res.error || 'Could not load the logo.'); return; }
+      var img = document.createElement('img');
+      img.className = 'sp-logo'; img.alt = 'Logo they sent';
+      img.src = 'data:' + res.logo.mime + ';base64,' + res.logo.base64;
+      spot.appendChild(img);
+    }).catch(function () { spot.textContent = 'Could not load the logo.'; spot.dataset.done = ''; });
+  }
+
   function renderPackets() {
     var box = $('#spPackets'), esc = A().esc, P = S.packets;
-    if (!P || !P.rows.length) { box.classList.add('hidden'); return; }
+    if (!P) { box.classList.add('hidden'); return; }
+    var waitBox = packetWaiting();
+    if (!P.rows.length) {
+      box.innerHTML = waitBox;
+      box.classList.toggle('hidden', !waitBox);
+      return;
+    }
     var t = { headers: P.headers };
     var c = { when: colOf(t, /^submitted/), status: colOf(t, /^status/), level: colOf(t, /^level/), biz: colOf(t, /^business/) };
     var skip = [colOf(t, /^files folder/), colOf(t, /^files$/)];
@@ -780,7 +914,7 @@
           (onList(r) ? '<p class="hint pk-on">On the sponsor list.</p>' :
             canAdd && get(r, 'biz') ? '<p class="pk-add"><button type="button" class="btn pk-add-btn" data-row="' + r.row + '">Add to sponsor list</button> <span class="hint" aria-live="polite"></span></p>' : '') +
           body + '</details></li>';
-      }).join('') + '</ul>';
+      }).join('') + '</ul>' + waitBox;
     box.classList.remove('hidden');
     $$('#spPackets .pk-add-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1282,29 +1416,24 @@
     var then = prevOn(lastYear(h.today));
     var now = S.committed;
     var scale = Math.max(fin, now, 1);
-    var pct = function (v) { return Math.min(100, Math.round(v / scale * 1000) / 10) + '%'; };
+    var pct = function (v) { return Math.min(100, Math.round(v / scale * 1000) / 10); };
     var thenText = then == null ? 'no record this early' : (then.est ? 'about ' : '') + fmtMoney(then.amount);
+    var esc = A().esc;
 
-    // Last year's month-start waypoints as ticks on the bar.
-    var season = Number(h.season), ticks = '';
+    // Last year's month starts, for the table under the bars.
+    var season = Number(h.season);
     var marks = ['11-01', '12-01', '01-01', '02-01', '03-01', '04-01', '05-01'].map(function (md) {
       var y = md >= '07' ? season - 1 : season;
       return y + '-' + md;
     });
     var rows = marks.map(function (iso) {
       var p = prevOn(lastYear(iso));
-      if (p && p.amount > 0) ticks += '<i class="yoy-tick" style="left:' + pct(p.amount) + '" title="' + dayLabel(iso) + ' last year: ' + fmtMoney(p.amount) + '"></i>';
       var n = nowOn(iso);
       var prevCell = p == null ? 'no record' : (p.est ? 'about ' : '') + fmtMoney(p.amount);
       var nowCell = iso > h.today ? '' : (n == null ? 'not kept' : fmtMoney(n));
       return '<tr><td>' + dayLabel(iso) + '</td><td>' + nowCell + '</td><td>' + prevCell + '</td></tr>';
     }).join('');
-    if (then && then.amount > 0) ticks += '<i class="yoy-then" style="left:' + pct(then.amount) + '"></i>';
-    // The treasurer's own figures for last season, marked as such.
-    var esc = A().esc, tre = pts.filter(function (p) { return p.treasurer; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-    tre.forEach(function (p) {
-      ticks += '<i class="yoy-tick yoy-tre" style="left:' + pct(p.committed) + '" title="' + esc(dayLabel(p.date)) + ' last year: ' + fmtMoney(p.committed) + ' (treasurer\'s figure' + (p.note ? ', ' + esc(p.note) : '') + ')"></i>';
-    });
+    var tre = pts.filter(function (p) { return p.treasurer; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
     // When last year's drive hadn't started yet, say when last year reached today's total.
     var reached = tre.concat(pts.filter(function (p) { return !p.treasurer; })).sort(function (a, b) { return a.date < b.date ? -1 : 1; })
       .filter(function (p) { return now > 0 && p.committed >= now; })[0];
@@ -1314,16 +1443,38 @@
     if (prev.sheetCreated) est.push('Last year\'s sheet was started ' + dayLabel(prev.sheetCreated) + '.');
     if (pts.length) est.push('Its totals come from the sheet\'s saved versions, the first on ' + dayLabel(pts.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0].date) + ', so "about" means the nearest saved version was more than a week away.');
     else est.push('Its saved versions couldn\'t be read, so only its final total shows.');
-    if (tre.length) est.push('The treasurer\'s figures (' + tre.map(function (p) { return dayLabel(p.date); }).join(', ') + ') are marked on the bar.');
+    if (tre.length) est.push('The treasurer\'s figures: ' + tre.map(function (p) { return esc(dayLabel(p.date)) + ' ' + fmtMoney(p.committed); }).join(', ') + '.');
     est.push('This year\'s totals are kept once a day from ' + dayLabel((h.snaps && h.snaps[0] && h.snaps[0].date) || h.today) + ' on.');
+
+    // One bar: its number printed on it (inside when there's room, just past
+    // its end when it's short), nothing to hover.
+    var bar = function (cls, v, label, extra) {
+      var w = pct(v), inside = w >= 34;
+      return '<div class="yoy-row">' +
+        '<div class="yoy-lab">' + label + '</div>' +
+        '<div class="yoy-track">' +
+          '<div class="yoy-fill ' + cls + '" style="width:' + w + '%">' + (inside ? '<span class="yoy-num">' + fmtMoney(v) + '</span>' : '') + '</div>' +
+          (inside ? '' : '<span class="yoy-num out" style="left:' + w + '%">' + fmtMoney(v) + '</span>') +
+          (extra || '') +
+        '</div></div>';
+    };
+    var thenMark = '', thenNote = '';
+    if (then && then.amount > 0) {
+      var tl = pct(then.amount);
+      thenMark = '<i class="yoy-then" style="left:' + tl + '%"></i>';
+      thenNote = '<div class="yoy-thenlab" style="left:' + Math.min(tl, 62) + '%">' + (then.est ? 'about ' : '') + fmtMoney(then.amount) + ' by ' + dayLabel(h.today) + ' last year' + '</div>';
+    }
 
     box.innerHTML =
       '<summary>' +
-        '<span class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + prev.season + ' final ' + fmtMoney(fin) + '</span>' +
-        '<span class="yoy-bar" role="img" aria-label="' + h.season + ' committed ' + fmtMoney(now) + ' of last year\'s final ' + fmtMoney(fin) + '">' +
-          '<span class="yoy-fill" style="width:' + pct(now) + '"></span>' + ticks +
-        '</span>' +
+        '<span class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + prev.season + ' final ' + fmtMoney(fin) +
+        ' <span class="yoy-open">Compare years ›</span></span>' +
       '</summary>' +
+      '<div class="yoy-bars" role="img" aria-label="' + prev.season + ' sponsor money ' + fmtMoney(fin) + (then && then.amount > 0 ? ', ' + fmtMoney(then.amount) + ' by this date' : '') + '. ' + h.season + ' so far ' + fmtMoney(now) + '.">' +
+        bar('prev', fin, '<b>' + prev.season + '</b> sponsor money, the whole season' + (then && then.amount > 0 ? '. The line is where it stood on this date.' : ''), thenMark) +
+        thenNote +
+        bar('now', now, '<b>' + h.season + '</b> so far') +
+      '</div>' +
       '<table class="yoy-table"><thead><tr><th></th><th>' + h.season + '</th><th>' + prev.season + '</th></tr></thead><tbody>' + rows +
         '<tr class="yoy-final"><td>Final</td><td></td><td>' + fmtMoney(fin) + '</td></tr></tbody></table>' +
       '<p class="yoy-note">' + est.join(' ') + '</p>';
@@ -1360,6 +1511,34 @@
 
   // ---------- list ----------
 
+  // Under the name: the level in its own color, then short status pills.
+  // The money status stays the colored badge at the card's right.
+  function levelKey(t) {
+    t = String(t || '').toLowerCase();
+    return /champ/.test(t) ? 'champ' : /mvp/.test(t) ? 'mvp' : /all.?star/.test(t) ? 'allstar' : /game.?day/.test(t) ? 'gameday' : 'other';
+  }
+  function pill(text, cls) { return text ? '<span class="pill' + (cls ? ' ' + cls : '') + '">' + A().esc(text) + '</span>' : ''; }
+  function cardPills(s) {
+    var p = packetFor(s), w = welcomeFor(s), out = [];
+    if (s.tier) out.push(pill(s.tier + (s.amountText && !s.inKind ? ' ' + s.amountText : ''), 'lv lv-' + levelKey(s.tier)));
+    else if (s.tierPrev) out.push(pill('Last year: ' + s.tierPrev, 'lv-prev'));
+    if (isIn(s) && s.inKind) out.push(pill('In kind', 'kind'));
+    if (String(s.contacted).trim()) out.push(pill('Contacted' + (/^(y|yes|x|true)$/i.test(String(s.contacted).trim()) ? '' : ': ' + String(s.contacted).trim()), 'done'));
+    else if (!isIn(s)) out.push(pill('Not contacted', 'dim'));
+    if (String(s.prevContact || '').trim()) out.push(pill('Reached out last year: ' + String(s.prevContact).trim(), 'dim'));
+    if (p) out.push(pill('Packet in' + (p.when ? ' ' + fmtDay(p.when) : ''), 'done'));
+    else if (isIn(s) && s.paid && S.packets) out.push(pill('Packet waiting', 'todo'));
+    if (w) out.push(w.had ? pill('Welcomed', 'done') : pill('Needs welcome', 'todo'));
+    if (needsOwner(s)) out.push(pill('Needs a new owner', 'todo'));
+    return out.length ? '<div class="pills">' + out.join('') + '</div>' : '';
+  }
+  function cardWho(s) {
+    var esc = A().esc, bits = [];
+    if (s.owner) bits.push('<b>Owner</b> ' + esc(s.owner));
+    if (s.contact) bits.push('<b>Contact</b> ' + esc(String(s.contact).replace(/^(manager|owner)\s*:\s*/i, '')));
+    return bits.length ? '<div class="sp-who">' + bits.join('<span class="sep"> · </span>') + '</div>' : '';
+  }
+
   // The one thing to know about a sponsor, in color only when money is involved.
   function cardBadge(s) {
     var badge = A().badge;
@@ -1377,7 +1556,30 @@
     return badge('Contacted', 'muted');
   }
 
-  function stat(n, label, cls) { return '<div class="stat' + (cls ? ' ' + cls : '') + '"><b>' + n + '</b><span>' + label + '</span></div>'; }
+  // Every count is a button that shows who's behind it.
+  function stat(n, label, cls, show) {
+    return '<button type="button" class="stat stat-tap' + (cls ? ' ' + cls : '') + '" data-show="' + show + '" aria-label="Show ' + A().esc(n + ' ' + label) + '"><b>' + n + '</b><span>' + label + '</span></button>';
+  }
+  // A count was tapped: the list filtered to them, or the box where they're worked.
+  function showCount(k) {
+    if (k === 'outreach' && canEdit() && S.outreach) { goOutreachReady(); return; }
+    if (k === 'outreach') k = 'notContacted';
+    if (!FILTERS[k]) return;
+    S.filter = k; S.owner = ''; S.area = ''; S.search = '';
+    var sb = $('#spSearch'); if (sb) sb.value = '';
+    if (S.mode) goList(); else render();
+    var list = $('#spList'); if (list && list.scrollIntoView) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function goList() {
+    var b = document.querySelector('.tab-btn[data-view="sponsors"]:not([data-sp])');
+    if (b) b.click(); else if (window.Sponsors) window.Sponsors.show('');
+  }
+  // Not contacted: straight to Outreach, showing the ones ready to send.
+  function goOutreachReady() {
+    S.orFilter = { status: OR_READY, owner: '' };
+    goSub('outreach');
+    renderOutreach();
+  }
 
   function render() {
     if (!S.book) return;
@@ -1392,13 +1594,14 @@
     // Dollar amounts first and wider, so five-digit totals fit as well as three.
     $('#spSummary').classList.toggle('k3', kind.length > 0);
     $('#spSummary').innerHTML =
-      stat(fmtMoney(committed), 'committed', 'money') +
-      stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money') +
-      (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money') : '') +
-      stat(inn.length, S.book.season + ' sponsors') +
-      stat(all.filter(FILTERS.notContacted).length, 'not contacted') +
-      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet') +
-      stat(all.filter(needsOwner).length, 'need a new owner');
+      stat(fmtMoney(committed), 'committed', 'money', 'committed') +
+      stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money', 'paidCash') +
+      (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money', 'inKind') : '') +
+      stat(inn.length, S.book.season + ' sponsors', '', 'signed') +
+      stat(all.filter(FILTERS.notContacted).length, 'not contacted', '', 'outreach') +
+      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet', '', 'lapsed') +
+      stat(all.filter(needsOwner).length, 'need a new owner', '', 'needsOwner');
+    $$('#spSummary [data-show]').forEach(function (b) { b.addEventListener('click', function () { showCount(b.dataset.show); }); });
     S.committed = committed;
     renderYoY();
     $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
@@ -1436,19 +1639,15 @@
         (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
+          cardPills(s) + cardWho(s) +
           facts([
-            s.tier ? s.tier + (s.amountText ? ' ' + s.amountText : '') : (s.tierPrev ? 'Last year: ' + s.tierPrev : ''),
-            s.owner ? 'Owner: ' + s.owner : '',
             s.area || '',
-            String(s.prevContact || '').trim() ? 'Reached out last year: ' + s.prevContact : '',
-            needsOwner(s) ? 'Needs a new owner' : '',
-            String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
             s.team ? 'Team: ' + s.team : '',
-            S.packetKeys && S.packetKeys[s.key] ? 'Info packet in' : '',
+            packetNote(s),
             upgradeFor(s) ? 'Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay' : ''
           ]) +
           (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
-          (s.notes ? '<div class="sub sp-note">' + esc(s.notes) + '</div>' : '') +
+          (s.notes ? '<details class="sp-more"><summary>Notes</summary><div class="sp-note-full">' + esc(s.notes) + '</div></details>' : '') +
         '</div>' +
         // The receipt button sits on the right, right under the status.
         (cardReceipt(s) ? '<div class="sp-card-side">' + cardBadge(s) + cardReceipt(s) + '</div>' : cardBadge(s)) +
@@ -1456,6 +1655,10 @@
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
+    // Opening the notes stays on the card.
+    $$('#spList .sp-more').forEach(function (d) {
+      ['click', 'keydown'].forEach(function (ev) { d.addEventListener(ev, function (e) { e.stopPropagation(); }); });
+    });
     $$('#spList .sp-card-rc').forEach(function (box) {
       // The receipt button and its preview stay on the card: no detail opens.
       ['click', 'keydown'].forEach(function (ev) { box.addEventListener(ev, function (e) { e.stopPropagation(); }); });
@@ -1538,10 +1741,12 @@
     });
     key.sort(function (a, b) { return a.k - b.k; });
     var fact = function (f) { return '<div class="sp-fact' + (/^notes?$/i.test(f.h) || f.v.length > 60 ? ' full' : '') + '"><dt>' + esc(f.h) + '</dt><dd>' + linkify(f.h, f.v) + '</dd></div>'; };
-    $('#spFields').innerHTML = (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
+    $('#spFields').innerHTML = inKindLinkBox(s) + renderPacketDetail(s) + (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
       '<details class="sp-all"><summary>Everything on the sheet (' + (key.length + rest.length) + ')</summary>' +
       (rest.length ? '<dl class="sp-facts">' + rest.map(fact).join('') + '</dl>' : '') +
       '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p></details>';
+    loadPacketLogo();
+    var lb = $('#spFields [data-pklink]'); if (lb) lb.addEventListener('click', function () { getPacketLink(s, lb); });
     renderMarks(s, []);
     renderBanner(s);
     showEditActs(s);
@@ -1771,6 +1976,13 @@
     $('#spNudges').addEventListener('click', function (e) { var b = e.target.closest('button[data-nd]'); if (b) nudgeAct(b); });
     $('#spOutreach').addEventListener('click', function (e) { var b = e.target.closest('button[data-or]'); if (b) outreachAct(b); });
     $('#spOutreach').addEventListener('change', outreachChange);
+    $('#spWelcome').addEventListener('click', function (e) { var b = e.target.closest('button[data-wl]'); if (b) welcomeAct(b); });
+    $('#spWelcome').addEventListener('change', function (e) {
+      var t = e.target; if (!t.matches('select[data-wl]')) return;
+      S.wlLast = '';
+      if (t.dataset.wl === 'sender') S.wlSender = t.value; else S.wlFilter = t.value;
+      renderWelcome();
+    });
     $('#spClose').addEventListener('click', close);
     $('#detailScrim').addEventListener('click', function () { if (S.current) close(); });
     $('#spSave').addEventListener('click', saveTeam);
@@ -1800,11 +2012,26 @@
     }).catch(function () { /* the box stays hidden */ });
   }
 
+  function markSentBack() {
+    var h = SENT_BACK; SENT_BACK = '';
+    A().apiPost({ action: 'allowSent', sent: h }).then(function (r) {
+      var t = r.ok ? '✓ ' + (r.message || 'Marked as sent.') : (r.error || 'That send could not be marked. Tap I sent it on the row.');
+      S.orLast = '<span class="' + (r.ok ? 'sp-done' : 'or-flag hold') + '">' + A().esc(t) + '</span>';
+      S.wlLast = r.ok ? r.message : '';
+      S.orOpen = {}; S.wlOpen = {};
+      loadOutreach(); loadWelcome();
+    }).catch(function () { S.orLast = 'Could not reach the backend to mark it. Tap I sent it on the row.'; loadOutreach(); });
+  }
+
   function orKey(i) { return i.row + '|' + i.company; }
+  // Not contacted, has an email, nothing holding it, not sent: ready to go.
+  var OR_READY = '__ready';
+  function orReady(i) { return i.status === 'Not contacted' && !!i.email && !i.hold.length && !i.sent; }
   function orShown() {
     var O = S.outreach, f = S.orFilter || { status: 'Not contacted', owner: '' };
     return O.items.filter(function (i) {
-      if (f.status && i.status !== f.status) return false;
+      if (f.status === OR_READY) { if (!orReady(i)) return false; }
+      else if (f.status && i.status !== f.status) return false;
       if (f.owner === '-') return !i.owner;
       if (f.owner && i.owner !== f.owner) return false;
       return true;
@@ -1835,36 +2062,45 @@
     });
     owners.sort();
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(label) + '</option>'; };
-    var sender = orSender();
+    var sender = orSender(), compose = !!(sender && sender.how === 'compose'), allow = !!(sender && sender.how === 'allow');
+    var oneByOne = compose || allow;
     var shown = orShown(), picked = orPicked();
     var lim = Math.min(O.batchMax, O.dayLeft);
     var html = '<h3>Outreach · ' + notYet.length + ' not contacted yet' + (noMail ? ', ' + noMail + ' with no email' : '') + '</h3>' +
-      '<p class="hint">Each business gets its own email with only its address in To. Nothing goes out until you tap Send twice. ' +
-      'Sent rows are marked Contacted on the sheet.' + (O.packet ? ' The packet PDF is attached.' : ' The packet isn’t attached; the email links to the levels on the league site.') + '</p>' +
+      (allow
+        ? '<p class="hint">Each email goes from your own Gmail, signed by you. The first time, Google asks you to Allow it once (only "send email as you"). Tap Send on a row, then Back to the app on the page that opens. Your emails link to the levels on the league site.</p>'
+        : compose
+        ? '<p class="hint">Each email opens filled in, in your own Gmail, so it comes from you and is signed by you. Press Send there, then tap I sent it here so the sheet shows Contacted. Your emails link to the levels on the league site.</p>'
+        : '<p class="hint">Each business gets its own email with only its address in To. Nothing goes out until you tap Send twice. ' +
+          'Sent rows are marked Contacted on the sheet.' + (O.packet ? ' The packet PDF is attached.' : ' The packet isn’t attached; the email links to the levels on the league site.') + '</p>') +
       (O.linksOk ? '' : '<p class="or-flag hold">The sponsor page and sign-up links aren’t set, so nothing can go out.</p>') +
       '<div class="or-top">' +
         '<label>From <select data-or="sender">' + O.senders.map(function (x) {
           return '<option value="' + esc(x.id) + '"' + (sender && x.id === sender.id ? ' selected' : '') + (x.ok ? '' : ' disabled') + '>' + esc(x.label) + (x.ok ? '' : ' (not set up)') + '</option>';
         }).join('') + '</select></label>' +
-        '<label>Status <select data-or="status">' + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
+        '<label>Status <select data-or="status">' + opt(OR_READY, 'Ready to send', f.status) + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
         '<label>Owner <select data-or="owner">' + opt('', 'Anyone', f.owner) + opt('-', 'No owner', f.owner) + owners.map(function (s) { return opt(s, s, f.owner); }).join('') + '</select></label>' +
       '</div>' +
       (sender ? '' : '<p class="or-flag hold">' + esc(O.senders.map(function (x) { return x.why; }).filter(Boolean).join(' ')) + '</p>') +
-      '<div class="rc-acts"><button class="btn small" type="button" data-or="pick">Tick the first ' + lim + ' ready</button>' +
-      '<button class="btn small" type="button" data-or="clear">Untick all</button></div>' +
+      (oneByOne ? '' : '<div class="rc-acts"><button class="btn small" type="button" data-or="pick">Tick the first ' + lim + ' ready</button>' +
+      '<button class="btn small" type="button" data-or="clear">Untick all</button></div>') +
       '<ul class="or-list">' + (shown.length ? shown.map(function (i) {
         var k = orKey(i), held = !!(i.hold.length || i.sent), on = !held && !!O.picked[k];
         return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row">' +
-          '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>' +
+          (oneByOne ? '' : '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>') +
           '<div class="or-main"><b>' + esc(i.company) + '</b>' +
-          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet || 'there') + ',' + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
+          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet) + ',' + (i.past === 'last' ? ' · sponsored last season' : i.past ? ' · past sponsor' : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
           (i.sent ? '<p class="or-flag">Emailed ' + esc(fmtDay(i.sent.at)) + '.</p>' : '') +
           i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('') +
           i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('') +
           '</div>' + (i.email && !i.sent ? '<button class="btn small" type="button" data-or="preview">Preview</button>' : '') +
-          '</div><div class="rc-preview hidden"></div></li>';
+          '</div>' + (oneByOne && !held && i.email && O.linksOk ? '<div class="rc-acts">' + (S.orOpen && S.orOpen[k]
+            ? '<button class="btn small primary" type="button" data-or="done">I sent it</button>' + (S.orOpen[k].allow ? '' : gmailLinks(S.orOpen[k]))
+            : allow ? '<button class="btn small primary" type="button" data-or="allow">' + (i.look.length ? 'Looked, send from my Gmail' : 'Send from my Gmail') + '</button>'
+            : '<button class="btn small primary" type="button" data-or="open">' + (i.look.length ? 'Looked, open in Gmail' : 'Open in Gmail') + '</button>') + '</div>' : '') +
+          '<div class="rc-preview hidden"></div></li>';
       }).join('') : '<li class="or-item hint">Nobody matches these filters.</li>') + '</ul>' +
-      '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span></div>' +
+      (oneByOne ? '' : '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span></div>') +
       '<div class="rc-msg or-msg" role="status">' + (S.orLast || '') + '</div>';
     box.innerHTML = html;
     orFoot();
@@ -1928,6 +2164,54 @@
       }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
       return;
     }
+    if (k === 'allow') {
+      var al = btn.closest('.or-item'), ai = O.items.filter(function (i) { return orKey(i) === al.dataset.k; })[0], ak = al.dataset.k;
+      if (!ai) return;
+      if (!btn.dataset.armed) {
+        btn.dataset.armed = '1'; btn.dataset.was = btn.textContent;
+        btn.textContent = 'Tap again to send to ' + ai.email;
+        setTimeout(function () { if (btn.isConnected && btn.dataset.armed && !btn.disabled) { delete btn.dataset.armed; btn.textContent = btn.dataset.was; } }, 6000);
+        return;
+      }
+      var aw = gmailWindow();
+      btn.disabled = true; msg.textContent = 'Getting it ready…';
+      A().apiPost({ action: 'outreachTicket', row: ai.row, company: ai.company, email: ai.email, looked: ai.look.length > 0 }).then(function (r) {
+        if (!r.ok || !r.open) { if (aw) aw.close(); btn.disabled = false; delete btn.dataset.armed; btn.textContent = btn.dataset.was; msg.textContent = r.error || 'That did not go through. Nothing was sent.'; return; }
+        S.orOpen = S.orOpen || {}; S.orOpen[ak] = { allow: true, open: r.open };
+        var went = sendWindowGo(aw, r.open);
+        S.orLast = esc(went ? 'Sending ' + ai.company + ' from your Gmail in the new tab. Tap Back to the app there when it says Sent.'
+                            : 'Your browser blocked the new tab. Allow pop-ups for this site and tap Send again.');
+        if (!went) delete S.orOpen[ak];
+        renderOutreach();
+      }).catch(function () { if (aw) aw.close(); btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent.'; });
+      return;
+    }
+    if (k === 'open' || k === 'done') {
+      var ol = btn.closest('.or-item'), oi = O.items.filter(function (i) { return orKey(i) === ol.dataset.k; })[0], ok2 = ol.dataset.k;
+      if (!oi) return;
+      S.orOpen = S.orOpen || {};
+      if (k === 'open') {
+        var win = gmailWindow();
+        btn.disabled = true; msg.textContent = 'Filling in the email…';
+        A().apiPost({ action: 'outreachCompose', row: oi.row, company: oi.company, email: oi.email, looked: oi.look.length > 0 }).then(function (r) {
+          if (!r.ok) { if (win) win.close(); btn.disabled = false; msg.textContent = r.error || 'Could not fill in the email.'; return; }
+          S.orOpen[ok2] = r;
+          var went = gmailGo(win, r);
+          S.orLast = esc((went ? 'Opened ' + oi.company + ' in your Gmail.' : 'Tap Open in Gmail again for ' + oi.company + '.') + ' Press Send there, then tap I sent it.');
+          renderOutreach();
+        }).catch(function () { if (win) win.close(); btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+        return;
+      }
+      btn.disabled = true; msg.textContent = 'Saving…';
+      A().apiPost({ action: 'outreachSent', row: oi.row, company: oi.company, email: oi.email }).then(function (r) {
+        if (!r.ok) { btn.disabled = false; msg.textContent = r.error || 'That did not save.'; return; }
+        delete S.orOpen[ok2];
+        S.orLast = '<span class="sp-done">✓ ' + esc(r.message) + '</span>';
+        msg.innerHTML = S.orLast;
+        load(true);
+      }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
     if (k === 'send') {
       var list = orPicked(), sd = orSender();
       if (!list.length || !sd) return;
@@ -1954,6 +2238,172 @@
     }
   }
 
+  // ---------- welcome emails ----------
+  // The website's thank-you and next steps, for sponsors who didn't sign up
+  // on the website (checks, and anyone added by hand). Each one waits for
+  // Preview and two taps on Send; "Already had it" marks one without sending.
+
+  function loadWelcome() {
+    if (S.book && !canEdit()) { var b = $('#spWelcome'); if (b) b.classList.add('hidden'); return; }
+    side({ action: 'welcomeList' }, function (res) {
+      if (!res || !res.ok || !canEdit()) return;
+      S.welcome = res;
+      renderWelcome();
+      render();
+    }).catch(function () { /* the box stays hidden */ });
+  }
+  function welcomeFor(s) {
+    if (!s || !S.welcome) return null;
+    return S.welcome.items.filter(function (i) { return i.row === s.row && i.company === s.company; })[0] || null;
+  }
+  function welcomeFact(s) {
+    var w = welcomeFor(s);
+    if (!w) return '';
+    if (!w.had) return 'Needs welcome email';
+    return w.had.how === 'website' ? 'Welcome email: from the website' : w.had.how === 'sent' ? 'Welcome email sent ' + fmtDay(w.had.at) : 'Welcome email: marked done';
+  }
+  function welcomeSender() {
+    var W = S.welcome, okd = W.senders.filter(function (x) { return x.ok; });
+    return W.senders.filter(function (x) { return x.id === S.wlSender && x.ok; })[0] || okd[0] || null;
+  }
+  function renderWelcome() {
+    var box = $('#spWelcome'), esc = A().esc, W = S.welcome;
+    if (!box) return;
+    if (!W || !canEdit()) { box.classList.add('hidden'); syncSpTabs(); return; }
+    box.classList.remove('hidden');
+    var f = S.wlFilter || 'needs', sender = welcomeSender(), compose = !!(sender && sender.how === 'compose'), allow = !!(sender && sender.how === 'allow');
+    var shown = W.items.filter(function (i) { return f === 'all' || (f === 'needs' ? !i.had : !!i.had); });
+    var opt = function (v, label) { return '<option value="' + v + '"' + (v === f ? ' selected' : '') + '>' + label + '</option>'; };
+    box.innerHTML = '<h3>Welcome emails · ' + W.needs + ' sponsor' + (W.needs === 1 ? '' : 's') + ' still need' + (W.needs === 1 ? 's' : '') + ' one</h3>' +
+      '<p class="hint">The thank-you and next steps the website sends, for sponsors who signed up any other way. Website signups already got it. ' +
+        (allow ? 'Each one goes from your own Gmail, signed by you, after you Allow it once. Tap Send twice, then Back to the app on the page that opens.'
+          : compose ? 'Each one opens filled in, in your own Gmail, from you and signed by you. Press Send there, then tap I sent it here.' : 'Nothing goes out until you tap Send twice.') + '</p>' +
+      (S.wlLast ? '<p class="sp-done">✓ ' + esc(S.wlLast) + '</p>' : '') +
+      '<div class="or-top">' +
+        '<label>From <select data-wl="sender">' + W.senders.map(function (x) {
+          return '<option value="' + esc(x.id) + '"' + (sender && x.id === sender.id ? ' selected' : '') + (x.ok ? '' : ' disabled') + '>' + esc(x.label) + (x.ok ? '' : ' (not set up)') + '</option>';
+        }).join('') + '</select></label>' +
+        '<label>Show <select data-wl="filter">' + opt('needs', 'Needs it') + opt('had', 'Had it') + opt('all', 'Everyone') + '</select></label>' +
+      '</div>' +
+      '<ul class="or-list">' + (shown.length ? shown.map(function (i) {
+        var k = i.row + '|' + i.company, can = !i.had && !i.hold.length && !!sender;
+        var had = i.had ? (i.had.how === 'website' ? 'Signed up on the website, so the website sent it.'
+          : i.had.how === 'sent' ? 'Sent ' + fmtDay(i.had.at) + '.' : 'Marked as already welcomed ' + fmtDay(i.had.at) + '.') : '';
+        return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row"><div class="or-main"><b>' + esc(i.company) + '</b>' +
+          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet) + ',' +
+            (i.tier ? ' · ' + esc(i.tier) : '') + ' · ' + (i.paid ? 'paid' : 'not paid yet') + '</div>' +
+          (had ? '<p class="or-flag">' + esc(had) + '</p>' : '') +
+          (i.had ? '' : i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('') +
+            i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('')) +
+          '</div></div>' +
+          (i.had ? '' : '<div class="rc-acts">' +
+            (i.email ? '<button class="btn small" type="button" data-wl="preview">Preview</button>' : '') +
+            (can && (compose || allow) && S.wlOpen && S.wlOpen[k] ? '<button class="btn small primary" type="button" data-wl="done">I sent it</button>' + (S.wlOpen[k].allow ? '' : gmailLinks(S.wlOpen[k])) : '') +
+            (can && compose && !(S.wlOpen && S.wlOpen[k]) ? '<button class="btn small primary" type="button" data-wl="open">' + (i.look.length ? 'Looked, open in Gmail' : 'Open in Gmail') + '</button>' : '') +
+            (can && !compose && !(allow && S.wlOpen && S.wlOpen[k]) ? '<button class="btn small primary" type="button" data-wl="send">' + (i.look.length ? 'Looked, send' : 'Send') + (allow ? ' from my Gmail' : '') + '</button>' : '') +
+            '<button class="btn small" type="button" data-wl="mark">Already had it</button></div>') +
+          '<div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
+      }).join('') : '<li class="or-item hint">' + (f === 'needs' ? 'Every sponsor has had one.' : 'Nobody here.') + '</li>') + '</ul>';
+    syncSpTabs();
+  }
+  function welcomeAct(btn) {
+    var W = S.welcome, esc = A().esc, li = btn.closest('.or-item'), k = btn.dataset.wl;
+    var it = W.items.filter(function (i) { return i.row + '|' + i.company === li.dataset.k; })[0];
+    var msg = li.querySelector('.rc-msg'), sender = welcomeSender();
+    if (!it) return;
+    if (k === 'preview') {
+      var pv = rowPreview(li);
+      msg.textContent = 'Building the preview…';
+      A().apiPost({ action: 'welcomePreview', row: it.row, company: it.company }).then(function (res) {
+        msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+        if (!res.ok) return;
+        framePane(pv, res.subject, res.html, '',
+          '<dl class="or-side"><dt>To</dt><dd>' + esc(res.to || 'no address') + '</dd>' +
+          '<dt>Greeting</dt><dd>Hi ' + esc(res.greet) + ',</dd>' +
+          '<dt>Contact</dt><dd>' + esc(res.contact || 'none on the sheet') + '</dd>' +
+          '<dt>From</dt><dd>' + esc(sender ? sender.label : 'nobody set up yet') + '</dd></dl>');
+      }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
+    if (k === 'open' || k === 'done') {
+      var wk = li.dataset.k, body0 = { action: 'welcomeSend', row: it.row, company: it.company, email: it.email, sender: 'mine', looked: it.look.length > 0 };
+      S.wlOpen = S.wlOpen || {};
+      var win = k === 'open' ? gmailWindow() : null;
+      if (k === 'done') body0.composed = true;
+      btn.disabled = true; msg.textContent = k === 'open' ? 'Filling in the email…' : 'Saving…';
+      A().apiPost(body0).then(function (r) {
+        if (!r.ok || (k === 'open' && !r.compose)) { if (win) win.close(); btn.disabled = false; msg.textContent = r.error || 'That did not go through.'; return; }
+        if (k === 'open') {
+          S.wlOpen[wk] = r.compose;
+          var went = gmailGo(win, r.compose);
+          S.wlLast = (went ? 'Opened ' + it.company + ' in your Gmail.' : 'Tap Open in Gmail again for ' + it.company + '.') + ' Press Send there, then tap I sent it.';
+          renderWelcome();
+          return;
+        }
+        delete S.wlOpen[wk];
+        S.wlLast = r.message;
+        loadWelcome();
+      }).catch(function () { if (win) win.close(); btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
+    if (!btn.dataset.armed) {
+      $$('#spWelcome [data-armed]').forEach(function (b) { delete b.dataset.armed; b.textContent = b.dataset.was; });
+      btn.dataset.armed = '1'; btn.dataset.was = btn.textContent;
+      btn.textContent = k === 'send' ? 'Tap again to send to ' + it.email : 'Tap again: already had it';
+      setTimeout(function () { if (btn.isConnected && btn.dataset.armed && !btn.disabled) { delete btn.dataset.armed; btn.textContent = btn.dataset.was; } }, 6000);
+      return;
+    }
+    var viaAllow = k === 'send' && sender && sender.how === 'allow', aw = viaAllow ? gmailWindow() : null;
+    btn.disabled = true; msg.textContent = k === 'send' ? (viaAllow ? 'Getting it ready…' : 'Sending…') : 'Saving…';
+    var body = { action: 'welcomeSend', row: it.row, company: it.company, email: it.email };
+    if (k === 'mark') body.mark = true;
+    else { body.sender = sender ? sender.id : ''; body.looked = it.look.length > 0; }
+    A().apiPost(body).then(function (r) {
+      if (!r.ok || (viaAllow && !r.open)) { if (aw) aw.close(); btn.disabled = false; delete btn.dataset.armed; btn.textContent = btn.dataset.was; msg.textContent = r.error || 'That did not go through.'; return; }
+      if (viaAllow) {
+        var went = sendWindowGo(aw, r.open);
+        S.wlOpen = S.wlOpen || {};
+        if (went) S.wlOpen[li.dataset.k] = { allow: true };
+        S.wlLast = went ? 'Sending ' + it.company + ' from your Gmail in the new tab. Tap Back to the app there when it says Sent.'
+                        : 'Your browser blocked the new tab. Allow pop-ups for this site and tap Send again.';
+        renderWelcome();
+        return;
+      }
+      S.wlLast = r.message;
+      loadWelcome();
+    }).catch(function () { if (aw) aw.close(); btn.disabled = false; delete btn.dataset.armed; btn.textContent = btn.dataset.was; msg.textContent = 'Could not reach the backend. Refresh before trying again.'; });
+  }
+
+  // ---------- emails sent from your own Gmail ----------
+  // A board member who isn't the script owner sends as themselves: the app
+  // fills the email in, it opens in their own Gmail, and they press Send there.
+  function gmailUrl(c) {
+    return 'https://mail.google.com/mail/?' + (c.from ? 'authuser=' + encodeURIComponent(c.from) + '&' : '') +
+      'view=cm&fs=1&to=' + encodeURIComponent(c.to) + '&su=' + encodeURIComponent(c.subject) + '&body=' + encodeURIComponent(c.text);
+  }
+  function mailtoUrl(c) {
+    return 'mailto:' + encodeURIComponent(c.to) + '?subject=' + encodeURIComponent(c.subject) + '&body=' + encodeURIComponent(c.text);
+  }
+  // Opened on the tap itself, so the browser doesn't block it; filled in once the email is ready.
+  function gmailWindow() {
+    try { var w = window.open('', '_blank'); if (w) w.opener = null; return w || null; } catch (e) { return null; }
+  }
+  function gmailGo(win, c) {
+    if (win && !win.closed) { try { win.location.href = gmailUrl(c); return true; } catch (e) { /* use the link */ } }
+    return false;
+  }
+  // The sender's page, in the tab opened on the tap (so a pop-up blocker lets it through).
+  function sendWindowGo(win, url) {
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_\-]+\/exec\?t=[A-Za-z0-9_\-]+&s=[A-Za-z0-9_\-]+$/.test(String(url))) { if (win) win.close(); return false; }
+    if (win && !win.closed) { try { win.location.href = url; return true; } catch (e) { /* fall through */ } }
+    return false;
+  }
+  function gmailLinks(c) {
+    var esc = A().esc;
+    return '<a class="btn small" target="_blank" rel="noopener" href="' + esc(gmailUrl(c)) + '">Open in Gmail again</a>' +
+      '<a class="btn small" href="' + esc(mailtoUrl(c)) + '">Use my mail app</a>';
+  }
+
   // ---------- one-tap jobs ----------
   // The three things the board does most sit at the top of the Sponsors tab:
   // add a sponsor, mark one paid, add a note. Each is a tap, a name and a
@@ -1972,9 +2422,24 @@
       b.setAttribute('aria-pressed', String(S.quick === k));
     });
     var n = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
+    var wl = S.welcome ? S.welcome.items.filter(function (i) { return !i.had; }).length : 0;
+    var pk = S.packets ? sponsors().filter(FILTERS.packetWaiting).length : 0;
+    var or = S.outreach ? S.outreach.items.filter(orReady).length : 0;
+    var plural = function (k, one, many) { return k + ' ' + (k === 1 ? one : many); };
+    var links = [
+      n ? '<button class="linkish" type="button" data-q="receipts">' + plural(n, 'receipt', 'receipts') + ' ready to check and send ›</button>' : '',
+      wl ? '<button class="linkish" type="button" data-q="welcome">' + plural(wl, 'welcome email', 'welcome emails') + ' to send ›</button>' : '',
+      or ? '<button class="linkish" type="button" data-q="outreach">' + plural(or, 'business', 'businesses') + ' ready for outreach ›</button>' : '',
+      pk ? '<button class="linkish" type="button" data-q="packets">' + plural(pk, 'paid sponsor', 'paid sponsors') + ' waiting on their packet ›</button>' : '',
+      S.toOrder ? '<button class="linkish" type="button" data-q="banners">' + plural(S.toOrder, 'banner', 'banners') + ' to order ›</button>' : ''
+    ].filter(Boolean);
     var todo = $('#spQuickTodo');
-    todo.classList.toggle('hidden', !n || !ed);
-    todo.innerHTML = n ? '<button class="linkish" type="button" data-q="receipts">' + n + ' receipt' + (n === 1 ? '' : 's') + ' ready to check and send ›</button>' : '';
+    todo.classList.toggle('hidden', !links.length || !ed);
+    todo.innerHTML = links.join('');
+    if (ed && !S.toOrderAsked && window.Season && window.Season.counts) {
+      S.toOrderAsked = true;
+      window.Season.counts().then(function (c) { if (c && c.order !== S.toOrder) { S.toOrder = c.order; renderQuick(); } }).catch(function () { });
+    }
     if (S.quick && !ed) closeQuick();
   }
   function goSub(sub) {
@@ -1989,6 +2454,16 @@
   function quickTap(k) {
     if (k === 'add') { closeQuick(); goSub('add'); setTimeout(function () { var f = $('#spa_company'); if (f) f.focus(); }, 50); return; }
     if (k === 'receipts') { closeQuick(); goSub('receipts'); return; }
+    if (k === 'welcome') { closeQuick(); S.wlFilter = 'needs'; goSub('welcome'); renderWelcome(); return; }
+    if (k === 'outreach') { closeQuick(); goOutreachReady(); return; }
+    if (k === 'packets') { closeQuick(); showCount('packetWaiting'); return; }
+    if (k === 'banners') {
+      closeQuick();
+      var sb = document.querySelector('.tab-btn[data-view="season"]');
+      if (window.Season && window.Season.filter) window.Season.filter('order');
+      if (sb) sb.click();
+      return;
+    }
     if (S.quick === k) { closeQuick(); return; }
     S.quick = k; S.quickRow = 0; S.quickQ = '';
     $$('#spQuick .sp-q').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.q === k)); });
@@ -2095,7 +2570,7 @@
   // Receipts, Follow-ups, Add sponsor and Record payment sit in the top bar
   // next to Sponsors. Each shows only its own box, opened; Sponsors shows the
   // list without them. A tab shows only when its box can be used.
-  var SP_BOX = { receipts: '#spReceipts', followups: '#spNudges', outreach: '#spOutreach', add: '#spAddBox', pay: '#spPayBox' };
+  var SP_BOX = { receipts: '#spReceipts', followups: '#spNudges', outreach: '#spOutreach', welcome: '#spWelcome', add: '#spAddBox', pay: '#spPayBox' };
   function applyMode() {
     var view = $('#view-sponsors'), mode = SP_BOX[S.mode] ? S.mode : '';
     if (!view) return;
@@ -2132,7 +2607,7 @@
       if (!S.book) load(); else render();
     },
     reset: function () {
-      S.book = null; S.outreach = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
+      S.book = null; S.outreach = null; S.welcome = null; S.orOpen = null; S.wlOpen = null; S.teams = null; S.current = null; S.history = null; S.committed = null; S.early = false;
       $('#spYoY').classList.add('hidden'); $('#spYoY').innerHTML = '';
       $('#spList').innerHTML = ''; $('#spSummary').innerHTML = ''; $('#spOther').innerHTML = ''; $('#spSource').innerHTML = ''; $('#spWeb').classList.add('hidden'); S.web = null;
     }

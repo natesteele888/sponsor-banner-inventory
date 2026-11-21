@@ -7,8 +7,10 @@ deployment checklist are in [README.md](README.md) — read that first.
 Styled to match the other Dashboard tools: the shared navy header card
 (lybs-reporting `shared/app-header.css`, copied into style.css as `.top` /
 `.hbtn`) and the tokens from lybs-reporting `shared/uniform-theme.css`, light
-by default and dark with the device. Each card has one colored status badge;
-everything else is a plain facts line. Keep it that way: no rows of pills. Linked from the Dashboard's Board nav
+by default and dark with the device. Each card has one colored status badge
+(money: paid, receipt). Under the name (Nate, Nov 21): the level as a colored
+pill, short status pills, owner and contact in bold, notes behind a tap. Every
+count is a button that shows who's behind it. Linked from the Dashboard's Board nav
 (`lybs-reporting/app.js` NAV_CATEGORIES), admin-gated for now.
 
 ## Nate AI Brain (shared memory)

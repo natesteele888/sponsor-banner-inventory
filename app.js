@@ -39,6 +39,7 @@
       });
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (res && res.ok === false && NO_ACCESS.test(String(res.error || ''))) lockOut(true);
+      if (res && res.ok === false && res.boardView) boardView();
       // Sponsors-only accounts (no Dashboard role): no links to the Dashboard.
       if (res && res.ok) document.body.classList.toggle('no-dash', res.dashboard === false);
       return res;
@@ -80,6 +81,35 @@
   }
 
   var NO_ACCESS = /does not have board access/i;
+
+  // Board members outside the sponsorship leads: one read-only summary
+  // (who's in, who's paid, outreach as counts) in place of every tab.
+  var boardShown = false;
+  function boardView() {
+    if (boardShown) return;
+    boardShown = true;
+    forgetKept();
+    document.body.classList.add('board-view');
+    $('#boardView').classList.remove('hidden');
+    $('#boardBody').textContent = 'Loading…';
+    apiPost({ action: 'sponsorBoardView' }).then(function (res) {
+      if (!res.ok) { $('#boardBody').textContent = res.error || 'Could not load the sponsors.'; return; }
+      $('#boardBody').innerHTML = boardHtml(res);
+    }).catch(function () { $('#boardBody').textContent = "Can't reach the sponsor list. Check your signal and reload."; });
+  }
+  function boardHtml(res) {
+    var n = res.counts || {}, list = res.sponsors || [];
+    var stat = function (v, label) { return '<div class="stat"><b>' + (Number(v) || 0) + '</b><span>' + esc(label) + '</span></div>'; };
+    var line = 'We’ve reached out to ' + (n.waiting || 0) + ' more ' + (n.waiting === 1 ? 'business' : 'businesses') +
+      ' and are waiting to hear back, with ' + (n.toContact || 0) + ' still to contact.';
+    var rows = list.map(function (s) {
+      var tag = s.inKind ? '<span class="pill kind">In kind</span>' : s.paid ? '<span class="pill done">Paid</span>' : '<span class="pill todo">Not paid yet</span>';
+      return '<li><b>' + esc(s.company) + '</b>' + (s.level ? '<span class="bv-lv">' + esc(s.level) + '</span>' : '') + tag + '</li>';
+    }).join('');
+    return '<div class="season-summary bv-stats">' + stat(n.sponsors, 'sponsors') + stat(n.paid, 'paid') + (n.inKind ? stat(n.inKind, 'in kind') : '') + stat(n.waiting, 'waiting to hear') + '</div>' +
+      '<p class="bv-line">' + esc(line) + '</p>' +
+      (rows ? '<ul class="bv-list">' + rows + '</ul>' : '<p class="hint">No ' + esc(res.season || '') + ' sponsors yet.</p>');
+  }
   function lockOut(on) {
     if (on) forgetKept();
     document.body.classList.toggle('locked', !!on);
@@ -141,7 +171,8 @@
       setSignedIn(user);
       $('#whoAmI').textContent = user ? 'Signed in as ' + (user.email || user.displayName || '') : '';
       lockOut(false);
-      document.body.classList.remove('no-dash');
+      document.body.classList.remove('no-dash', 'board-view');
+      boardShown = false; $('#boardView').classList.add('hidden');
       if (!user) {
         forgetKept();
         state.banners = [];

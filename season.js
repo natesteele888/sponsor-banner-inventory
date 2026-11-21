@@ -15,23 +15,35 @@
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
-  var S = { rows: [], statuses: [], loaded: false, loading: null, filter: 'all', current: null, entry: false, skipPop: false };
+  var S = { rows: [], statuses: [], order: null, loaded: false, loading: null, filter: 'all', current: null, entry: false, skipPop: false };
 
   function isMatchNeeded(r) { return String(r.company).indexOf('Needs a match') === 0; }
   // No payment, no email and no banner (Nate's rule).
   function isPaid(r) { return String(r.paid).toUpperCase() === 'TRUE'; }
   function isUnpaid(r) { return !isMatchNeeded(r) && !isPaid(r); }
-  function isWaiting(r) { return !isMatchNeeded(r) && isPaid(r) && r.requestStatus !== 'Info received'; }
+  // A sponsor's second banner (like an in-kind sponsor's extra one): its own
+  // wording, design and order status, but not a sponsor of its own.
+  function isExtra(r) { return !!r.extraOf; }
+  function isSponsor(r) { return !isExtra(r); }
+  function isWaiting(r) { return !isExtra(r) && !isMatchNeeded(r) && isPaid(r) && r.requestStatus !== 'Info received'; }
   function isOrder(r) { return r.bannerStatus === 'Order new' || r.bannerStatus === 'Reprint needed'; }
   function isStock(r) { return r.bannerStatus === 'Use banner from stock' || !!r.assignedBannerId; }
+  // From their info packet: a print-ready file came in, or the banner still needs designing.
+  function isReady(r) { return isOrder(r) && isPaid(r) && r.design === 'File in hand, ready to order'; }
+  function isDesign(r) { return isOrder(r) && isPaid(r) && (r.design === 'Design needed' || r.design === 'Check with sponsor'); }
+  // Paid banners still to buy (Ordered and Ready to hang are done).
+  function toBuy(r) { return isOrder(r) && isPaid(r) && !isMatchNeeded(r); }
 
   function matches(r) {
     if (S.filter === 'order') return isOrder(r);
     if (S.filter === 'stock') return isStock(r);
+    if (S.filter === 'ready') return isReady(r);
+    if (S.filter === 'design') return isDesign(r);
     if (S.filter === 'unpaid') return isUnpaid(r);
     if (S.filter === 'waiting') return isWaiting(r);
     if (S.filter === 'received') return r.requestStatus === 'Info received';
     if (S.filter === 'match') return isMatchNeeded(r);
+    if (S.filter === 'sponsors') return isSponsor(r);
     return true;
   }
 
@@ -43,6 +55,7 @@
       if (!res.ok) throw A().backendError(res.error || 'Could not load the 2027 list.');
       S.rows = res.rows;
       S.statuses = res.statuses;
+      S.order = res.order || null;
       S.loaded = true;
       $('#seasonStatus').textContent = '';
       render();
@@ -58,11 +71,23 @@
   function render() {
     var esc = A().esc, badge = A().badge, facts = A().facts;
     $('#seasonSummary').innerHTML =
-      stat(S.rows.length, 'banner sponsors') +
-      stat(count(isUnpaid), 'waiting on payment') +
-      stat(count(isOrder), 'to order') +
-      stat(count(isStock), 'from stock') +
-      stat(count(isWaiting), 'waiting on info');
+      stat(count(isSponsor), 'banner sponsors', 'all') +
+      stat(count(isUnpaid), 'waiting on payment', 'unpaid') +
+      stat(count(isOrder), 'to order', 'order') +
+      stat(count(isStock), 'from stock', 'stock') +
+      stat(count(isWaiting), 'waiting on info', 'waiting') +
+      stat(count(isReady), 'ready to order', 'ready') +
+      stat(count(isDesign), 'need a design', 'design');
+    // Every count opens who's behind it.
+    $$('#seasonSummary [data-show]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.filter = b.dataset.show;
+        var sel = $('#seasonFilter'); if (sel) sel.value = S.filter;
+        render();
+        var list = $('#seasonList'); if (list && list.scrollIntoView) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    renderOrder();
 
     // "1000" on the sheet reads as $1,000; anything else shows as written.
     var dollars = function (v) {
@@ -76,11 +101,15 @@
         '<div class="info">' +
           '<div class="name">' + esc(r.company) + '</div>' +
           facts([
-            r.tier ? r.tier + (r.amount ? ' ' + dollars(r.amount) : '') : '',
-            'Banner: ' + (banner ? 'from stock (' + banner + ')' : (r.bannerStatus || 'Not decided'))
+            isExtra(r) ? 'Second banner: "' + r.bannerText + '"' : '',
+            r.tier && !isExtra(r) ? r.tier + (r.amount ? ' ' + dollars(r.amount) : '') : '',
+            'Banner: ' + (banner ? 'in stock (' + banner + ')' : isOrder(r) ? 'to order' : (r.bannerStatus || 'Not decided')),
+            isExtra(r) || isMatchNeeded(r) || isUnpaid(r) ? '' : r.submittedAt ? 'Packet in ' + shortDay(r.submittedAt) : 'Packet not in yet',
+            r.design && r.design !== 'In stock' ? r.design : ''
           ]) +
         '</div>' +
         (isUnpaid(r) ? badge('Waiting on payment', 'warn') :
+          isExtra(r) ? badge('Second banner', 'muted') :
           isMatchNeeded(r) ? badge('Needs a match', 'warn') :
           r.requestStatus === 'Info received' ? badge('Info received', 'ok') :
           badge(requestLabel(r), 'muted')) +
@@ -96,8 +125,35 @@
     });
   }
 
-  function stat(n, label) {
-    return '<div class="stat"><b>' + n + '</b><span>' + label + '</span></div>';
+  function shortDay(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s));
+    return m ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + (+m[3]) : String(s);
+  }
+
+  // What this year's new banners will cost: the paid ones still to buy, at the
+  // per-banner price kept in the backend's settings. Pricing only.
+  function renderOrder() {
+    var box = $('#seasonOrder');
+    if (!box) return;
+    var esc = A().esc, buy = S.rows.filter(toBuy), n = buy.length, o = S.order || {};
+    if (!n) { box.innerHTML = ''; box.classList.add('hidden'); return; }
+    var money = function (v) { return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var ready = buy.filter(isReady).length, design = buy.filter(isDesign).length, open = n - ready - design;
+    box.classList.remove('hidden');
+    box.innerHTML = '<h3>' + n + ' new banner' + (n === 1 ? '' : 's') + ' to order' +
+      (o.each ? ': about ' + money(n * o.each) : '') + '</h3>' +
+      '<p class="hint">' + [ready ? ready + ' ready to order' : '', design ? design + ' need a design first' : '',
+        open ? open + ' waiting on their info packet' : ''].filter(Boolean).join(', ') + '.</p>' +
+      (o.each ? '<p class="hint">About ' + money(o.each) + ' a banner all in' + (o.vendor ? ' at ' + esc(o.vendor) : '') + '. ' + esc(o.note) + '</p>'
+        : '<p class="hint">Set the per-banner price in the backend settings to see the cost.</p>') +
+      '<p class="hint">Pricing only. Nothing is ordered from here.</p>';
+  }
+
+  function stat(n, label, show) {
+    var on = show && S.filter === show && show !== 'all' ? ' on' : '';
+    return show
+      ? '<button type="button" class="stat stat-tap' + on + '" data-show="' + show + '" aria-label="Show ' + n + ' ' + label + '"><b>' + n + '</b><span>' + label + '</span></button>'
+      : '<div class="stat"><b>' + n + '</b><span>' + label + '</span></div>';
   }
 
   function requestLabel(r) {
@@ -179,7 +235,7 @@
       got.classList.remove('hidden');
       got.innerHTML = '<h3 class="ss-h">What they sent (' + esc(r.submittedAt) + ')</h3>' +
         row('Jersey name', r.jerseyName) + row('Website', r.website) + row('Write-up', r.writeup) +
-        row('Banner', r.bannerChoice) + row('Banner notes', r.bannerText) +
+        row('Packet', r.packetNote) + row('Banner', r.bannerChoice) + row('What the banner needs', r.design) + row('Banner notes', r.bannerText) +
         (r.fileFolderId ? '<p><a class="btn small" target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/' +
           encodeURIComponent(r.fileFolderId) + '">Open their files in Drive</a></p>' : '') +
         (r.fileLink ? row('Link they pasted (check it before opening)', r.fileLink) : '');
@@ -322,6 +378,13 @@
 
   window.Season = {
     show: function () { if (!S.loaded) load(); else render(); },
+    // For the Sponsors tab's to-do line: how many banners there are to order.
+    counts: function () {
+      var c = function () { return { order: count(toBuy) }; };
+      return S.loaded ? Promise.resolve(c()) : (load() || Promise.resolve()).then(function () { return S.loaded ? c() : null; });
+    },
+    // Opened from a count: show just those.
+    filter: function (f) { S.filter = f; var sel = $('#seasonFilter'); if (sel) sel.value = f; if (S.loaded) render(); },
     reset: function () { S.rows = []; S.loaded = false; $('#seasonList').innerHTML = ''; $('#seasonSummary').innerHTML = ''; }
   };
 

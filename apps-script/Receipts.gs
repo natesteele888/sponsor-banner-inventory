@@ -96,7 +96,8 @@ function receiptRows_() {
     if (!row.company || row.amount <= 0 || !isYes_(row.paidText) || !row.email) return;
     row.key = receiptKey_(row);
     row.online = /\b(online|website|crossbar|card)\b/i.test(row.how || (row.paidText + ' ' + row.notes));
-    row.inKind = /\bin.?kind\b/i.test(row.how || '');
+    // In kind: Paid how says so, or with no such column the notes say "paid in kind".
+    row.inKind = /\bin.?kind\b/i.test(row.how || '') || /\bpaid in.?kind\b/i.test(row.notes || '');
     // An upgrade paid after an earlier receipt: this receipt is for the new
     // money only, with the season's total under it, so nothing is counted twice.
     var pre = companyKey_(row.company) + '|' + row.email.toLowerCase() + '|', before = 0;
@@ -378,7 +379,7 @@ function receiptSend(data) {
     catch (e) { return fail(e.message + ' Nothing was sent.'); }
     var pdf = receiptPdf_(r, s);
     // In test mode the CC is left off: a test only ever goes to the test address.
-    var how = leagueSend_({ to: to, cc: s.live ? cc : '', subject: m.subject, text: m.text, html: m.html, live: s.live, attachments: pdf ? [pdf] : null });
+    var how = leagueSend_({ kind: 'receipt', company: r.company, to: to, cc: s.live ? cc : '', editorCc: s.live ? cc : '', subject: m.subject, text: m.text, html: m.html, live: s.live, attachments: pdf ? [pdf] : null });
     if (!how.ok) return fail(how.error);
     saveReceiptCopy_(r, m, to + (s.live && cc ? ' (cc ' + cc + ')' : ''), s.live);
     if (!r.ccCol) rememberReceiptCc_(r, cc);

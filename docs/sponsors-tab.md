@@ -92,9 +92,12 @@ sheet is ever renamed, run `forgetSponsorSheet` once from the editor.
 
 ## Year over year
 
-A thin bar under the counts shows this season's committed total against last
-season's final, with a mark where last season stood on the same date. Tap it
-for month-by-month totals.
+One line under the counts gives this season's committed total, where last
+season stood on the same date, and last season's final. Tap the line for two
+plain bars with their numbers printed on them, nothing to hover: gray is last
+season's whole sponsor money, with a dark mark and its amount where it stood on
+this date (when a dated total exists), and blue is this season so far. Under
+them are the month-by-month totals. In kind is left out of both years' dollars.
 
 - **This season:** each day the tab opens, the backend keeps that day's
   totals (dollars committed, dollars paid, how many sponsors) in the Apps
@@ -106,6 +109,10 @@ for month-by-month totals.
   more than a week from the nearest saved version shows as "about", and dates
   between the sheet starting and its first saved version show "no record".
   Run `forgetSponsorHistory` from the editor to read them again.
+
+## The board view
+
+Only the sponsorship leads (the league admin plus the addresses in `SPONSOR_EDITORS`) get the full app. Any other board member who signs in sees one screen: this season's sponsors by name and level, which have paid (or are in kind), how many businesses have been reached out to and are waiting to hear back, and how many are still to contact. No contacts, emails, phones, notes, amounts or owners, no tabs and no buttons. The backend refuses every other call from them (`BOARD_VIEW_ACTIONS` in `Code.gs`), so nothing else reaches their device; the Dashboard's Uniforms and Jersey Order pages still read `sponsorSheet` as before.
 
 ## Letting someone in without the Dashboard
 
@@ -143,7 +150,7 @@ Until `RECEIPTS_LIVE` is set to `on`, every Send goes only to `RECEIPTS_TEST_TO`
 
 ## Sponsor info packets
 
-What sponsors send on the info packet page (level, business, jersey name, write-up, socials, banner choice, logo) shows under **Sponsor info packets** on the Sponsors tab, newest first, with new ones marked. Open one to see everything they sent and the logo from its files folder. A sponsor's card says "Info packet in" when the business name matches. It's read live from the "LYBS Sponsor Info Packets" sheet (tab Packets) and never written to. A packet whose business isn't on the sponsor list yet has an **Add to sponsor list** button (any signed-in board member): it adds a row with the business, contact, email, phone, level and amount from that packet, marks it contacted and signed up, and notes the packet's date. The backend reads the packet row itself, so the page can't change what goes in. A business already on the list is refused, so nothing goes in twice.
+What sponsors send on the info packet page (level, business, jersey name, write-up, socials, banner choice, logo) shows under **Sponsor info packets** on the Sponsors tab, newest first, with new ones marked. Open one to see everything they sent and the logo from its files folder. A sponsor's card says "Info packet in" with the day and what kind it was (same as last year, N changes, or new sponsor), matched to the sponsor it was sent for, not the name they typed; a paid sponsor without one says "Waiting on info packet". Their detail opens with what they sent and the logo. Under the packets, **Paid, waiting on their info packet** lists paid sponsors with none back yet, and whether their receipt (which carries the packet link) has gone out. It's read live from the "LYBS Sponsor Info Packets" sheet (tab Packets) and never written to. A packet whose business isn't on the sponsor list yet has an **Add to sponsor list** button (any signed-in board member): it adds a row with the business, contact, email, phone, level and amount from that packet, marks it contacted and signed up, and notes the packet's date. The backend reads the packet row itself, so the page can't change what goes in. A business already on the list is refused, so nothing goes in twice.
 
 Setup: add `apps-script/Packets.gs` as a script file named `Packets` and deploy a new version. The sheet is found by its name. When it moves (for example to the league's info account), share the sheet and its folder with the account this script runs as, and set the `PACKET_SHEET_ID` Script Property if the name changes. Put the packet page's link in `SPONSOR_PACKET_URL` so receipts include it; change it there when the page moves.
 
@@ -154,6 +161,8 @@ The **Fill out your sponsor packet** button in each receipt opens that sponsor's
 What they send goes on the **LYBS Sponsor Info Packets** sheet's Packets tab, with their files in a folder inside the packets folder, so it shows under Sponsor info packets like any packet. Its Level says "(paid)", or "(upgrade from ..., $N more owed)".
 
 An upgrade only counts once the difference is paid. Until then the sheet keeps the old level and amount, the sponsor's card says "Upgrade to ... asked, $N to pay", and **Record a payment** lists them first under "Upgrade waiting on payment". Recording a payment for them adds it to their amount. Once the whole difference is in, it sets the new level, ticks Owed a Banner when the new level has one, and marks the upgrade counted. Their next receipt is for the new money only, with the season total under it.
+
+**In kind:** an in-kind sponsor gets the same page and the same form. Their level shows as **Your level · In-kind donation**, credited at the row's amount (for example "Credited at $750 for the 2027 season"), with no other levels, no upgrades and nothing to pay. They get no receipt, so a sponsorship editor opens their card in the app and taps **Get their packet link**, then copies it into their email. The level comes from the row even while Paid? is empty. Their packet's Level says "(in-kind donation)".
 
 The levels and prices are the defaults in `apps-script/SponsorPage.gs` (Gameday any amount, All-Star $300, MVP $500, Championship $750 and up, as on the league's Become a Sponsor page). Set `SPONSOR_LEVELS` in Script Properties to change them without new code.
 
@@ -253,15 +262,27 @@ preview of each email.
   sponsors; otherwise tests go to `RECEIPTS_TEST_TO`), and the shared
   `RECEIPT_ORG_ADDRESS` for where checks go.
 
-## Sending from the league's address
+## What the app is allowed to email
 
-Receipts and follow-ups both send through `Mail.gs`. Set `SEND_FROM` to the
-league's address. Nothing goes to a sponsor until that address is in the
-"Send mail as" list of the Gmail account that owns this script (Gmail →
-Settings → Accounts and Import → Send mail as → Add another email address,
-then the confirmation link Gmail mails to that address). Until then, live
-sends are refused, and test sends come from the owner's Gmail with the
-league address as reply-to.
+Every email the script sends goes through one guard in `Mail.gs`, and the
+script asks Google for as little as it can (`apps-script/appsscript.json`).
+
+- **What Google still lets the script do:** send email as the script owner,
+  read their mail (it looks for Crossbar donation notices) and make drafts.
+  It can't delete, change or label mail, and it can't send as another
+  address, so there's no Send-as for the league address any more.
+- **What the code allows on top of that:** only the app's own emails
+  (receipts, follow-ups, outreach, welcome, the packet notice and the owner's
+  alerts). Each one goes only to the address on that sponsor's own row. A
+  receipt may also copy, at most, two addresses: the row's own CC column, or
+  what an editor types in the receipt's CC box. Notices go only to the script
+  owner (or `RECEIPTS_PING_TO`). Anything else is refused and logged, never
+  sent.
+- **After this change:** open the project, press Run on any function once and
+  Allow the shorter list of permissions. Until that's done the web app asks
+  for it.
+
+Replies to receipts go to the league address (`SEND_FROM`) as reply-to.
 
 When the board copy is switched on and has a **Receipt sent** or **Last
 follow-up** column, each live send writes its date (and the round's name) on
@@ -292,6 +313,71 @@ The Outreach tab sends the first "would you sponsor us?" email to businesses on 
 - Held, can't be ticked: no email, an email cell with no address in it, already emailed from here, said no, or walk-in only.
 - Needs a look, starts unticked: the contact's name doesn't match the address (a books person or a front desk can be right), more than one address in the cell, the same address on another row, or the sheet already says contacted.
 
-Pick who it's from (your own Gmail, or the league address once it's connected as "Send mail as"), tick up to 15, preview any of them (To and the greeting side by side), and tap Send twice. Each business gets its own email with only its address in To: never a shared To, CC or BCC. Right before sending, each row is read again and must still have the same business and address. Sent rows get the sender's name in Contacted? and Status moves to Contacted, logged like any other change. Nothing runs on a schedule.
+Pick who it's from (your own Gmail), tick up to 15, preview any of them (To and the greeting side by side), and tap Send twice. Each business gets its own email with only its address in To: never a shared To, CC or BCC. Right before sending, each row is read again and must still have the same business and address. Sent rows get the sender's name in Contacted? and Status moves to Contacted, logged like any other change. Nothing runs on a schedule.
 
 Setup (Apps Script editor): add `apps-script/Outreach.gs` as a new script file named `Outreach`, then deploy a new version. Optional Script Properties: `OUTREACH_PACKET_FILE` (Drive id of the packet PDF to attach), `OUTREACH_LEVELS_URL` and `OUTREACH_SIGNUP_URL` (the league pages the email links to), `OUTREACH_SIGN` (sign-off lines), `OUTREACH_DAY_MAX` (most a day, 40 by default).
+
+## Welcome
+
+Sponsors who sign up on the league website get the website's thank-you and next steps email straight away. Anyone who pays by check or is added to the sheet by hand doesn't, so the Welcome tab sends them the same email from the app.
+
+- **Who's listed:** every row that's signed up, paid, or has a tier picked, unless it says not sponsoring. Each shows "Needs welcome email" or how it got one (from the website, sent here, or marked by hand), and the same line shows on the sponsor's card.
+- **From the website:** matched by business name against the sheet's OnlineLogs tab, so those are never listed as needing it.
+- **The email:** thank-you, the level and season, and next steps. A paid sponsor hears that the payment came in; an unpaid one gets the payment deadline, the online payment page and, when `RECEIPT_ORG_ADDRESS` is set, where to mail a check.
+- **Sending:** Preview first, then Send twice. One email per sponsor, only their address in To, no CC or BCC, from the same sender picker as Outreach. Rows with no address can't be sent; rows that need a look say why and send only on "Looked, send".
+- **Already had it:** marks a sponsor done without sending.
+
+Nothing runs on a schedule, nothing changes on the sheet, and the record of who's had it lives in the script's own properties.
+
+## Who it's from
+
+Outreach and Welcome emails come from whoever is signed in and are signed by them. Receipts always come from the script owner.
+
+- **The script owner:** the app sends straight from their Gmail, as before, with their sign-off (`OUTREACH_SIGN`).
+- **Any other board member, one-time Allow:** they tap **Send from my Gmail** twice, a small page opens, and the email goes from their own Gmail. The first time, Google asks them to Allow one thing: send email as them. **Back to the app** marks the row. See One-time Allow below.
+- **Without the Allow sender set up:** each email opens filled in, in their own Gmail (or their phone's mail app). They press Send there, then tap **I sent it** so the sheet and the Welcome list catch up.
+- These emails link to the levels on the league site instead of attaching the packet.
+- **A title under the name:** set `OUTREACH_SIGNS` to JSON like `{"their@email": "Their Name\nTheir title"}`.
+
+### The greeting
+
+"Hi" and the contact's first name, or "Hi [Business] team" when there's no name (LLC, Inc and the like left off), never "Hi there". The script picks one of three versions from the sheet alone, every time:
+
+- **Sponsored last season** (a level in last season's tier column): thanked for last season first, then invited back.
+- **Sponsored before that** ("Has sponsored in past?" says yes, last season's column empty): thanked for their past support, no year named, then invited back.
+- **New:** who's writing and why in the first line, then asked if they'd be interested.
+
+The list shows "sponsored last season" or "past sponsor" beside each one.
+
+## One-time Allow (apps-script-sender/)
+
+A separate small Apps Script project that runs as whoever opens it, so an email goes from that board member's own Gmail. It can only send an email this app made and signed, to that one address, once, for the board member it was made for, within 15 minutes.
+
+1. New Apps Script project, named "LYBS Sponsor Sender". Paste in `apps-script-sender/Code.gs`, and in Project Settings tick "Show appsscript.json" and paste in `apps-script-sender/appsscript.json`.
+2. Script Properties in both projects: `SENDER_SECRET`, the same long random string (24 characters or more) in each. Never in this repo.
+3. Deploy the sender: Deploy → New deployment → Web app, Execute as: User accessing the web app, Who has access: Anyone with a Google account. Copy its `/exec` link.
+4. In the main project's Script Properties, set `SENDER_URL` to that link.
+
+Without both settings, board members keep the open-in-Gmail way.
+
+## In kind and a second banner
+
+- **In kind:** a sponsor paying in goods or services. It shows as In kind when the sheet's Paid how column says so, or, on a sheet with no such column, when the notes say "paid in kind" (Record a payment's In kind writes that note). In kind is counted on its own, never as dollars, and its receipt describes the gift with no dollar amount.
+- **A second banner:** when the sheet's **Banner needed?** cell says 2 banners (or a second banner) and has the wording in quotes, the next check for new sponsors adds a row on the 2027 banners tab named "[Sponsor] (second banner)", with that wording, Design needed and Order new. It has the sponsor's level, adds no money and no sponsor to the counts, gets no info-request email, and is paid when the sponsor is.
+
+## Cards and counts
+
+- **Cards:** under the name, the level as a colored pill (Gameday, All-Star, MVP, Championship each their own color, In kind in green), then short pills for where it stands: contacted, packet in or waiting, welcomed or needs one, needs an owner. Owner and contact sit on their own line in bold. The paid and receipt status stays the badge on the right. Notes and write-ups sit behind a Notes tap.
+- **Counts:** every count is a button. Committed, paid, in kind, this season's sponsors, past sponsors and needs an owner each show just those sponsors. Not contacted opens Outreach showing the ones ready to send. The line under the three big buttons lists what's waiting (receipts, welcome emails, outreach, packets, banners to order), and each one opens its list. On the 2027 banners tab every count shows its banners.
+
+## The packet loop
+
+Each packet sent from a receipt link emails the script owner (never the sponsor) one notice of three kinds:
+
+- **Returning, same as last year:** good to proceed, including the banner when last year's is in banner stock.
+- **Returning with changes:** each change listed against what the board sheet has (level, contact, email, business name, a new logo, jersey name, write-up, banner). Last year's jersey names and write-ups weren't kept, so those show as sent.
+- **New sponsor:** everything they sent, and either "banner file ready" or "you make the banner".
+
+The kind and a one-line note go on the sponsor's private pages record (`packetAt`, `packetKind`, `packetNote`). For a banner level the sponsor's row on the 2027 banners tab is filled in too: Info received, their answers and files, and the banner: from stock (the banner in stock with their name is assigned when there's exactly one and it's free) or Order new, with **What the banner needs** (In stock, File in hand ready to order, Design needed, or Check with sponsor). A status set by hand (Reprint needed, Ordered, Ready to hang) is left alone. An upgrade waiting on payment shows as waiting on payment.
+
+The 2027 banners tab counts ready to order and need a design, and shows what this year's new banners cost: the paid banners still to buy, times the per-banner price in the private Script Properties `BANNER_ORDER_EACH` (all in), with `BANNER_ORDER_VENDOR` and `BANNER_ORDER_NOTE`. Pricing only: nothing is ordered from the app.

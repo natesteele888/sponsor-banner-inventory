@@ -29,17 +29,22 @@
  *   On send, the row is read again and must still have the same business and
  *   address, so the greeting, business and address always come from one row.
  *
- * Who it's from:
- *   mine    the script owner's own Gmail, signed by them. Only that person
- *           can pick it (it goes out in their name).
- *   league  the league address, when it is connected as "Send mail as"
- *           (SEND_FROM, see Mail.gs). Any sponsorship editor.
+ * Who it's from: always whoever is signed in, signed by them.
+ *   the script owner   straight from the app, from their own Gmail
+ *   anyone else        from their own Gmail after a one-time Allow (Allow.gs),
+ *                      or, until that's set up, filled in and opened in their
+ *                      own Gmail for them to press Send
+ * The league address is never a sender here: this script doesn't ask Gmail
+ * for "Send mail as" access (see Mail.gs).
  *
  * Script Properties (all optional; nothing about a sponsor is in this file):
  *   OUTREACH_LEVELS_URL   the Become a Sponsor page (default below)
  *   OUTREACH_SIGNUP_URL   the sign-up form (default below)
  *   OUTREACH_PACKET_FILE  Drive file id of the packet PDF to attach
- *   OUTREACH_SIGN         sign-off lines, e.g. "Nate Steele\nLYBS Director & Secretary"
+ *   OUTREACH_SIGN         the script owner's sign-off lines, e.g. "Nate Steele\nLYBS Director & Secretary"
+ *   OUTREACH_SIGNS        optional sign-offs for other board members, as JSON:
+ *                         {"their@email": "Their Name\nTheir title"}; without one,
+ *                         their Google account name signs it
  *   OUTREACH_DAY_MAX      most outreach emails in a day (default 40)
  */
 
@@ -81,18 +86,64 @@ function outreachIsOwner_() {
   return !!me && !!(WHO && WHO.email) && String(WHO.email).toLowerCase() === me;
 }
 
+// Whoever is signed in sends as themselves. The script owner's emails go
+// straight from the app (it runs in their Gmail); anyone else's open as a
+// filled-in email in their own Gmail, and they press Send there.
 function outreachSenders_() {
-  var mail = senderSettings_();
-  var owner = outreachIsOwner_();
-  return [
-    { id: 'mine', label: 'You (' + (owner ? myEmail_() : 'the script owner') + ')', ok: owner,
-      why: owner ? '' : 'Only the script owner can send in their own name.' },
-    { id: 'league', label: 'The league address' + (mail.from ? ' (' + mail.from + ')' : ''), ok: mail.connected,
-      why: mail.connected ? '' : 'The league address isn’t connected to Gmail as "Send mail as" yet.' }
-  ];
+  var owner = outreachIsOwner_(), me = String(WHO && WHO.email || '').toLowerCase();
+  if (owner) return [{ id: 'mine', how: 'send', label: 'You (' + (me || myEmail_()) + ')', ok: true, why: '' }];
+  var why = me ? '' : 'Your sign-in has no verified email address.';
+  var out = [];
+  if (allowSettings_().ready) out.push({ id: 'allow', how: 'allow', label: 'You (' + (me || 'your account') + '), from your Gmail', ok: !!me, email: me, why: why });
+  out.push({ id: 'mine', how: 'compose', label: 'You (' + (me || 'your account') + '), opens in your Gmail', ok: !!me, email: me, why: why });
+  return out;
+}
+function outreachPick_(id) {
+  var sender = id === 'allow' ? 'allow' : id === 'mine' ? 'mine' : '';
+  return outreachSenders_().filter(function (x) { return x.id === sender; })[0] || null;
 }
 
-// "Hi Sam," from the contact cell when it reads as a person's name, else "Hi there,".
+// The sign-off of whoever is sending: their own line in OUTREACH_SIGNS, the
+// owner's OUTREACH_SIGN, or their Google account name.
+function outreachSign_() {
+  var me = String(WHO && WHO.email || '').toLowerCase();
+  try {
+    var map = JSON.parse(PropertiesService.getScriptProperties().getProperty('OUTREACH_SIGNS') || '{}');
+    var mine = me && map && map[me];
+    if (mine) return String(mine).replace(/\r/g, '').trim();
+  } catch (e) { console.log('outreach signs: ' + e); }
+  if (outreachIsOwner_()) return outreachSettings_().sign;
+  var n = String(WHO && WHO.name || '').replace(/[^A-Za-z\u00C0-\u017F .'’\-]/g, '').replace(/\s+/g, ' ').trim();
+  return n.length > 50 ? '' : n;
+}
+// Settings with the sender's sign-off. An email opened in someone's own
+// Gmail can't carry the packet PDF, so it links to the levels instead.
+function outreachFor_(how) {
+  var s = outreachSettings_();
+  s.sign = outreachSign_();
+  if (how === 'compose') s.packetFile = '';
+  return s;
+}
+
+// "Hi Sam," from the contact cell when it reads as a person's name, else
+// "Hi Alpha Bakery team," (outreachGreet_). Never "Hi there".
+function outreachGreet_(r) {
+  var n = outreachFirstName_(r.contact);
+  if (n) return n;
+  var b = String(r.company || '').replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
+  return (b || 'Lunenburg') + ' team';
+}
+// Which email they get, from the sheet alone:
+//   'last'     a level in last season's tier column: thanked for last season
+//   'earlier'  "Has sponsored in past?" says yes but last season's column is
+//              empty: thanked for their past support, no year named
+//   ''         new: who's writing and why
+function outreachWhen_(r) {
+  if (r.prevTier && !/^none/i.test(r.prevTier)) return 'last';
+  return isYes_(r.past) ? 'earlier' : '';
+}
+function outreachPast_(r) { return !!outreachWhen_(r); }
+
 function outreachFirstName_(contact) {
   var c = String(contact || '').trim();
   if (!c || /[^A-Za-z\u00C0-\u017F\s.'’\-\/&(),:]/.test(c) || /https?:|www\./i.test(c) || c.length > 60) return '';
@@ -128,7 +179,8 @@ function outreachRows_() {
   var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
   var c = { company: col(/^(company|business)/), contact: col(/^contact$/), email: col(/^email/), status: col(/^status$/),
             owner: col(/^lybs owner/), contacted: col(/^contacted/), walk: col(/^walk-?in/), paid: col(/^paid/),
-            tier: col(new RegExp('^tier selected ' + SEASON)) };
+            tier: col(new RegExp('^tier selected ' + SEASON)), prevTier: col(new RegExp('^tier selected ' + (Number(SEASON) - 1))),
+            past: col(/^has sponsored in past/) };
   if (c.company < 0 || c.email < 0) return [];
   var get = function (r, k) { return c[k] < 0 ? '' : String(r.cells[c[k]] || '').trim(); };
   var out = [];
@@ -137,7 +189,7 @@ function outreachRows_() {
     if (!company) return;
     out.push({ row: r.row, company: company, contact: get(r, 'contact'), emailCell: get(r, 'email'),
                status: get(r, 'status'), owner: get(r, 'owner'), contacted: get(r, 'contacted'),
-               walk: get(r, 'walk'), paid: get(r, 'paid'), tier: get(r, 'tier') });
+               walk: get(r, 'walk'), paid: get(r, 'paid'), tier: get(r, 'tier'), prevTier: get(r, 'prevTier'), past: get(r, 'past') });
   });
   return out;
 }
@@ -173,16 +225,23 @@ function outreachCheck_(r, all, log, s) {
 }
 
 function outreachText_(r, greet, s) {
-  var hi = 'Hi ' + (greet || 'there') + ',';
+  var hi = 'Hi ' + (greet || outreachGreet_(r)) + ',';
   var packet = s.packetFile ? 'I’ve attached our ' + SEASON + ' sponsorship packet, and the levels are also on our site here:'
                             : 'Our ' + SEASON + ' sponsorship levels are on our site here:';
+  var name = String(s.sign || '').split('\n')[0].trim();
+  var me = name ? 'My name is ' + name + ', and I’m on the board.' : 'I’m on the board.';
+  var when = outreachWhen_(r), past = !!when;
   var paras = [
     hi,
-    'My name is Nate Steele, and I’m on the board of Lunenburg Youth Baseball & Softball. We’re a volunteer run, nonprofit league for kids in Lunenburg, and we’re starting to plan for the ' + SEASON + ' season.',
-    'I wanted to see if ' + r.company + ' would have any interest in sponsoring the league this year. Sponsors help us cover uniforms, equipment and field upkeep, and this year we’re working on new dugouts at Powell Field and fixing the scoreboard at McNally Field. ' + packet + '\n' + s.levels,
+    past
+      ? 'Thank you for sponsoring Lunenburg Youth Baseball & Softball ' + (when === 'last' ? 'last season' : 'in the past') + '. Having ' + r.company + ' behind our kids made a real difference, and I’m reaching out about the ' + SEASON + ' season.'
+      : 'I’m reaching out from Lunenburg Youth Baseball & Softball about sponsoring our ' + SEASON + ' season.',
+    me + ' We’re a volunteer run, nonprofit league for kids in Lunenburg.',
+    (past ? 'We’d love to have ' + r.company + ' back with us this year.' : 'I wanted to see if ' + r.company + ' would have any interest in sponsoring the league this year.') +
+      ' Sponsors help us cover uniforms, equipment and field upkeep, and this year we’re working on new dugouts at Powell Field and fixing the scoreboard at McNally Field. ' + packet + '\n' + s.levels,
     'If it’s a fit, the sign-up form is here:\n' + s.signup,
     'We’re a 501(c)(3), so it’s tax deductible too. Thanks for taking a look, and let me know if you have any questions.',
-    s.sign
+    s.sign || 'Lunenburg Youth Baseball & Softball'
   ];
   return paras.join('\n\n');
 }
@@ -203,7 +262,7 @@ function outreachList() {
   var items = all.map(function (r) {
     var ck = outreachCheck_(r, all, log, s), sent = log[companyKey_(r.company)] || null;
     return { row: r.row, company: r.company, contact: r.contact, email: ck.email, status: r.status || 'Not contacted',
-             owner: r.owner, greet: outreachFirstName_(r.contact), hold: ck.hold, look: ck.look,
+             owner: r.owner, greet: outreachGreet_(r), past: outreachWhen_(r), hold: ck.hold, look: ck.look,
              sent: sent ? { at: sent.at, by: sent.by } : null };
   });
   return ok({ items: items, senders: outreachSenders_(), packet: !!s.packetFile, linksOk: s.linksOk,
@@ -222,28 +281,29 @@ function outreachPreview(data) {
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can send outreach.');
   var f = outreachFind_(data);
   if (!f.r) return fail('That row changed on the sheet. Refresh the list.');
-  var s = outreachSettings_(), ck = outreachCheck_(f.r, f.all, outreachLog_(), s);
-  var sender = data.sender === 'league' ? 'league' : 'mine';
-  var greet = outreachFirstName_(f.r.contact), text = outreachText_(f.r, greet, s, sender);
-  return ok({ subject: OUTREACH_SUBJECT, text: text, html: outreachHtml_(text), to: ck.email, greet: greet || 'there',
-              company: f.r.company, contact: f.r.contact, hold: ck.hold, look: ck.look, packet: !!s.packetFile });
+  var pick = outreachPick_(data.sender === 'allow' ? 'allow' : 'mine');
+  var s = outreachFor_(pick && pick.how), ck = outreachCheck_(f.r, f.all, outreachLog_(), s);
+  var greet = outreachGreet_(f.r), text = outreachText_(f.r, greet, s);
+  return ok({ subject: OUTREACH_SUBJECT, text: text, html: outreachHtml_(text), to: ck.email, greet: greet, past: outreachWhen_(f.r),
+              company: f.r.company, contact: f.r.contact, hold: ck.hold, look: ck.look, packet: !!s.packetFile,
+              sign: s.sign.split('\n')[0] || '' });
 }
 
 // data: { sender, items: [{ row, company, email, looked }] }. One email each.
 function outreachSend(data) {
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can send outreach.');
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
-  var sender = data && data.sender === 'league' ? 'league' : data && data.sender === 'mine' ? 'mine' : '';
-  var pick = outreachSenders_().filter(function (x) { return x.id === sender; })[0];
+  var pick = outreachPick_(data && data.sender), sender = pick ? pick.id : '';
   if (!pick) return fail('Pick who it’s from.');
   if (!pick.ok) return fail(pick.why);
+  if (pick.how !== 'send') return fail('Your emails go one at a time from your own Gmail. Use Send on each row. Nothing was sent.');
   var items = (data && data.items) || [];
   if (!items.length) return fail('Tick at least one sponsor.');
   if (items.length > OUTREACH_BATCH_MAX) return fail('Send ' + OUTREACH_BATCH_MAX + ' at most at a time.');
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) return fail('Someone else is sending right now. Try again in a moment.');
   try {
-    var s = outreachSettings_(), log = outreachLog_();
+    var s = outreachFor_('send'), log = outreachLog_();
     var left = Math.max(0, s.dayMax - outreachSentToday_(log));
     var all = outreachRows_().filter(outreachCandidate_);
     var pdf = null;
@@ -265,13 +325,14 @@ function outreachSend(data) {
       var to = ck.email.toLowerCase();
       if (seen[to]) { res.error = 'Same address as another one in this batch. Not sent.'; return; }
       if (left <= 0) { res.error = 'Today’s limit of ' + s.dayMax + ' is reached. Not sent.'; return; }
-      var text = outreachText_(r, outreachFirstName_(r.contact), s);
-      var o = { htmlBody: outreachHtml_(text) };
+      var text = outreachText_(r, outreachGreet_(r), s);
+      var o = { company: r.company, to: ck.email, subject: OUTREACH_SUBJECT, text: text, html: outreachHtml_(text),
+                name: String(s.sign.split('\n')[0] || RECEIPT_ORG) };
       if (pdf) o.attachments = [pdf];
-      if (sender === 'league') { o.from = mail.from; o.replyTo = mail.from; o.name = RECEIPT_ORG; }
-      else o.name = String(s.sign.split('\n')[0] || 'Nate Steele');
-      try { GmailApp.sendEmail(ck.email, OUTREACH_SUBJECT, text, o); }   // one sponsor, one To, no CC or BCC
-      catch (e) { res.error = 'Gmail refused it: ' + String(e.message || e).slice(0, 120); return; }
+      try {   // one sponsor, one To, no CC or BCC
+        var sent = sendGuarded_('outreach', o);
+        if (!sent.ok) { res.error = sent.error; return; }
+      } catch (e) { res.error = 'Gmail refused it: ' + String(e.message || e).slice(0, 120); return; }
       seen[to] = 1; left--;
       log[companyKey_(r.company)] = { at: dayOf_(new Date()), by: String(WHO.email || ''), via: sender, to: to };
       saveOutreachLog_(log);
@@ -281,6 +342,67 @@ function outreachSend(data) {
     var marked = outreachMark_(marks, who);
     return ok({ results: results, sent: marks.length, marked: marked,
                 message: marks.length ? 'Sent ' + marks.length + ' email' + (marks.length === 1 ? '' : 's') + ', one per sponsor.' : 'Nothing was sent.' });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// For a board member who isn't the script owner: the filled-in email for one
+// sponsor, to open in their own Gmail. Nothing is sent or marked here.
+// data: { row, company, email, looked }
+function outreachCompose(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can send outreach.');
+  var pick = outreachPick_('mine');
+  if (!pick || pick.how !== 'compose' || !pick.ok) return fail(pick && pick.why || 'This is for sending from your own Gmail.');
+  var f = outreachFind_(data);
+  if (!f.r) return fail('That row changed on the sheet. Refresh the list.');
+  var s = outreachFor_('compose'), ck = outreachCheck_(f.r, f.all, outreachLog_(), s);
+  if (!s.linksOk) return fail('The sponsor page and sign-up links aren’t set.');
+  if (ck.hold.length) return fail(ck.hold[0]);
+  if (String(data.email || '').toLowerCase() !== ck.email.toLowerCase()) return fail('The address on the sheet changed. Refresh the list.');
+  if (ck.look.length && data.looked !== true) return fail('This one needs a look first.');
+  return ok({ to: ck.email, subject: OUTREACH_SUBJECT, text: outreachText_(f.r, outreachGreet_(f.r), s), from: pick.email });
+}
+
+// After the one-time Allow: a signed ticket for this one email, which opens
+// in the sender and goes from their own Gmail (Allow.gs). Nothing is sent or
+// marked here. data: { row, company, email, looked }
+function outreachTicket(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can send outreach.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var pick = outreachPick_('allow');
+  if (!pick || !pick.ok) return fail(pick && pick.why || 'Sending from your own Gmail isn’t set up yet. Use Open in Gmail.');
+  var f = outreachFind_(data);
+  if (!f.r) return fail('That row changed on the sheet. Refresh the list.');
+  var log = outreachLog_(), s = outreachFor_('compose'), ck = outreachCheck_(f.r, f.all, log, s);
+  if (!s.linksOk) return fail('The sponsor page and sign-up links aren’t set.');
+  if (ck.hold.length) return fail(ck.hold[0]);
+  if (String(data.email || '').toLowerCase() !== ck.email.toLowerCase()) return fail('The address on the sheet changed. Refresh the list.');
+  if (ck.look.length && data.looked !== true) return fail('This one needs a look first.');
+  if (outreachSentToday_(log) >= s.dayMax) return fail('Today’s limit of ' + s.dayMax + ' is reached.');
+  var t = allowTicket_('outreach', { company: f.r.company, to: ck.email, subject: OUTREACH_SUBJECT, text: outreachText_(f.r, outreachGreet_(f.r), s),
+                                     name: String(s.sign.split('\n')[0] || '') }, { row: f.r.row, company: f.r.company, email: ck.email });
+  return t.error ? fail(t.error) : ok({ open: t.url });
+}
+
+// They pressed Send in their Gmail: record it and mark the row Contacted.
+// data: { row, company, email }
+function outreachSent(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can send outreach.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return fail('Someone else is saving right now. Try again in a moment.');
+  try {
+    var f = outreachFind_(data);
+    if (!f.r) return fail('That row changed on the sheet. Nothing was marked.');
+    var log = outreachLog_(), key = companyKey_(f.r.company);
+    if (log[key]) return fail(f.r.company + ' is already marked as emailed.');
+    var email = firstEmail_(f.r.emailCell);
+    if (!email || String(data.email || '').toLowerCase() !== email.toLowerCase()) return fail('The address on the sheet changed. Nothing was marked.');
+    log[key] = { at: dayOf_(new Date()), by: String(WHO.email || ''), via: 'gmail', to: email.toLowerCase() };
+    saveOutreachLog_(log);
+    outreachMark_([f.r], sponsorMe_() || String(WHO.email || '').split('@')[0]);
+    return ok({ message: f.r.company + ' is marked as emailed.' });
   } finally {
     lock.releaseLock();
   }

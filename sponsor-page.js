@@ -88,10 +88,13 @@
   function renderLevels() {
     var html = P.levels.map(function (l, i) {
       var paid = l.state === 'paid', below = l.state === 'below', on = paid ? !pick : pick === l.name;
-      var badge = paid ? '<span class="lv-badge">Your level · Paid</span>'
+      var kind = paid && P.paid.inKind;
+      var badge = kind ? '<span class="lv-badge">Your level · In-kind donation</span>'
+        : paid ? '<span class="lv-badge">Your level · Paid</span>'
         : on ? '<span class="lv-badge lv-badge-up">Upgrade picked</span>' : '';
-      var price = paid && P.paid.amount ? money(P.paid.amount) : priceText(l);
-      var sub = paid ? 'Paid for the ' + esc(P.season || '') + ' season'
+      var price = kind ? 'In-kind donation' : paid && P.paid.amount ? money(P.paid.amount) : priceText(l);
+      var sub = kind ? (P.paid.amount ? 'Credited at ' + money(P.paid.amount) + ' for the ' : 'For the ') + esc(P.season || '') + ' season'
+        : paid ? 'Paid for the ' + esc(P.season || '') + ' season'
         : below ? 'Included in your level' : money(l.owed) + ' more than you paid';
       var act = paid
         ? (pick ? '<button type="button" class="btn small lv-act" data-keep="1">Keep ' + esc(l.name) + '</button>'
@@ -277,6 +280,8 @@
       $('pending').classList.remove('hidden');
     } else $('pending').classList.add('hidden');
     $('levels').classList.remove('hidden');
+    // One card (in kind): nothing to swipe through.
+    var sw = document.querySelector('.lv-swipe'); if (sw) sw.classList.toggle('hidden', res.levels.length < 2);
     renderLevels();
     syncKeep();
   }
