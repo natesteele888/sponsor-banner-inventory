@@ -295,3 +295,15 @@ The Outreach tab sends the first "would you sponsor us?" email to businesses on 
 Pick who it's from (your own Gmail, or the league address once it's connected as "Send mail as"), tick up to 15, preview any of them (To and the greeting side by side), and tap Send twice. Each business gets its own email with only its address in To: never a shared To, CC or BCC. Right before sending, each row is read again and must still have the same business and address. Sent rows get the sender's name in Contacted? and Status moves to Contacted, logged like any other change. Nothing runs on a schedule.
 
 Setup (Apps Script editor): add `apps-script/Outreach.gs` as a new script file named `Outreach`, then deploy a new version. Optional Script Properties: `OUTREACH_PACKET_FILE` (Drive id of the packet PDF to attach), `OUTREACH_LEVELS_URL` and `OUTREACH_SIGNUP_URL` (the league pages the email links to), `OUTREACH_SIGN` (sign-off lines), `OUTREACH_DAY_MAX` (most a day, 40 by default).
+
+## Welcome
+
+Sponsors who sign up on the league website get the website's thank-you and next steps email straight away. Anyone who pays by check or is added to the sheet by hand doesn't, so the Welcome tab sends them the same email from the app.
+
+- **Who's listed:** every row that's signed up, paid, or has a tier picked, unless it says not sponsoring. Each shows "Needs welcome email" or how it got one (from the website, sent here, or marked by hand), and the same line shows on the sponsor's card.
+- **From the website:** matched by business name against the sheet's OnlineLogs tab, so those are never listed as needing it.
+- **The email:** thank-you, the level and season, and next steps. A paid sponsor hears that the payment came in; an unpaid one gets the payment deadline, the online payment page and, when `RECEIPT_ORG_ADDRESS` is set, where to mail a check.
+- **Sending:** Preview first, then Send twice. One email per sponsor, only their address in To, no CC or BCC, from the same sender picker as Outreach. Rows with no address can't be sent; rows that need a look say why and send only on "Looked, send".
+- **Already had it:** marks a sponsor done without sending.
+
+Nothing runs on a schedule, nothing changes on the sheet, and the record of who's had it lives in the script's own properties.
