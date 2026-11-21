@@ -364,6 +364,49 @@ function noteOnBoardCopy_(company, header, value) {
   return false;
 }
 
+// A note on a sponsor's row, from the Sponsors tab's "Add a note". Editors
+// only. The new note goes on top of the Notes cell with the day and who
+// wrote it ("Nov 21, Nate: ..."); older notes stay under it, so nobody's
+// note is ever written over. Logged like any other change.
+var NOTE_MAX = 500;         // one note
+var NOTES_CELL_MAX = 5000;  // the whole cell; the oldest words drop off past this
+function sponsorNote(data) {
+  forgetBoardRows_();
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can add a note.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var text = String(data.text == null ? '' : data.text).replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+  if (!text) return fail('Write the note first.');
+  var sh = writableSponsorSheet_();
+  if (!sh) return fail('Editing is turned off right now.');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return fail('Someone else is saving right now. Try again in a moment.');
+  try {
+    var t = sponsorHead_(sh);
+    var row = Number(data.row);
+    if (!(row > t.h0 + 1) || row > t.v.length) return fail('That row is no longer on the sheet. Refresh and try again.');
+    var cCo = -1, cNote = -1;
+    t.head.forEach(function (h, i) {
+      if (cCo < 0 && /^(company|business)/i.test(h)) cCo = i;
+      if (cNote < 0 && /^notes?$/i.test(String(h).trim())) cNote = i;
+    });
+    if (cCo >= 0 && companyKey_(t.v[row - 1][cCo]) !== companyKey_(data.company)) return fail('That row changed since you opened it. Refresh and try again.');
+    if (cNote < 0) return fail('The sheet has no Notes column.');
+    if (sh.getRange(row, cNote + 1).getFormula()) return fail('Notes on that row is a formula, so it can’t take a note.');
+    var who = sponsorMe_() || (WHO && WHO.email ? String(WHO.email).split('@')[0] : 'Someone');
+    var day = Utilities.formatDate(new Date(), 'America/New_York', 'MMM d');
+    var was = String(t.v[row - 1][cNote] == null ? '' : t.v[row - 1][cNote]);
+    var put = (day + ', ' + who + ': ' + text + (was.trim() ? '\n' + was : '')).slice(0, NOTES_CELL_MAX);
+    put = /^[=+\-@]/.test(put) ? "'" + put : put;
+    sh.getRange(row, cNote + 1).setValue(put);
+    try { SpreadsheetApp.flush(); }
+    catch (e) { console.log('sponsorNote refused: ' + e); return fail('The sheet refused that note, so it may not have saved. Refresh and check the row.'); }
+    logChanges_(sh, [{ company: t.v[row - 1][cCo >= 0 ? cCo : 0], what: t.head[cNote], from: was, to: put }]);
+    return ok({ message: 'Note saved.', notes: put });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // Walk-in only: someone has to stop by in person. Editors only. The sheet
 // gets a "Walk-in only" column at the end the first time it's used.
 var WALKIN_HEAD = 'Walk-in only';

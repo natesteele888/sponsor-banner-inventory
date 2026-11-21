@@ -263,6 +263,7 @@
 
   function renderReceipts() {
     var box = $('#spReceipts'), esc = A().esc, R = S.receipts;
+    renderQuick();
     if (!R) { box.classList.add('hidden'); return; }
     var ready = R.items.filter(function (i) { return i.status === 'ready'; });
     var web = [];
@@ -1392,7 +1393,9 @@
       stat(all.filter(needsOwner).length, 'need a new owner');
     S.committed = committed;
     renderYoY();
+    $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
     applyMode();
+    renderQuick();
 
     // The default view is this season's sponsors; name it with the season.
     var yo = $('#spFilter option[value="signed"]');
@@ -1736,6 +1739,11 @@
     $('#spSearch').addEventListener('input', function (e) { S.search = e.target.value; render(); });
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(true); });
+    $('#spQuick').addEventListener('click', function (e) {
+      var q = e.target.closest('[data-q]'); if (q) { quickTap(q.dataset.q); return; }
+      var a = e.target.closest('[data-qa]'); if (a) quickAct(a);
+    });
+    keepReportsState();
     $('#spAddForm').addEventListener('submit', addContact);
     $('#spa_tier').addEventListener('change', addLevelPicked);
     $('#spaFill').addEventListener('click', fillFromForm);
@@ -1763,6 +1771,143 @@
       if (S.skipPop) { S.skipPop = false; return; }
       if (S.entry) { S.entry = false; hide(); }
     });
+  }
+
+  // ---------- one-tap jobs ----------
+  // The three things the board does most sit at the top of the Sponsors tab:
+  // add a sponsor, mark one paid, add a note. Each is a tap, a name and a
+  // confirm. Same roles as everywhere else: anyone who can add sees Add,
+  // the sponsorship editors see Mark paid and Add a note. Marking paid opens
+  // that sponsor's receipt to check; it only goes out when someone taps Send.
+  var QUICK_MAX = 8;
+  function renderQuick() {
+    var box = $('#spQuick');
+    if (!box || !S.book) return;
+    var canAdd = !!(S.book.writable && S.book.canAdd), ed = canEdit();
+    box.classList.toggle('hidden', !canAdd && !ed);
+    $$('#spQuick .sp-q').forEach(function (b) {
+      var k = b.dataset.q;
+      b.classList.toggle('hidden', k === 'add' ? !canAdd : !ed);
+      b.setAttribute('aria-pressed', String(S.quick === k));
+    });
+    var n = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
+    var todo = $('#spQuickTodo');
+    todo.classList.toggle('hidden', !n || !ed);
+    todo.innerHTML = n ? '<button class="linkish" type="button" data-q="receipts">' + n + ' receipt' + (n === 1 ? '' : 's') + ' ready to check and send ›</button>' : '';
+    if (S.quick && !ed) closeQuick();
+  }
+  function goSub(sub) {
+    var b = document.querySelector('.tab-btn[data-view="sponsors"][data-sp="' + sub + '"]');
+    if (b) b.click(); else if (window.Sponsors) window.Sponsors.show(sub);
+  }
+  function closeQuick() {
+    S.quick = ''; S.quickRow = 0; S.quickQ = '';
+    var pn = $('#spQuickPanel'); pn.classList.add('hidden'); pn.innerHTML = '';
+    $$('#spQuick .sp-q').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+  }
+  function quickTap(k) {
+    if (k === 'add') { closeQuick(); goSub('add'); setTimeout(function () { var f = $('#spa_company'); if (f) f.focus(); }, 50); return; }
+    if (k === 'receipts') { closeQuick(); goSub('receipts'); return; }
+    if (S.quick === k) { closeQuick(); return; }
+    S.quick = k; S.quickRow = 0; S.quickQ = '';
+    $$('#spQuick .sp-q').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.q === k)); });
+    drawQuick(true);
+  }
+  function quickMatches(q) {
+    var words = norm(q).split(' ').filter(Boolean);
+    var list = sponsors().filter(function (s) {
+      if (!words.length) return S.quick === 'paid' ? isIn(s) && !s.paid : isIn(s);
+      var hay = norm([s.company, s.contact, s.owner, s.email].join(' '));
+      return words.every(function (w) { return hay.indexOf(w) >= 0; });
+    });
+    if (S.quick === 'paid') list = list.filter(function (s) { return !s.paid; });
+    list.sort(function (a, b) { return (isIn(b) - isIn(a)) || a.company.localeCompare(b.company); });
+    return list;
+  }
+  function drawQuick(focus) {
+    var pn = $('#spQuickPanel'), esc = A().esc;
+    if (!S.quick) { closeQuick(); return; }
+    var paid = S.quick === 'paid';
+    var picked = S.quickRow ? sponsors().find(function (x) { return x.row === S.quickRow; }) : null;
+    if (picked && !paid) {
+      var last = String(picked.notes || '').split('\n')[0];
+      pn.innerHTML = '<p class="sp-q-who"><b>' + esc(picked.company) + '</b> <button class="linkish" type="button" data-qa="back">Pick someone else</button></p>' +
+        (last ? '<p class="hint">Last note: ' + esc(last.length > 140 ? last.slice(0, 140) + '…' : last) + '</p>' : '<p class="hint">No notes on this one yet.</p>') +
+        '<label class="full">Note <textarea id="spQuickNote" rows="3" maxlength="500" placeholder="Called, wants an MVP banner. Check coming next week."></textarea></label>' +
+        '<div class="sheet-acts"><button class="btn primary" type="button" data-qa="save">Save note</button>' +
+        '<button class="btn small" type="button" data-qa="close">Cancel</button><span class="status sp-q-msg" role="status"></span></div>' +
+        '<p class="hint">It goes on top of the Notes column on the sheet with today’s date and your name. Older notes stay under it.</p>';
+      pn.classList.remove('hidden');
+      if (focus) $('#spQuickNote').focus();
+      return;
+    }
+    var list = quickMatches(S.quickQ), shown = list.slice(0, QUICK_MAX);
+    var row = function (s) {
+      var bits = [s.tier ? s.tier + (s.amountText ? ' ' + s.amountText : '') : (isIn(s) ? s.amountText : ''), s.owner ? 'Owner: ' + s.owner : '']
+        .filter(Boolean).join(' · ');
+      return '<li class="sp-q-row" data-row="' + s.row + '"><div><b>' + esc(s.company) + '</b>' + (bits ? '<span class="hint"> ' + esc(bits) + '</span>' : '') + '</div>' +
+        '<button class="btn small' + (paid ? ' primary' : '') + '" type="button" data-qa="' + (paid ? 'paid' : 'pick') + '">' + (paid ? 'Paid' : 'Note') + '</button></li>';
+    };
+    var empty = S.quickQ ? 'Nobody on the sheet matches that.' : (paid ? 'Everyone signed up this season is marked paid.' : 'Type a name to find a sponsor.');
+    var keep = $('#spQuickFind');
+    if (!keep) {
+      pn.innerHTML = '<label class="full sp-q-find">' + (paid ? 'Who paid?' : 'Note on who?') +
+        ' <input id="spQuickFind" type="search" autocomplete="off" placeholder="Type a sponsor’s name"></label>' +
+        '<ul class="sp-q-list"></ul><p class="sp-q-foot hint"></p><span class="status sp-q-msg" role="status"></span>';
+      $('#spQuickFind').addEventListener('input', function (e) { S.quickQ = e.target.value; drawQuick(); });
+    }
+    $('#spQuickFind').value = S.quickQ;
+    pn.querySelector('.sp-q-find').firstChild.textContent = (paid ? 'Who paid?' : 'Note on who?') + ' ';
+    pn.querySelector('.sp-q-list').innerHTML = shown.length ? shown.map(row).join('') : '<li class="hint">' + empty + '</li>';
+    pn.querySelector('.sp-q-foot').innerHTML = (list.length > shown.length ? (list.length - shown.length) + ' more: type more of the name. ' : '') +
+      (paid ? (S.quickQ ? '' : 'Signed up, not paid yet. ') + 'Different amount, or not on the sheet? <button class="linkish" type="button" data-qa="pay">Record a payment</button>' : '');
+    pn.classList.remove('hidden');
+    if (focus) $('#spQuickFind').focus();
+  }
+  function quickAct(btn) {
+    var act = btn.dataset.qa, li = btn.closest('[data-row]'), pn = $('#spQuickPanel');
+    var msg = pn.querySelector('.sp-q-msg');
+    if (act === 'close') { closeQuick(); return; }
+    if (act === 'back') { S.quickRow = 0; pn.innerHTML = ''; drawQuick(true); return; }
+    if (act === 'pay') { closeQuick(); goSub('pay'); return; }
+    if (act === 'pick') { S.quickRow = Number(li.dataset.row); pn.innerHTML = ''; drawQuick(true); return; }
+    if (act === 'paid') {
+      var s = sponsors().find(function (x) { return x.row === Number(li.dataset.row); });
+      if (!s) return;
+      // Second tap confirms, so a slip of the thumb changes nothing.
+      if (!btn.dataset.armed) {
+        $$('#spQuickPanel [data-armed]').forEach(function (b) { delete b.dataset.armed; b.textContent = 'Paid'; });
+        btn.dataset.armed = '1'; btn.textContent = 'Tap again: paid';
+        clearTimeout(btn._t); btn._t = setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Paid'; } }, 6000);
+        return;
+      }
+      closeQuick();
+      open(s.row);
+      markPaid();   // saves Paid? = Yes, then opens the receipt to check. Send is a separate tap.
+      return;
+    }
+    if (act === 'save') {
+      var p = sponsors().find(function (x) { return x.row === S.quickRow; }), text = $('#spQuickNote').value.trim();
+      if (!p) return;
+      if (!text) { msg.textContent = 'Write the note first.'; return; }
+      btn.disabled = true; msg.textContent = 'Saving…';
+      A().apiPost({ action: 'sponsorNote', row: p.row, company: p.company, text: text }).then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) { msg.textContent = res.error || 'That did not save.'; return; }
+        var who = p.company;
+        return load().then(function () {
+          S.quickRow = 0; S.quickQ = ''; pn.innerHTML = ''; drawQuick();
+          var m = pn.querySelector('.sp-q-msg');
+          if (m) m.innerHTML = '<span class="sp-done">✓ Note saved on ' + A().esc(who) + '.</span>';
+        });
+      }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+    }
+  }
+  function keepReportsState() {
+    var d = $('#spReports');
+    if (!d) return;
+    try { d.open = localStorage.getItem('lybsSpReportsOpen') === '1'; } catch (e) { }
+    d.addEventListener('toggle', function () { try { localStorage.setItem('lybsSpReportsOpen', d.open ? '1' : '0'); } catch (e) { } });
   }
 
   // ---------- the Sponsors tab's own tabs ----------
