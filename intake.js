@@ -43,7 +43,12 @@
       $('greet').textContent = 'This page needs the personal link from your LYBS email. Please open it from there, or just reply to that email.';
       return;
     }
+    // If the backend never answers (one weak bar), say so rather than sit on "Loading".
+    var slow = setTimeout(function () {
+      $('greet').textContent = "This is taking longer than it should. Refresh the page, or just reply to the email and we'll sort it out.";
+    }, 20000);
     call({ action: 'intakeGet' }).then(function (res) {
+      clearTimeout(slow);
       if (!res.ok) { $('greet').textContent = res.error; return; }
       $('greet').textContent = 'Thank you, ' + res.company + '! ' +
         (res.tier ? 'For your ' + res.tier + ' sponsorship, p' : 'P') +
@@ -53,6 +58,7 @@
       $('jerseyName').placeholder = res.company;
       $('intakeForm').classList.remove('hidden');
     }).catch(function () {
+      clearTimeout(slow);
       $('greet').textContent = "We couldn't load the form. Check your connection and refresh, or just reply to the email.";
     });
   }
