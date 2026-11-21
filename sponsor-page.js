@@ -230,8 +230,10 @@
   }
   function finish(res, kept) {
     ['pageForm', 'levels', 'greet', 'keepBox'].forEach(function (id) { $(id).classList.add('hidden'); });
+    // An upgrade keeps the pay box (with its thank-you) above this, so the
+    // done note doesn't repeat it.
     $('doneText').textContent = res.upgrade
-      ? thanks(res.upgrade.to, res.upgrade.owed)
+      ? 'We have your info.'
       : kept ? "We'll use what we have from last season. If anything's missing, we'll reach out by email."
       : "We have your info. If we need anything else, we'll reach out by email.";
     if (!res.upgrade) renderPay($('payBox'), null);
