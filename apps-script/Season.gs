@@ -81,7 +81,7 @@ var SEASON_COLUMNS = ['key', 'company', 'tier', 'amount', 'source', 'paid', 'pai
   'contactName', 'contactEmail', 'contactPhone',
   'requestStatus', 'requestAt', 'token', 'submittedAt',
   'website', 'jerseyName', 'writeup', 'bannerChoice', 'bannerText', 'fileLink', 'fileFolderId',
-  'bannerStatus', 'assignedBannerId', 'notes', 'addedAt', 'updatedAt'];
+  'bannerStatus', 'assignedBannerId', 'notes', 'addedAt', 'updatedAt', 'design', 'packetNote'];
 
 var BANNER_STATUSES = ['Not decided', 'Use banner from stock', 'Reprint needed', 'Order new', 'Ordered', 'Ready to hang'];
 
@@ -596,7 +596,19 @@ function seasonList() {
     delete o.token;
     return o;
   });
-  return { season: SEASON, rows: rows, statuses: BANNER_STATUSES };
+  return { season: SEASON, rows: rows, statuses: BANNER_STATUSES, order: bannerOrderPrice_() };
+}
+
+// What a new banner costs to order, from this script's private Script
+// Properties (never written here): BANNER_ORDER_EACH is the all-in price of
+// one banner (printing after the usual deal, plus its share of shipping and
+// tax), BANNER_ORDER_VENDOR the printer, BANNER_ORDER_NOTE where the price
+// came from. Pricing only: nothing here orders anything.
+function bannerOrderPrice_() {
+  var p = PropertiesService.getScriptProperties();
+  var each = Number(String(p.getProperty('BANNER_ORDER_EACH') || '').replace(/[$,]/g, ''));
+  return { each: isFinite(each) && each > 0 ? each : 0, vendor: String(p.getProperty('BANNER_ORDER_VENDOR') || ''),
+           note: String(p.getProperty('BANNER_ORDER_NOTE') || '') };
 }
 
 // Rows are found by their company key, not their row number, so a row

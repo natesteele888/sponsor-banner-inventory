@@ -708,3 +708,8 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .or-side dd { margin: 0; overflow-wrap: anywhere; }
 .or-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; position: sticky; bottom: 0; background: var(--card); padding: 8px 0; }
 .or-res { font-size: 13px; }
+.season-order { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.season-order h3 { margin: 0 0 4px; font-size: 16px; }
+.season-order .hint { margin: 2px 0; }
+.sp-packet { margin: 4px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.pk-wait .pk-item { padding: 4px 0; }

@@ -259,6 +259,7 @@
       S.receipts = res;
       renderReceipts();
       render();
+      if (S.packets) renderPackets();
     }).catch(function () { /* the box stays hidden */ });
   }
 
@@ -747,14 +748,99 @@
       var t = { headers: res.headers }, bc = colOf(t, /^business/);
       S.packetKeys = {};
       res.rows.forEach(function (r) { if (bc >= 0 && r.cells[bc]) S.packetKeys[nameKey(r.cells[bc])] = true; });
+      // Sent from their own receipt link: matched to the sponsor, whatever name they typed.
+      S.packetRecv = {};
+      (res.received || []).forEach(function (p) { S.packetRecv[nameKey(p.company)] = p; });
       renderPackets();
       render();
     }).catch(function () { /* the box stays hidden */ });
   }
 
+  // A sponsor's info packet: the record of the one they sent from their
+  // receipt link (when, and what kind), and its row on the Packets sheet.
+  function packetFor(s) {
+    if (!s || !S.packets) return null;
+    var P = S.packets, t = { headers: P.headers };
+    var c = { when: colOf(t, /^submitted/), biz: colOf(t, /^business/) };
+    var rec = S.packetRecv ? S.packetRecv[s.key] || null : null;
+    var row = null;
+    if (rec && rec.packetAt && c.when >= 0) row = P.rows.filter(function (r) { return String(r.cells[c.when]) === rec.packetAt; }).pop() || null;
+    if (!row && c.biz >= 0) {
+      row = P.rows.filter(function (r) {
+        var k = nameKey(r.cells[c.biz]);
+        return k && (k === s.key || (k.length >= 6 && s.key.length >= 6 && (k.indexOf(s.key) === 0 || s.key.indexOf(k) === 0)));
+      }).pop() || null;
+    }
+    if (!rec && !row) return null;
+    return { rec: rec, row: row, when: rec ? rec.at : (row && c.when >= 0 ? String(row.cells[c.when]).slice(0, 10) : ''), note: rec ? rec.note : '' };
+  }
+  function packetFact(s) {
+    var p = packetFor(s);
+    if (p) return 'Info packet in' + (p.when ? ' ' + fmtDay(p.when) : '') + (p.note ? ': ' + p.note : '');
+    return isIn(s) && s.paid && S.packets ? 'Waiting on info packet' : '';
+  }
+  // Paid, but no packet back yet. The receipt carries their packet link, so
+  // one whose receipt hasn't gone out hasn't got the link yet.
+  function packetWaiting() {
+    if (!S.book || !S.packets) return '';
+    var esc = A().esc;
+    var list = sponsors().filter(function (s) { return isIn(s) && s.paid && !packetFor(s); })
+      .sort(function (a, b) { return a.company.localeCompare(b.company); });
+    if (!list.length) return '';
+    return '<h2 class="rc-h">Paid, waiting on their info packet (' + list.length + ')</h2><ul class="rc-list pk-wait">' +
+      list.map(function (s) {
+        var rc = receiptItem(s.key);
+        var how = rc && rc.status === 'sent' ? 'Receipt with their packet link sent' + (rc.at ? ' ' + fmtDay(String(rc.at).slice(0, 10)) : '')
+          : 'Receipt not sent yet, so they don’t have the packet link';
+        return '<li class="pk-item"><b>' + esc(s.company) + '</b> <span class="hint">' + esc((s.tier ? s.tier + '. ' : '') + how + '.') + '</span></li>';
+      }).join('') + '</ul>';
+  }
+
+  // The packet on the sponsor's own detail: what they sent, and their logo.
+  function renderPacketDetail(s) {
+    var p = packetFor(s), esc = A().esc;
+    if (!p) {
+      return isIn(s) && s.paid && S.packets ? '<div class="sp-packet"><h3 class="ss-h">Info packet</h3><p class="hint">Not in yet.</p></div>' : '';
+    }
+    var html = '<div class="sp-packet"><h3 class="ss-h">Info packet in' + (p.when ? ' ' + esc(fmtDay(p.when)) : '') + '</h3>' +
+      (p.note ? '<p><b>' + esc(p.note) + '</b></p>' : '');
+    if (p.row) {
+      var P = S.packets, t = { headers: P.headers };
+      var want = [/^level/, /^business/, /^name on jersey/, /^contact name/, /^email/, /^phone/, /^website/, /^facebook/, /^instagram/,
+        /^other social/, /^banner$/, /^banner notes/, /^sponsoring/, /^write up/, /^anything else/];
+      html += '<div class="pk-logo" data-row="' + p.row.row + '" aria-live="polite"></div>' + want.map(function (re) {
+        var i = colOf(t, re), v = i < 0 ? '' : String(p.row.cells[i] || '');
+        return v ? '<p class="ss-row"><span>' + esc(P.headers[i]) + '</span>' + linkify(P.headers[i], v) + '</p>' : '';
+      }).join('');
+      var fi = colOf(t, /^files folder/), f = fi < 0 ? '' : String(p.row.cells[fi] || '');
+      if (/^https:\/\/drive\.google\.com\//.test(f)) html += '<p><a class="btn small" target="_blank" rel="noopener" href="' + esc(f) + '">Open their files in Drive</a></p>';
+    }
+    return html + '</div>';
+  }
+  function loadPacketLogo() {
+    var spot = $('#spFields .sp-packet .pk-logo');
+    if (!spot || spot.dataset.done) return;
+    spot.dataset.done = '1';
+    spot.textContent = 'Loading logo…';
+    A().apiPost({ action: 'packetLogo', row: Number(spot.dataset.row) }).then(function (res) {
+      spot.textContent = '';
+      if (!res.ok || !res.logo) { spot.textContent = res.ok ? 'No logo image in their files.' : (res.error || 'Could not load the logo.'); return; }
+      var img = document.createElement('img');
+      img.className = 'sp-logo'; img.alt = 'Logo they sent';
+      img.src = 'data:' + res.logo.mime + ';base64,' + res.logo.base64;
+      spot.appendChild(img);
+    }).catch(function () { spot.textContent = 'Could not load the logo.'; spot.dataset.done = ''; });
+  }
+
   function renderPackets() {
     var box = $('#spPackets'), esc = A().esc, P = S.packets;
-    if (!P || !P.rows.length) { box.classList.add('hidden'); return; }
+    if (!P) { box.classList.add('hidden'); return; }
+    var waitBox = packetWaiting();
+    if (!P.rows.length) {
+      box.innerHTML = waitBox;
+      box.classList.toggle('hidden', !waitBox);
+      return;
+    }
     var t = { headers: P.headers };
     var c = { when: colOf(t, /^submitted/), status: colOf(t, /^status/), level: colOf(t, /^level/), biz: colOf(t, /^business/) };
     var skip = [colOf(t, /^files folder/), colOf(t, /^files$/)];
@@ -780,7 +866,7 @@
           (onList(r) ? '<p class="hint pk-on">On the sponsor list.</p>' :
             canAdd && get(r, 'biz') ? '<p class="pk-add"><button type="button" class="btn pk-add-btn" data-row="' + r.row + '">Add to sponsor list</button> <span class="hint" aria-live="polite"></span></p>' : '') +
           body + '</details></li>';
-      }).join('') + '</ul>';
+      }).join('') + '</ul>' + waitBox;
     box.classList.remove('hidden');
     $$('#spPackets .pk-add-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1444,7 +1530,7 @@
             needsOwner(s) ? 'Needs a new owner' : '',
             String(s.contacted).trim() ? 'Contacted: ' + s.contacted : '',
             s.team ? 'Team: ' + s.team : '',
-            S.packetKeys && S.packetKeys[s.key] ? 'Info packet in' : '',
+            packetFact(s),
             upgradeFor(s) ? 'Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay' : ''
           ]) +
           (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
@@ -1538,10 +1624,11 @@
     });
     key.sort(function (a, b) { return a.k - b.k; });
     var fact = function (f) { return '<div class="sp-fact' + (/^notes?$/i.test(f.h) || f.v.length > 60 ? ' full' : '') + '"><dt>' + esc(f.h) + '</dt><dd>' + linkify(f.h, f.v) + '</dd></div>'; };
-    $('#spFields').innerHTML = (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
+    $('#spFields').innerHTML = renderPacketDetail(s) + (key.length ? '<dl class="sp-facts">' + key.map(fact).join('') + '</dl>' : '') +
       '<details class="sp-all"><summary>Everything on the sheet (' + (key.length + rest.length) + ')</summary>' +
       (rest.length ? '<dl class="sp-facts">' + rest.map(fact).join('') + '</dl>' : '') +
       '<p class="hint">Row ' + s.row + ' on the sheet.' + (S.book.writable ? '' : ' Changes to these go on the sheet itself.') + '</p></details>';
+    loadPacketLogo();
     renderMarks(s, []);
     renderBanner(s);
     showEditActs(s);
