@@ -130,7 +130,9 @@ function outreachFor_(how) {
 function outreachGreet_(r) {
   var n = outreachFirstName_(r.contact);
   if (n) return n;
-  var b = String(r.company || '').replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
+  // "Example Insurance (Leominster)" greets "Example Insurance team": no town in brackets.
+  var b = String(r.company || '').replace(/\s*\([^)]*\)/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  b = b.replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
   return (b || 'Lunenburg') + ' team';
 }
 // Which email they get, from the sheet alone:
