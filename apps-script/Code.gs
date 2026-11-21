@@ -191,7 +191,7 @@ function route_(action, data) {
     if (action === 'sponsorTeamSave') return sponsorTeamSave(data);
     if (action === 'sponsorTeamLogo') return sponsorTeamLogo(data);
     // A small copy of each sponsor's logo from the league's Sponsor Logos folder.
-    if (action === 'sponsorLogoList') return ok(snapRead_('logos', false, sponsorLogoList));
+    if (action === 'sponsorLogoList') return ok(snapRead_('logos', !!data.fresh, function () { return sponsorLogoList(!!data.fresh); }));
     // When the website was last looked at for sponsor payments, and whether each is on the sheet. Read only.
     if (action === 'websiteCheck') return ok(websiteCheck(!!data.fresh));
     // The LYBS Dashboard's Uniforms and Jersey Order pages: same sheet, no contact columns.
