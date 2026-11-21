@@ -67,7 +67,7 @@ function spotlightReceiptDay_(v) {
   return stYes_(t) ? spotlightDay_(new Date()) : '';
 }
 
-// "Lunenburg", from "655 Massachusetts Ave, Lunenburg, MA 01462" or "Leominster, MA".
+// "Lunenburg", from "12 Example St, Lunenburg, MA 01462" or "Leominster, MA".
 function spotlightTown_(r) {
   var tries = [r.foundAddress, r.address];
   for (var i = 0; i < tries.length; i++) {
