@@ -16,7 +16,7 @@
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]){
     --navy: #0d1830; --navy2: #1b2d55;
     --ink: #E9EDF6; --ink2: #B3BBCE; --ink3: #8A93AA;
     --line: #283350; --bg: #0B1120; --card: #131B2E; --panel: #19223A; --field: #0F1628;
@@ -27,6 +27,18 @@
     --shadow: 0 1px 2px rgba(0,0,0,.4);
   }
 }
+/* the same, when dark is chosen on a light device */
+:root[data-theme="dark"]{
+  --navy: #0d1830; --navy2: #1b2d55;
+  --ink: #E9EDF6; --ink2: #B3BBCE; --ink3: #8A93AA;
+  --line: #283350; --bg: #0B1120; --card: #131B2E; --panel: #19223A; --field: #0F1628;
+  --blue: #7C9BFF; --blue-bg: rgba(124,155,255,.14);
+  --gold: #F2B544; --gold-bg: rgba(242,181,68,.10);
+  --red: #FF8A80;
+  --green: #5BD49A; --green-bg: rgba(76,208,142,.15);
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -57,6 +69,7 @@ body {
 .hbtn:focus-visible { outline: 2px solid #9FB3E6; outline-offset: 2px; }
 .hbtn.home { background: #fff; border-color: #fff; color: #0a1628; }
 .hbtn.home:hover { background: #E7ECF8; }
+.hbtn.theme { padding: 0 11px; font-size: 16px; cursor: pointer; font-family: inherit; }
 @media (max-width: 640px) {
   .top { padding: 12px; gap: 10px; border-radius: 12px; }
   .topbar h1 { font-size: 20px; }
@@ -385,7 +398,10 @@ select, input[type=url] {
 }
 
 /* On the light blue of dark mode, dark text reads better than white. */
-@media (prefers-color-scheme: dark) { .tab-btn.active, .btn.primary { color: #0B1120; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tab-btn.active,:root:not([data-theme="light"]) .btn.primary{ color: #0B1120; } }
+/* the same, when dark is chosen on a light device */
+:root[data-theme="dark"] .tab-btn.active,:root[data-theme="dark"] .btn.primary{ color: #0B1120; }
+
 
 /* Fields tab extras: unplaced banners, mark hung, the printed hang sheet. */
 .fcard-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
