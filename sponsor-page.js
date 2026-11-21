@@ -59,8 +59,9 @@
 
   // Each level's perks, as a check-list: what it has, and (greyed) what it doesn't.
   function perks(l) {
-    var listing = l.writeup >= 800 ? 'Full-width spot on our sponsor page, ' + l.writeup + '-character write-up and link'
-      : l.writeup ? 'Half-width spot on our sponsor page, ' + l.writeup + '-character write-up and link'
+    var listing = l.writeup >= 700 ? 'Full-width spot on our sponsor page, ' + l.writeup + '-character write-up and link'
+      : l.writeup >= 300 ? 'Half-width spot on our sponsor page, ' + l.writeup + '-character write-up and link'
+      : l.writeup ? 'Logo, link and a short ' + l.writeup + '-character write-up on our sponsor page'
       : l.logo ? 'Logo and link on our sponsor page' : 'Name on our sponsor page';
     return [
       [true, 'Logo on our homepage'],
@@ -76,7 +77,7 @@
     var prev = i > 0 ? P.levels[i - 1] : null;
     if (!prev) return l.price ? 'Support the league' : 'Any amount helps';
     if (l.jersey && !prev.jersey) return 'Your name on a team jersey';
-    if (l.banner && !prev.banner) return 'Adds a banner and a write-up';
+    if (l.banner && !prev.banner) return prev.writeup ? 'Adds a banner and a longer write-up' : 'Adds a banner and a write-up';
     if (l.writeup > prev.writeup) return 'Our biggest spotlight';
     return 'More time in the spotlight';
   }

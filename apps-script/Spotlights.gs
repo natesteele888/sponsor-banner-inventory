@@ -4,13 +4,16 @@
  * name it "Spotlights").
  *
  * The Sponsors app itself shows none of this: it stays sponsors and banners.
- * Marking a sponsor paid here is the whole trigger. The Dashboard's Social
+ * A sponsor is ready for their spotlight once they are marked paid and their
+ * receipt has gone out (Receipt sent has a date), or once they are marked
+ * paid in kind. The welcome post is due two days after the receipt. The Dashboard's Social
  * Studio (lybs-reporting, social/spotlights.js) asks this script for the
  * sponsors that are paid, with their level and logo, plans their spotlight
  * posts, draws the logo-on-white card and hands it back to be filed in a
  * private Drive folder. Nothing here, or there, ever posts to Facebook.
  *
- *   Sponsors app: Mark paid  →  sponsor sheet, Paid? = Yes / Status = Paid
+ *   Sponsors app: Mark paid, Send receipt  →  sponsor sheet, Paid? = Yes,
+ *        │  Receipt sent = the day (or Paid how = In kind)
  *        │  spotlightSponsors (level, team, jersey name, write-up)
  *        │  spotlightLogo     (the logo, one sponsor at a time)
  *        ▼
@@ -22,6 +25,12 @@
  *
  * Social Studio is open to the league admin only, so these three actions are
  * too: anyone else signed in gets "not allowed", the same as that page.
+ *
+ * Write-ups come from three columns on the sponsor sheet, one per level, so
+ * an upgrade picks up the longer one: "Write-up (All-Star)" (100 characters),
+ * "Write-up (MVP)" (300) and "Write-up (Championship)" (700). Anyone on the
+ * board can edit them there. With none filled in, the info packet's write-up
+ * stands in. Town comes from the address columns.
  *
  * Script Properties (all optional, none hold sponsor data):
  *   SPOTLIGHT_CARD_FOLDER_ID  the cards folder, remembered after the first card
@@ -39,6 +48,58 @@ function spotlightAllowed_() {
 
 function spotlightPaid_(r) {
   return stYes_(r.paid) || /^\s*paid\b/i.test(String(r.status || ''));
+}
+
+function spotlightInKind_(r) {
+  return /\bin.?kind\b/i.test(String(r.paidHow || '')) || /\bpaid in.?kind\b/i.test(String(r.notes || ''));
+}
+
+function spotlightDay_(d) { return Utilities.formatDate(d, 'America/New_York', 'yyyy-MM-dd').slice(0, 10); }
+
+// The day the receipt went out, as YYYY-MM-DD, or '' if it hasn't.
+function spotlightReceiptDay_(v) {
+  var t = String(v || '').trim();
+  if (!t || /^(no|n|false|-)$/i.test(t)) return '';
+  var m = t.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[0];
+  var d = new Date(t);
+  if (!isNaN(d.getTime())) return spotlightDay_(d);
+  return stYes_(t) ? spotlightDay_(new Date()) : '';
+}
+
+// "Lunenburg", from "655 Massachusetts Ave, Lunenburg, MA 01462" or "Leominster, MA".
+function spotlightTown_(r) {
+  var tries = [r.foundAddress, r.address];
+  for (var i = 0; i < tries.length; i++) {
+    var m = String(tries[i] || '').match(/(?:^|,)\s*([A-Za-z][A-Za-z .']{1,40}?)\s*,\s*(?:MA|Mass\.?|Massachusetts)\b/i);
+    if (m) return m[1].trim();
+  }
+  return '';
+}
+
+// Cut to a whole sentence under max where one ends past halfway, else a word.
+function spotlightTrim_(text, max) {
+  var t = String(text || '').trim();
+  if (!t || t.length <= max) return t;
+  var cut = t.slice(0, max + 1);
+  var end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  return end > max * 0.5 ? cut.slice(0, end + 1) : t.slice(0, max).replace(/\s+\S*$/, '') + '…';
+}
+
+// The write-up for their level: that level's column, then the next level's
+// cut down, then the info packet's.
+function spotlightWriteUp_(r, tier, packet) {
+  var order = tier === 'Championship' ? [r.wChamp, r.wMvp] : [r.wMvp, r.wChamp, r.wAllStar];
+  var max = WRITEUP_LIMITS[tier] || WRITEUP_LIMITS.MVP;
+  for (var i = 0; i < order.length; i++) if (String(order[i] || '').trim()) return spotlightTrim_(order[i], max);
+  return spotlightTrim_(packet || '', max);
+}
+
+// 'last' if they sponsored last season, 'earlier' if before that, '' if new.
+function spotlightSince_(r) {
+  var prev = String(r.tierPrev || '').trim();
+  if (prev && !/^(none|no|n\/a|-)$/i.test(prev)) return 'last';
+  return stYes_(r.pastSponsor) ? 'earlier' : '';
 }
 
 function spotlightTier_(r) {
@@ -87,19 +148,30 @@ function spotlightList_() {
     amount: /^amount/,
     paid: /^paid/,
     pastSponsor: /sponsored in past/,
-    team: /^(associated team|team)/
-  });
+    team: /^(associated team|team)/,
+    receipt: /^receipt sent/,
+    paidHow: /^(paid how|payment method|paid by)/,
+    notes: /^notes?$/,
+    address: /^address$/,
+    foundAddress: /^found online address/,
+    wAllStar: /^write up all star/,
+    wMvp: /^write up mvp/,
+    wChamp: /^write up championship/
+  }, ['wAllStar', 'wMvp', 'wChamp', 'notes']);
   var picks = {};
   sponsorTeams_().rows.forEach(function (t) { picks[String(t.key)] = t; });
   var packets = spotlightPackets_();
   var cards = spotlightCards_();
-  var seen = {}, list = [], otherPaid = 0;
+  var seen = {}, list = [], otherPaid = 0, waitingReceipt = 0;
   main.rows.forEach(function (r) {
     var key = companyKey_(r.company);
-    if (!key || seen[key] || !spotlightPaid_(r)) return;
+    var inKind = spotlightInKind_(r);
+    if (!key || seen[key] || !(inKind || spotlightPaid_(r))) return;
     seen[key] = 1;
     var tier = spotlightTier_(r);
     if (SPOTLIGHT_TIERS.indexOf(tier) < 0) { otherPaid++; return; }
+    var receiptDay = spotlightReceiptDay_(r.receipt);
+    if (!inKind && !receiptDay) { waitingReceipt++; return; }
     var p = picks[key], pk = packets[key] || {};
     var team = p && (p.division || p.team) ? [p.division, p.team].filter(Boolean).join(' ') : String(r.team || '');
     list.push({
@@ -107,14 +179,18 @@ function spotlightList_() {
       name: String(r.company).trim().slice(0, 120),
       tier: tier,
       returning: spotlightReturning_(r),
+      since: spotlightSince_(r),
+      inKind: inKind,
+      readyAt: receiptDay || spotlightDay_(new Date()),
+      town: spotlightTown_(r).slice(0, 60),
       team: team.slice(0, 120),
       jerseyName: pk.jerseyName || '',
-      writeUp: pk.writeUp || '',
+      writeUp: spotlightWriteUp_(r, tier, pk.writeUp),
       banner: pk.banner || '',
       card: cards[key] || null
     });
   });
-  return { season: SEASON, readAt: new Date().toISOString(), sponsors: list, otherPaid: otherPaid,
+  return { season: SEASON, readAt: new Date().toISOString(), sponsors: list, otherPaid: otherPaid, waitingReceipt: waitingReceipt,
            missing: main.missing };
 }
 

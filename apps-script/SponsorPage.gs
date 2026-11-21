@@ -37,7 +37,7 @@
  * Script Properties (all optional):
  *   SPONSOR_LEVELS          JSON list of levels, low to high, to override the
  *                           defaults below when the packet changes:
- *                           [{"name":"MVP","price":500,"jersey":true,"logo":true,"writeup":200,"banner":true}, …]
+ *                           [{"name":"MVP","price":500,"jersey":true,"logo":true,"writeup":300,"banner":true}, …]
  *   SPONSOR_PAY_VENMO       the league's Venmo name, e.g. @Example-League
  *   SPONSOR_PAY_ONLINE_URL  the league's online payment page (https://…)
  * A check goes to the league at RECEIPT_ORG_ADDRESS. Cash is always offered.
@@ -53,13 +53,14 @@ var UPGRADE_PAID = 'Paid';
 
 // Low to high, as the league's Become a Sponsor page lists them. Gameday
 // takes any amount and needs only the business name; Championship is $750
-// and up (plus: shows as "$750+"). photo: a framed team photo; social:
+// and up (plus: shows as "$750+"). Write-up lengths match WRITEUP_LIMITS
+// (Season.gs). photo: a framed team photo; social:
 // 0 none, 1 a spotlight, 2 two or three spotlights a year.
 var DEFAULT_SPONSOR_LEVELS = [
   { name: 'Gameday', price: 0, jersey: false, logo: false, writeup: 0, banner: false, photo: false, social: 0 },
-  { name: 'All-Star', price: 300, jersey: true, logo: true, writeup: 0, banner: false, photo: false, social: 0 },
-  { name: 'MVP', price: 500, jersey: true, logo: true, writeup: 200, banner: true, photo: true, social: 1 },
-  { name: 'Championship', price: 750, plus: true, jersey: true, logo: true, writeup: 800, banner: true, photo: true, social: 2 }
+  { name: 'All-Star', price: 300, jersey: true, logo: true, writeup: 100, banner: false, photo: false, social: 0 },
+  { name: 'MVP', price: 500, jersey: true, logo: true, writeup: 300, banner: true, photo: true, social: 1 },
+  { name: 'Championship', price: 750, plus: true, jersey: true, logo: true, writeup: 700, banner: true, photo: true, social: 2 }
 ];
 
 function sponsorLevels_() {
@@ -293,6 +294,9 @@ function sponsorPageState_(token, quick) {
 // A returning sponsor: the level they had last season, or for one marked as
 // a past sponsor with no level on file, the level they have now. Null for a
 // new sponsor. "Same as last year" covers only what that level had.
+// Levels that had no write-up last season, so "Same as last year" can't
+// cover one (All-Star got its short write-up for 2027). Empty it for 2028.
+var NO_WRITEUP_LAST_SEASON = ['All-Star'];
 function lastYearLevel_(levels, row) {
   if (!row) return null;
   var prev = row.prevTier ? levelNamed_(levels, row.prevTier) : null;
@@ -316,7 +320,7 @@ function sponsorPageGet(data) {
     // Returning sponsor: what last season's level had, for "Same as last year".
     // contact: we have a name and email on file, so "Keep last year's info"
     // can send in one tap with nothing typed.
-    lastYear: last ? { jersey: !!last.jersey, logo: !!last.logo, writeup: !!last.writeup, banner: !!last.banner,
+    lastYear: last ? { jersey: !!last.jersey, logo: !!last.logo, writeup: !!last.writeup && NO_WRITEUP_LAST_SEASON.indexOf(last.name) < 0, banner: !!last.banner,
                        contact: !!(st.row.contact && st.row.hasEmail) } : null,
     paid: { level: st.paid.name, amount: st.row.amount, inKind: !!st.row.inKind },
     // Every level, low to high: theirs marked paid, the ones above as
