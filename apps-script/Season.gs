@@ -1385,7 +1385,9 @@ function libraryLogo_(key) {
 var LOGO_THUMBS_NAME = 'Sponsor logo thumbnails (app).json';
 var LOGO_THUMBS_PROP = 'LOGO_THUMBS_FILE_ID';
 
-function sponsorLogoList(fresh) {
+// key -> { id, at, file? }: the library file, then a form upload, then one
+// set in the app, each later one winning.
+function logoPicks_(fresh) {
   var pick = {};   // key -> { id, at, file? }
   var lib = fresh ? logoLibraryBuild_() : null;
   if (!lib) {
@@ -1411,10 +1413,30 @@ function sponsorLogoList(fresh) {
       if (f) pick[String(t.key)] = f;
     });
   } catch (e) { console.log('set logos: ' + e); }
+  return pick;
+}
+
+function sponsorLogoList(fresh) {
+  // Which file each card uses is worked out from the sheets and three Drive
+  // folders, which takes seconds; the answer is small, so it is kept for ten
+  // minutes and cleared by any change made through the app (an upload too).
+  var cache = null, pickKey = 'logoPick_v1_' + (typeof snapGen_ === 'function' ? snapGen_() : '0'), pick = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  if (!fresh && cache) {
+    try { pick = JSON.parse(cache.get(pickKey) || 'null'); } catch (e) { pick = null; }
+  }
+  if (!pick) {
+    pick = logoPicks_(fresh);
+    if (cache) {
+      var slim = {};
+      Object.keys(pick).forEach(function (k) { slim[k] = { id: pick[k].id, at: pick[k].at }; });
+      try { cache.put(pickKey, JSON.stringify(slim), SNAP_TTL); } catch (e) { /* read again next time */ }
+    }
+  }
 
   var store = readThumbStore_(), kept = {}, changed = false, out = {};
   Object.keys(pick).forEach(function (key) {
-    var p = pick[key], ck = p.id + '_' + p.at;
+    var p = pick[key], ck = LOGO_THUMB_PX + ':' + p.id + '_' + p.at;
     var img = store.data[ck];
     if (!img) {
       try {
@@ -1446,12 +1468,44 @@ function teamLogoFiles_() {
   return out;
 }
 
+// A card shows a logo about 72 x 40, so a copy 200 px on its long side is
+// plenty, even on a sharp phone screen. Drive makes one on request: the file's
+// thumbnail link, asked for at 200 px, fetched with this script's own sign-in.
+// getThumbnail() alone can hand back a copy of 300 KB or more, and 33 of those
+// made every read of the box several MB.
+var LOGO_THUMB_PX = 200;
+var LOGO_THUMB_MAX = 120 * 1024;   // bytes; anything bigger is left off its card
+
 function smallLogo_(file) {
-  var blob = file.getThumbnail() || (file.getSize() <= 60 * 1024 ? file.getBlob() : null);
-  if (!blob) return null;
-  var mime = blob.getContentType();
-  if (LOGO_LIBRARY_MIMES.indexOf(mime) < 0) return null;
-  return { mime: mime, base64: Utilities.base64Encode(blob.getBytes()) };
+  var blob = null;
+  try { blob = driveThumb_(file.getId(), LOGO_THUMB_PX); } catch (e) { console.log('logo thumb link: ' + e); }
+  if (!fitsLogo_(blob)) {
+    try { blob = file.getThumbnail(); } catch (e) { blob = null; }
+  }
+  if (!fitsLogo_(blob) && file.getSize() <= LOGO_THUMB_MAX) blob = file.getBlob();
+  if (!fitsLogo_(blob)) return null;
+  return { mime: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+function fitsLogo_(blob) {
+  if (!blob) return false;
+  if (LOGO_LIBRARY_MIMES.indexOf(blob.getContentType()) < 0) return false;
+  return blob.getBytes().length <= LOGO_THUMB_MAX;
+}
+
+// The file's own Drive thumbnail at the size asked for, or null. The link is
+// only ever one of Google's own image hosts, read with this script's token.
+function driveThumb_(fileId, px) {
+  var auth = { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true };
+  var meta = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) +
+    '?fields=thumbnailLink&supportsAllDrives=true', auth);
+  if (meta.getResponseCode() !== 200) return null;
+  var link = (JSON.parse(meta.getContentText() || '{}') || {}).thumbnailLink;
+  if (!link || !/^https:\/\/[a-z0-9-]+\.googleusercontent\.com\//.test(link)) return null;
+  link = /=s\d+$/.test(link) ? link.replace(/=s\d+$/, '=s' + px) : link;
+  var res = UrlFetchApp.fetch(link, auth);
+  if (res.getResponseCode() !== 200) return null;
+  return res.getBlob();
 }
 
 function thumbStoreFile_() {
