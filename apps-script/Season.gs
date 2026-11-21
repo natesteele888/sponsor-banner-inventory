@@ -167,6 +167,12 @@ function parseAmount_(v) {
   return m ? Number(m[0]) : 0;
 }
 
+// Write-up length by level, on the website and in spotlight posts (Nathan,
+// Nov 21 2026): All-Star very short, MVP a couple hundred more, Championship
+// about 700. An upgrade gets the longer write-up. The packet page's levels
+// (SponsorPage.gs) use the same numbers.
+var WRITEUP_LIMITS = { 'All-Star': 100, MVP: 300, Championship: 700 };
+
 function tierFromText_(t) {
   var s = String(t || '').toLowerCase().replace(/\s+/g, '');
   // Championship is $750 and up; an old "Championship+" reads as Championship.
@@ -553,6 +559,13 @@ function firstName_(full) {
  * personal form link and the deadline. Wording follows the 2026 "Sponsorship
  * Info Request" email Nate sent by hand.
  */
+// How long a level's write-up may be, from the sponsor levels (SponsorPage.gs).
+function writeupLimit_(tier) {
+  var t = tierFromText_(tier) || String(tier || ''), hit = 0;
+  try { sponsorLevels_().forEach(function (l) { if (l.name === t) hit = l.writeup; }); } catch (e) { /* defaults below */ }
+  return hit || WRITEUP_LIMITS[t] || WRITEUP_LIMITS.MVP;
+}
+
 function buildRequestEmail_(rec) {
   var first = firstName_(rec.contactName);
   var hi = first ? 'Hi ' + first + ',' : 'Hi there,';
@@ -571,7 +584,7 @@ function buildRequestEmail_(rec) {
     'It asks for:',
     '- The website or social link for your sponsor listing',
     '- Your business name as it should appear on the team jersey',
-    '- A short write-up about your business (up to 200 characters) for our website',
+    '- A short write-up about your business (up to ' + writeupLimit_(rec.tier) + ' characters) for our website',
     '- A high resolution logo (PNG, SVG, AI, EPS, PDF or JPG)',
     '- Your 3x5 vinyl banner for the fence at Marshall Park: reuse last season\'s, send a print-ready design, or we can design one with your logo',
     '',
@@ -1078,7 +1091,8 @@ function sponsorSheet() {
 // One tab as a list of plain objects with only the wanted fields, every value
 // as display text, found by header text so a moved or added column doesn't
 // break it. A header it can't find comes back empty and is listed in missing.
-function sheetRows_(ss, tabName, wanted) {
+// Cells are cut to 160 characters, or 1000 for the fields named in long.
+function sheetRows_(ss, tabName, wanted, long) {
   var sh = ss.getSheetByName(tabName);
   var keys = Object.keys(wanted);
   if (!sh) return { rows: [], missing: [tabName + ' (tab)'] };
@@ -1098,7 +1112,7 @@ function sheetRows_(ss, tabName, wanted) {
   });
   var rows = v.slice(h0 + 1).map(function (row) {
     var o = {};
-    keys.forEach(function (k) { o[k] = col[k] < 0 ? '' : String(row[col[k]] || '').trim().slice(0, 160); });
+    keys.forEach(function (k) { o[k] = col[k] < 0 ? '' : String(row[col[k]] || '').trim().slice(0, long && long.indexOf(k) >= 0 ? 1000 : 160); });
     return o;
   });
   return { rows: rows, missing: missing };
