@@ -167,6 +167,9 @@ function route_(action, data) {
     if (action === 'sponsorAdd') return sponsorAdd(data);
     if (action === 'sponsorEdit') return sponsorEdit(data);
     if (action === 'sponsorNote') return sponsorNote(data);
+    if (action === 'outreachList') return outreachList(data);
+    if (action === 'outreachPreview') return outreachPreview(data);
+    if (action === 'outreachSend') return outreachSend(data);
     if (action === 'sponsorWalkIn') return sponsorWalkIn(data);
     if (action === 'walkInForm') return walkInForm();
     // This season's committed total next to last season's (History.gs). Totals only.
@@ -216,7 +219,7 @@ var SNAP_TTL = 600;            // 10 minutes
 var SNAP_CHUNK = 30000;        // characters per cache entry (each entry holds up to 100 KB)
 var SNAP_READ_ONLY = { list: 1, image: 1, seasonList: 1, sponsorBook: 1, walkInForm: 1, sponsorHistory: 1, receiptList: 1,
   receiptPreview: 1, receiptCopyGet: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
-  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1 };
+  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, outreachList: 1, outreachPreview: 1 };
 
 function snapGen_() { try { return CacheService.getScriptCache().get('snapGen') || '0'; } catch (e) { return '0'; } }
 function forgetSnaps_() { try { CacheService.getScriptCache().put('snapGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }
