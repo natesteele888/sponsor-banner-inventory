@@ -82,7 +82,7 @@ function welcomeText_(r, greet, s) {
     'We will contact you to gather things such as your business write-up, logo files, and any additional information needed to complete your sponsorship package.'
   ];
   var paras = [
-    'Hi ' + (greet || 'there') + ',',
+    'Hi ' + (greet || outreachGreet_(r)) + ',',
     'Thank you for sponsoring Lunenburg Youth Baseball & Softball' + level + ' for ' + SEASON + '! We truly appreciate ' + r.company + '’s commitment to our players and community.',
     'NEXT STEPS:\n' + steps.map(function (x) { return '- ' + x; }).join('\n')
   ];
@@ -129,7 +129,7 @@ function welcomeItems_() {
       if (twin) look.push('The same address is on ' + twin.company + ' too.');
     }
     return { r: r, row: r.row, company: r.company, contact: r.contact, email: email, status: r.status, owner: r.owner,
-             tier: r.tier, paid: welcomePaid_(r), greet: outreachFirstName_(r.contact), had: had, hold: hold, look: look };
+             tier: r.tier, paid: welcomePaid_(r), greet: outreachGreet_(r), had: had, hold: hold, look: look };
   });
 }
 function welcomePublic_(i) {
@@ -156,7 +156,7 @@ function welcomePreview(data) {
   var it = welcomeFind_(data);
   if (!it) return fail('That row changed on the sheet. Refresh the list.');
   var text = welcomeText_(it.r, it.greet, welcomeSettings_());
-  return ok({ subject: WELCOME_SUBJECT, text: text, html: welcomeHtml_(text), to: it.email, greet: it.greet || 'there',
+  return ok({ subject: WELCOME_SUBJECT, text: text, html: welcomeHtml_(text), to: it.email, greet: it.greet,
               company: it.company, contact: it.contact, hold: it.hold, look: it.look, had: it.had });
 }
 
@@ -186,7 +186,13 @@ function welcomeSend(data) {
     var pick = outreachPick_(data.sender), sender = pick ? pick.id : '';
     if (!pick) return fail('Pick who it’s from.');
     if (!pick.ok) return fail(pick.why);
-    var s = welcomeSettings_(), text = welcomeText_(it.r, it.greet, s), o = { htmlBody: welcomeHtml_(text) };
+    var s = welcomeSettings_(), text = welcomeText_(it.r, it.greet, s);
+    if (pick.how === 'allow') {
+      if (data.composed === true) return fail('Nothing to mark. Nothing was sent.');
+      var t = allowTicket_('welcome', { company: it.company, to: it.email, subject: WELCOME_SUBJECT, text: text, name: String(s.sign.split('\n')[0] || '') },
+                           { row: it.row, company: it.company, email: it.email });
+      return t.error ? fail(t.error) : ok({ open: t.url });
+    }
     if (pick.how === 'compose') {
       if (data.composed !== true) return ok({ compose: { to: it.email, subject: WELCOME_SUBJECT, text: text, from: pick.email } });
       log[key] = { how: 'sent', at: today, by: by, via: 'gmail', to: it.email.toLowerCase() };
@@ -194,10 +200,11 @@ function welcomeSend(data) {
       return ok({ message: it.company + ' is marked as welcomed.' });
     }
     if (data.composed === true) return fail('Nothing to mark. Nothing was sent.');
-    if (sender === 'league') { var mail = senderSettings_(); o.from = mail.from; o.replyTo = mail.from; o.name = RECEIPT_ORG; }
-    else o.name = String(s.sign.split('\n')[0] || RECEIPT_ORG);
-    try { GmailApp.sendEmail(it.email, WELCOME_SUBJECT, text, o); }   // one sponsor, one To, no CC or BCC
-    catch (e) { return fail('Gmail refused it: ' + String(e.message || e).slice(0, 120) + ' Nothing was sent.'); }
+    var o = { company: it.company, to: it.email, subject: WELCOME_SUBJECT, text: text, html: welcomeHtml_(text), name: String(s.sign.split('\n')[0] || RECEIPT_ORG) };
+    try {   // one sponsor, one To, no CC or BCC
+      var sent = sendGuarded_('welcome', o);
+      if (!sent.ok) return fail(sent.error);
+    } catch (e) { return fail('Gmail refused it: ' + String(e.message || e).slice(0, 120) + ' Nothing was sent.'); }
     log[key] = { how: 'sent', at: today, by: by, via: sender, to: it.email.toLowerCase() };
     saveWelcomeLog_(log);
     return ok({ message: 'Welcome email sent to ' + it.email + '.' });

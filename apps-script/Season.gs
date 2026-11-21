@@ -319,15 +319,39 @@ function fromOnlineLogs_(ss) {
  * the row is marked "Needs a match" and gets no sponsor email until Nate
  * fills in who it is (a $500 gift could be a family's donation, not a sponsor).
  */
+// The league's donation notices, read with Gmail's read-only access (this
+// script can't change, label or delete mail). Notices already read are kept
+// by message id in DONATIONS_SEEN; older ones labelled by earlier versions
+// are left out by their label.
+var DONATIONS_QUERY = 'from:notifications@lunenburgybs.com subject:"Donation received from"';
+var DONATIONS_SEEN_PROP = 'DONATIONS_SEEN';
+function donationNotices_(q, max) {
+  var list = Gmail.Users.Messages.list('me', { q: q, maxResults: max || 50 }).messages || [];
+  return list.map(function (x) {
+    var m = Gmail.Users.Messages.get('me', x.id, { format: 'full' });
+    return { id: x.id, body: plainOf_(m.payload), date: new Date(Number(m.internalDate)) };
+  });
+}
+function plainOf_(part) {
+  if (!part) return '';
+  if (/^text\/plain/i.test(part.mimeType || '') && part.body && part.body.data) {
+    return Utilities.newBlob(Utilities.base64DecodeWebSafe(part.body.data)).getDataAsString('UTF-8');
+  }
+  var out = '';
+  (part.parts || []).forEach(function (p) { if (!out) out = plainOf_(p); });
+  return out;
+}
+
 function fromDonationEmails_(ss, season) {
-  var label = GmailApp.getUserLabelByName(SEEN_LABEL) || GmailApp.createLabel(SEEN_LABEL);
-  var threads = GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' +
-    DONATIONS_SINCE + ' -label:' + SEEN_LABEL_SEARCH, 0, 50);
+  var props = PropertiesService.getScriptProperties();
+  var seen = JSON.parse(props.getProperty(DONATIONS_SEEN_PROP) || '[]');
+  var notices = donationNotices_(DONATIONS_QUERY + ' after:' + DONATIONS_SINCE + ' -label:' + SEEN_LABEL_SEARCH, 50)
+    .filter(function (n) { return seen.indexOf(n.id) < 0; });
   var people = readTab_(ss, sponsorTabName_(ss));
   var out = [];
-  threads.forEach(function (t) {
-    t.getMessages().forEach(function (m) {
-      var text = m.getPlainBody() || '';
+  notices.forEach(function (n) {
+    [n].forEach(function (m) {
+      var text = m.body || '';
       var hit = text.match(/received a \$([\d,]+(?:\.\d+)?) donation from ([^\.\n]+)/i);
       if (!hit) return;
       var amount = parseAmount_(hit[1]);
@@ -353,7 +377,7 @@ function fromDonationEmails_(ss, season) {
           if (!match && last && pl === last && parseAmount_(p['Amount']) === amount) match = p;
         });
       }
-      var when = Utilities.formatDate(m.getDate(), Session.getScriptTimeZone(), 'MMM d');
+      var when = Utilities.formatDate(m.date, Session.getScriptTimeZone(), 'MMM d');
       if (match && String(match['Company'] || '').trim()) {
         out.push({
           company: String(match['Company']).trim(),
@@ -381,8 +405,9 @@ function fromDonationEmails_(ss, season) {
         });
       }
     });
-    t.addLabel(label);
+    seen.push(n.id);
   });
+  props.setProperty(DONATIONS_SEEN_PROP, JSON.stringify(seen.slice(-400)));
   return out;
 }
 
@@ -399,16 +424,13 @@ function websiteCheck(fresh) {
   var cache = CacheService.getScriptCache(), key = 'websiteCheck_v1';
   if (!fresh) { var hit = cache.get(key); if (hit) return JSON.parse(hit); }
   var ss = sponsorSpreadsheet_(), people = readTab_(ss, sponsorTabName_(ss));
-  var threads = GmailApp.search('from:notifications@lunenburgybs.com subject:"Donation received from" after:' + DONATIONS_SINCE, 0, 100);
   var found = [];
-  threads.forEach(function (t) {
-    t.getMessages().forEach(function (m) {
-      var hitM = String(m.getPlainBody() || '').match(/received a \$([\d,]+(?:\.\d+)?) donation from ([^\.\n]+)/i);
-      if (!hitM) return;
-      var amount = parseAmount_(hitM[1]);
-      if (amount < WEBSITE_MIN_AMOUNT) return;
-      found.push({ donor: hitM[2].trim(), amount: amount, when: m.getDate() });
-    });
+  donationNotices_(DONATIONS_QUERY + ' after:' + DONATIONS_SINCE, 100).forEach(function (m) {
+    var hitM = String(m.body || '').match(/received a \$([\d,]+(?:\.\d+)?) donation from ([^\.\n]+)/i);
+    if (!hitM) return;
+    var amount = parseAmount_(hitM[1]);
+    if (amount < WEBSITE_MIN_AMOUNT) return;
+    found.push({ donor: hitM[2].trim(), amount: amount, when: m.date });
   });
   var out = found.sort(function (a, b) { return b.when - a.when; }).map(function (d) {
     var dn = nameKey_(d.donor), dc = companyKey_(d.donor), last = dn.split(' ').pop(), match = null;
@@ -551,8 +573,8 @@ function prepareRequest_(season, rec) {
     writeFields_(season.sheet, season.header, rec._row, { token: rec.token });
   }
   var mail = buildRequestEmail_(rec);
-  var opts = { htmlBody: mail.html, name: SIGNATURE_NAME, cc: LEAGUE_CC };
-  GmailApp.createDraft(to, mail.subject, mail.text, opts);
+  var d = draftGuarded_('inforequest', { company: rec.company, to: to, cc: LEAGUE_CC, subject: mail.subject, text: mail.text, html: mail.html, name: SIGNATURE_NAME });
+  if (!d.ok) throw new Error(d.error);
   rec.requestStatus = 'Draft in Gmail';
   rec.requestAt = todayStamp();
   writeFields_(season.sheet, season.header, rec._row, { requestStatus: rec.requestStatus, requestAt: rec.requestAt });
@@ -579,8 +601,7 @@ function notifyNewSponsors_(added, paidNow, drafted) {
     '\n\nNothing has been sent to any sponsor. Open the ' + SEASON + ' tab of Sponsor Banners to check them, ' +
     'assign a banner from stock or mark one to order:\n' + APP_URL;
   var n = added.length + paidNow.length;
-  GmailApp.sendEmail(myEmail_(), SEASON + ' banner sponsors: ' + n + ' update' + (n > 1 ? 's' : ''), body,
-    { name: 'LYBS Sponsor Banners' });
+  ownerAlert_(myEmail_(), SEASON + ' banner sponsors: ' + n + ' update' + (n > 1 ? 's' : ''), body, 'LYBS Sponsor Banners');
 }
 
 
@@ -808,7 +829,7 @@ function intakeSubmit(data) {
     'Files: ' + (saved.length ? saved.join(', ') + '\n' + folder.getUrl() : '(none attached)') +
     (fields.fileLink ? '\nLink they pasted (check it before opening): ' + fields.fileLink : '') +
     '\n\nOpen the ' + SEASON + ' tab in Sponsor Banners to assign or order their banner:\n' + APP_URL;
-  GmailApp.sendEmail(myEmail_(), SEASON + ' sponsor info received: ' + rec.company, body, { name: 'LYBS Sponsor Banners' });
+  ownerAlert_(myEmail_(), SEASON + ' sponsor info received: ' + rec.company, body, 'LYBS Sponsor Banners');
 
   return ok({ message: 'Thank you! We have your info.' });
 }
