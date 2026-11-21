@@ -116,9 +116,7 @@
     var mine = $('levelList').querySelector('[data-mine]'), list = $('levelList');
     if (mine && list.scrollWidth > list.clientWidth + 4) list.scrollLeft = mine.offsetLeft - (list.clientWidth - mine.offsetWidth) / 2;
     var lv = level();
-    $('formFor').textContent = pick
-      ? 'Your info for ' + lv.name + '. It counts once the ' + money(lv.owed) + ' difference is paid; until then you stay at ' + P.paid.level + '.'
-      : 'Your info for ' + lv.name + '.';
+    $('formFor').textContent = 'Your info for ' + lv.name + '.';
     showFields();
     $('writeup').maxLength = lv.writeup || 0;
     $('writeupMax').textContent = lv.writeup || 0;
@@ -152,12 +150,19 @@
     var p = P.pay || {}, ways = [];
     if (p.venmo) ways.push('<li><b>Venmo:</b> ' + esc(p.venmo) + '. Put your business name in the note.</li>');
     if (p.online) ways.push('<li><b>Online:</b> <a href="' + esc(p.online) + '" target="_blank" rel="noopener">pay on our website\'s donation page</a>. Put your business name in the note.</li>');
-    ways.push('<li><b>Check or money order:</b> payable to ' + esc(p.checkTo || 'the league') + (p.address ? ', mailed to ' + esc(p.address) : '') + '. Put your business name on the memo line.</li>');
-    if (p.cash) ways.push('<li><b>Cash:</b> hand it to any LYBS board member.</li>');
+    // Check or money order laid out like an envelope: who it's payable to,
+    // where it goes, and what to put on the memo line. Cash isn't offered.
+    var addr = String(p.address || '').split(/,\s*/), street = addr.shift() || '', city = addr.join(', ');
+    ways.push('<li><b>Check or money order</b><div class="lv-check">' +
+      '<div><span>Payable to:</span> ' + esc(p.checkTo || 'the league') + '</div>' +
+      (street ? '<div><span>Mail to:</span> ' + esc(street) + (city ? '<br>' + esc(city) : '') + '</div>' : '') +
+      '<div><span>Memo:</span> your business name</div></div></li>');
     box.innerHTML = '<h2>Pay the ' + esc(money(lv.owed)) + ' difference</h2>' +
-      '<p>Your upgrade to ' + esc(lv.name) + ' counts once we get it. Any of these work:</p><ul class="lv-ways">' + ways.join('') + '</ul>' +
-      '<p class="hint">Until then your sponsorship stays at ' + esc(P.paid.level) + (lv.banner && !level0().banner ? ', and the banner comes once the upgrade is paid' : '') + '.</p>';
+      '<p>' + esc(thanks(lv.name, lv.owed)) + '</p><ul class="lv-ways">' + ways.join('') + '</ul>';
     box.classList.remove('hidden');
+  }
+  function thanks(name, owed) {
+    return 'Thank you so much for upgrading to ' + name + '! Please send along the ' + money(owed) + ' difference to receive your additional benefits.';
   }
   function level0() { return P.levels.filter(function (l) { return l.state === 'paid'; })[0] || {}; }
 
@@ -226,7 +231,7 @@
   function finish(res, kept) {
     ['pageForm', 'levels', 'greet', 'keepBox'].forEach(function (id) { $(id).classList.add('hidden'); });
     $('doneText').textContent = res.upgrade
-      ? 'We have your info. Your upgrade to ' + res.upgrade.to + ' counts once we get the ' + money(res.upgrade.owed) + ' difference.'
+      ? thanks(res.upgrade.to, res.upgrade.owed)
       : kept ? "We'll use what we have from last season. If anything's missing, we'll reach out by email."
       : "We have your info. If we need anything else, we'll reach out by email.";
     if (!res.upgrade) renderPay($('payBox'), null);
@@ -266,7 +271,7 @@
     $('sameBox').classList.toggle('hidden', !res.lastYear);
     $('jerseyName').placeholder = res.company;
     if (res.upgrade) {
-      $('pending').textContent = 'You asked to upgrade to ' + res.upgrade.to + '. It counts once we get the ' + money(res.upgrade.owed) + ' difference.';
+      $('pending').textContent = thanks(res.upgrade.to, res.upgrade.owed);
       $('pending').classList.remove('hidden');
     } else $('pending').classList.add('hidden');
     $('levels').classList.remove('hidden');
