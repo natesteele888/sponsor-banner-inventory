@@ -166,6 +166,7 @@ function route_(action, data) {
     }
     if (action === 'sponsorAdd') return sponsorAdd(data);
     if (action === 'sponsorEdit') return sponsorEdit(data);
+    if (action === 'sponsorNote') return sponsorNote(data);
     if (action === 'sponsorWalkIn') return sponsorWalkIn(data);
     if (action === 'walkInForm') return walkInForm();
     // This season's committed total next to last season's (History.gs). Totals only.

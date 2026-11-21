@@ -664,3 +664,26 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-card-rc .rc-msg:empty { display: none; }
 .rc-pv-cc { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 14px; }
 .rc-pv-cc input { flex: 1 1 auto; min-width: 0; font-size: 16px; }
+
+/* One-tap jobs at the top of the Sponsors tab; the numbers fold away under them. */
+.sp-quick { margin: 0 0 12px; }
+.sp-quick-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sp-quick-btns .sp-q { min-height: 56px; font-size: 15px; font-weight: 700; justify-content: center; gap: 6px; }
+.sp-quick-btns .sp-q span { font-size: 18px; }
+.sp-quick-btns .sp-q[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
+@media (max-width: 420px) { .sp-quick-btns { grid-template-columns: 1fr; } .sp-quick-btns .sp-q { min-height: 48px; } }
+.sp-quick-todo { margin: 8px 0 0; }
+.sp-quick-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.sp-quick-panel input[type="search"], .sp-quick-panel textarea { width: 100%; box-sizing: border-box; font-size: 16px; }
+.sp-q-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.sp-q-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.sp-q-row:first-child { border-top: 0; }
+.sp-q-row .btn { flex: 0 0 auto; min-width: 72px; }
+.sp-q-who { margin: 0 0 6px; }
+.sp-q-foot { margin: 8px 0 0; }
+.linkish { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.sp-reports { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.sp-reports > summary { cursor: pointer; padding: 10px 12px; font-weight: 700; list-style-position: inside; }
+.sp-reports > summary .hint { font-weight: 400; margin-left: 6px; }
+.sp-reports[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.sp-reports > :not(summary) { margin-left: 12px; margin-right: 12px; }
