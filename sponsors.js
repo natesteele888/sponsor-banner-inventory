@@ -817,7 +817,8 @@
     if (!list.length) return '';
     return '<h2 class="rc-h">Paid, waiting on their info packet (' + list.length + ')</h2><ul class="rc-list pk-wait">' +
       list.map(function (s) {
-        var rc = receiptItem(s.key);
+        // Matched by sheet row, the way the card's badge is; the key alone can miss.
+        var rc = (S.receipts && S.receipts.items || []).filter(function (i) { return Number(i.row) === Number(s.row); })[0] || receiptItem(s.key);
         var how = rc && rc.status === 'sent' ? 'Receipt with their packet link sent' + (rc.at ? ' ' + fmtDay(String(rc.at).slice(0, 10)) : '')
           : 'Receipt not sent yet, so they don’t have the packet link';
         return '<li class="pk-item"><b>' + esc(s.company) + '</b> <span class="hint">' + esc((s.tier ? s.tier + '. ' : '') + how + '.') + '</span></li>';
