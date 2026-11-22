@@ -478,13 +478,14 @@ function receiptMark(data) {
 }
 
 // ---------- thank-you with the packet link, no receipt ----------
-// Only for a receipt marked Not needed. Preview first, then one tap sends it
-// to the sponsor's own address alone, no CC. Never on a schedule.
+// For any receipt already handled: sent from here (an older receipt may carry
+// an old packet link) or marked Not needed. Preview first, then one tap sends
+// it to the sponsor's own address alone, no CC. Never on a schedule. (Nov 22)
 function thanksSetup_(data) {
   if (!canEditSponsors_()) return { err: 'Only the sponsorship editors can send this.' };
   var r = findReceiptRow_(data && data.key);
   if (!r) return { err: 'That row is no longer marked paid with an email.' };
-  if (r.status !== 'skip') return { err: 'This one still needs its receipt. Mark it Not needed first.' };
+  if (r.status !== 'skip' && r.status !== 'sent') return { err: 'This one still needs its receipt. Send it or mark it Not needed first.' };
   var s = receiptSettings_();
   s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
   if (!s.packetUrl) return { err: 'There is no sponsor packet link set, so there is nothing to send.' };

@@ -303,10 +303,12 @@
         ? '<button class="btn small primary" data-rc="preview" type="button">Preview and send</button>' +
           '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
         : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : i.elsewhere ? 'Sent another way' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
+            // Every row here can get the short thank-you with the packet link,
+            // whether the receipt went from this app or another way. (Nov 22)
+            (i.thanked ? '<span class="rc-state">Thank-you sent ' + esc(i.thanked) + '</span>'
+              : '<button class="btn small" data-rc="thanks" type="button">Send thank-you + packet</button>') +
             (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>'
-              : (i.thanked ? '<span class="rc-state">Thank-you sent ' + esc(i.thanked) + '</span>'
-                : '<button class="btn small" data-rc="thanks" type="button">Send thank-you + packet</button>') +
-                '<button class="btn small" data-rc="undo" type="button">Undo</button>');
+              : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
         '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
         (i.online ? '<span class="rc-path">Paid online: send this one, not Crossbar’s receipt</span>' : '') +
