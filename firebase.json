@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "target": "sponsors",
+    "public": ".",
+    "cleanUrls": false,
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/.*/**",
+      "**/*.md",
+      "apps-script/**",
+      "apps-script-sender/**",
+      "docs/**",
+      "tests/**"
+    ],
+    "headers": [
+      { "source": "**/*.@(js|css|html|json)", "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+      { "source": "**/*.html", "headers": [ { "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Referrer-Policy", "value": "no-referrer" } ] }
+    ]
+  }
+}

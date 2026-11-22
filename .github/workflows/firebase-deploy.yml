@@ -1,0 +1,47 @@
+# Puts the app online at https://lybs-sponsors.web.app after every merge to
+# main, so nobody runs firebase deploy by hand. This repo is public, so the
+# GitHub minutes are free.
+#
+# One-time hookup: a deploy key for the lybs-dashboard Firebase project saved
+# as the repository secret FIREBASE_SERVICE_ACCOUNT. Until it exists this
+# workflow skips the deploy and says so; it never fails a merge over it. The
+# key lives only in GitHub's secret store, never in this repo.
+name: Deploy to lybs-sponsors.web.app
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "apps-script/**"
+      - "apps-script-sender/**"
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - name: Waiting on the one-time hookup
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice title=Not deployed::Add the FIREBASE_SERVICE_ACCOUNT repository secret and this deploys on the next merge."
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: env.HAS_KEY == 'true'
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: lybs-dashboard
+          target: sponsors
+          channelId: live
