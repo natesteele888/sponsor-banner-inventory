@@ -1,0 +1,4 @@
+{
+  "projects": { "default": "lybs-dashboard" },
+  "targets": { "lybs-dashboard": { "hosting": { "sponsors": ["lybs-sponsors"] } } }
+}

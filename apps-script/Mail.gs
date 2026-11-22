@@ -23,7 +23,7 @@
 // The league logo for letterheads. It's the public league logo the app's own
 // site serves; LEAGUE_LOGO_URL overrides it. Sends attach it inline so it
 // shows even where a mail app blocks outside pictures.
-var LEAGUE_LOGO_DEFAULT = 'https://natesteele888.github.io/sponsor-banner-inventory/icons/lybs-wordmark.png';
+var LEAGUE_LOGO_DEFAULT = 'https://lybs-sponsors.web.app/icons/lybs-wordmark.png';
 function leagueLogoUrl_() {
   var u = String(PropertiesService.getScriptProperties().getProperty('LEAGUE_LOGO_URL') || '').trim();
   return /^https:\/\//.test(u) ? u : LEAGUE_LOGO_DEFAULT;
