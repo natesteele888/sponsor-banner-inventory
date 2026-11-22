@@ -130,10 +130,14 @@ function outreachFor_(how) {
 function outreachGreet_(r) {
   var n = outreachFirstName_(r.contact);
   if (n) return n;
-  // "Example Insurance (Leominster)" greets "Example Insurance team": no town in brackets.
+  return (outreachBizName_(r) || 'Lunenburg') + ' team';
+}
+// The business as the email names it, in the greeting and the body alike:
+// "Example Insurance (Leominster)" reads "Example Insurance", and "Example
+// Roofing, LLC" reads "Example Roofing". Nothing in brackets (Nate, Nov 22).
+function outreachBizName_(r) {
   var b = String(r.company || '').replace(/\s*\([^)]*\)/g, ' ').replace(/\s{2,}/g, ' ').trim();
-  b = b.replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
-  return (b || 'Lunenburg') + ' team';
+  return b.replace(/,?\s+(llc|l\.l\.c\.|inc\.?|incorporated|co\.|corp\.?|ltd\.?|pc|p\.c\.)$/i, '').trim();
 }
 // Which email they get, from the sheet alone:
 //   'last'     a level in last season's tier column: thanked for last season
@@ -233,14 +237,15 @@ function outreachText_(r, greet, s) {
   var name = String(s.sign || '').split('\n')[0].trim();
   var me = name ? 'My name is ' + name + ', and I’m on the board.' : 'I’m on the board.';
   var when = outreachWhen_(r), past = !!when;
+  var biz = outreachBizName_(r) || r.company;
   var paras = [
     hi,
     past
-      ? 'Thank you for sponsoring Lunenburg Youth Baseball & Softball ' + (when === 'last' ? 'last season' : 'in the past') + '. Having ' + r.company + ' behind our kids made a real difference, and I’m reaching out about the ' + SEASON + ' season.'
+      ? 'Thank you for sponsoring Lunenburg Youth Baseball & Softball ' + (when === 'last' ? 'last season' : 'in the past') + '. Having ' + biz + ' behind our kids made a real difference, and I’m reaching out about the ' + SEASON + ' season.'
       : 'I’m reaching out from Lunenburg Youth Baseball & Softball about sponsoring our ' + SEASON + ' season.',
     me + ' We’re a volunteer run, nonprofit league for kids in Lunenburg.',
-    (past ? 'We’d love to have ' + r.company + ' back with us this year.' : 'I wanted to see if ' + r.company + ' would have any interest in sponsoring the league this year.') +
-      ' Sponsors help us cover uniforms, equipment and field upkeep, and this year we’re working on new dugouts at Powell Field and fixing the scoreboard at McNally Field. ' + packet + '\n' + s.levels,
+    (past ? 'We’d love to have ' + biz + ' back with us this year.' : 'I wanted to see if ' + biz + ' would have any interest in sponsoring the league this year.') +
+      ' Sponsors help us cover uniforms, equipment and field upkeep, and this year we’re working on new dugouts at Powell Field and getting the scoreboard at McNally Field checked out by an electrician and back up and running. ' + packet + '\n' + s.levels,
     'If it’s a fit, the sign-up form is here:\n' + s.signup,
     'We’re a 501(c)(3), so it’s tax deductible too. Thanks for taking a look, and let me know if you have any questions.',
     s.sign || 'Lunenburg Youth Baseball & Softball'
