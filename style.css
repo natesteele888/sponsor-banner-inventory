@@ -710,7 +710,19 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-quick-btns .sp-q { min-height: 56px; font-size: 15px; font-weight: 700; justify-content: center; gap: 6px; }
 .sp-quick-btns .sp-q span { font-size: 18px; }
 .sp-quick-btns .sp-q[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
-@media (max-width: 420px) { .sp-quick-btns { grid-template-columns: 1fr; } .sp-quick-btns .sp-q { min-height: 48px; } }
+/* On a phone (Nate, Nov 22): the three buttons sit as one row of compact
+   pills, a second layer right under the tabs, in a lighter blue so they read
+   apart from the tabs above. Banners' three-page switch matches. */
+@media (max-width: 600px) {
+  .sp-quick { margin: 2px 0 10px; }
+  .sp-quick-btns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .sp-quick-btns .sp-q { min-height: 36px; padding: 0 8px; border-radius: 999px; font-size: 13px; font-weight: 700; gap: 4px;
+    background: var(--blue-bg); border-color: transparent; color: var(--blue); white-space: nowrap; }
+  .sp-quick-btns .sp-q span { font-size: 14px; }
+  .sp-quick-btns .sp-q[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .banner-switch { margin: 2px 0 12px; }
+}
+@media (max-width: 360px) { .sp-quick-btns .sp-q { font-size: 12px; padding: 0 4px; } .sp-quick-btns .sp-q span { display: none; } }
 .sp-quick-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .sp-quick-panel input[type="search"], .sp-quick-panel textarea { width: 100%; box-sizing: border-box; font-size: 16px; }
 .sp-q-list { list-style: none; margin: 10px 0 0; padding: 0; }
