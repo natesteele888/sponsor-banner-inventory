@@ -68,6 +68,7 @@ function outreachSettings_() {
     dayMax: Number(p.getProperty('OUTREACH_DAY_MAX')) || OUTREACH_DAY_MAX
   };
   s.linksOk = !!(s.levels && s.signup);
+  s.review = outreachReviewSet_();
   return s;
 }
 
@@ -75,6 +76,13 @@ function outreachLog_() {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(OUTREACH_PROP) || '{}'); } catch (e) { return {}; }
 }
 function saveOutreachLog_(log) { PropertiesService.getScriptProperties().setProperty(OUTREACH_PROP, JSON.stringify(log)); }
+// Businesses set aside "for review" (Nate, Nov 22): kept out of outreach and
+// listed at the very bottom until someone puts them back. Key: companyKey_.
+var OUTREACH_REVIEW_PROP = 'OUTREACH_REVIEW_' + SEASON;
+function outreachReviewSet_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(OUTREACH_REVIEW_PROP) || '{}') || {}; }
+  catch (e) { return {}; }
+}
 function outreachSentToday_(log) {
   var today = dayOf_(new Date());
   return Object.keys(log).filter(function (k) { return log[k] && log[k].at === today; }).length;
@@ -211,6 +219,7 @@ function outreachCandidate_(r) {
 // Checks for one row. all: every candidate row (for repeated addresses).
 function outreachCheck_(r, all, log, s) {
   var hold = [], look = [];
+  if ((s.review || {})[companyKey_(r.company)]) hold.push('Set aside for review. Put it back in outreach first.');
   var email = firstEmail_(r.emailCell);
   var found = String(r.emailCell || '').match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g) || [];
   if (!r.emailCell) hold.push('No email on the sheet.');
@@ -264,12 +273,14 @@ function outreachHtml_(text) {
 
 function outreachList() {
   if (!canEditSponsors_()) return fail('Only the sponsorship editors can send outreach.');
-  var s = outreachSettings_(), log = outreachLog_();
+  var s = outreachSettings_(), log = outreachLog_(), rev = s.review;
   var all = outreachRows_().filter(outreachCandidate_);
   var items = all.map(function (r) {
     var ck = outreachCheck_(r, all, log, s), sent = log[companyKey_(r.company)] || null;
+    var setAside = !!rev[companyKey_(r.company)];
     return { row: r.row, company: r.company, contact: r.contact, email: ck.email, status: r.status || 'Not contacted',
-             owner: r.owner, greet: outreachGreet_(r), past: outreachWhen_(r), hold: ck.hold, look: ck.look,
+             owner: r.owner, greet: outreachGreet_(r), past: outreachWhen_(r), review: setAside,
+             hold: setAside ? ck.hold.slice(1) : ck.hold, look: ck.look,
              sent: sent ? { at: sent.at, by: sent.by } : null };
   });
   return ok({ items: items, senders: outreachSenders_(), packet: !!s.packetFile, linksOk: s.linksOk,
@@ -349,6 +360,26 @@ function outreachSend(data) {
     var marked = outreachMark_(marks, who);
     return ok({ results: results, sent: marks.length, marked: marked,
                 message: marks.length ? 'Sent ' + marks.length + ' email' + (marks.length === 1 ? '' : 's') + ', one per sponsor.' : 'Nothing was sent.' });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Set a business aside for review, or put it back. Sends nothing and leaves
+// the sheet alone. data: { row, company, undo }
+function outreachReview(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can change outreach.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var f = outreachFind_(data);
+  if (!f.r) return fail('That row changed on the sheet. Refresh the list.');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return fail('Busy. Try again in a moment.');
+  try {
+    var rev = outreachReviewSet_(), k = companyKey_(f.r.company);
+    if (data.undo === true) delete rev[k];
+    else rev[k] = { at: dayOf_(new Date()), by: String(WHO && WHO.email || '') };
+    PropertiesService.getScriptProperties().setProperty(OUTREACH_REVIEW_PROP, JSON.stringify(rev));
+    return ok({ message: data.undo === true ? f.r.company + ' is back in outreach.' : f.r.company + ' is set aside for review.' });
   } finally {
     lock.releaseLock();
   }
