@@ -153,11 +153,14 @@
   // column, the notes say "paid in kind"): counted on its own, never as cash.
   var IN_KIND = /\bin.?kind\b/i, PAID_IN_KIND = /\bpaid in.?kind\b/i;
 
+  var FILTER_MORE = {};   // value: label, for views off the short Show list
   var FILTERS = {
     all: function () { return true; },
     signed: isIn,
     paid: function (s) { return isIn(s) && s.paid; },
-    unpaid: function (s) { return isIn(s) && !s.paid; },
+    unpaid: function (s) { return isIn(s) && !s.paid && !s.inKind; },
+    // Signed up, and one of Paid, Receipt sent, Packet sent is still No.
+    todo: function (s) { if (!isIn(s)) return false; var st = stepsOf(s); return !st.paid.done || !st.receipt.done || !st.packet.done; },
     notContacted: function (s) { return !String(s.contacted).trim(); },
     lapsed: function (s) { return s.past && !isIn(s); },
     pastNotContacted: function (s) { return s.past && !isIn(s) && contactState(s) === 'none'; },
@@ -185,7 +188,65 @@
     return /@/.test(String(s.email || '')) ? '' : 'noEmail';
   }
 
+  // ---------- the three steps of getting a sponsor in ----------
+  // Paid (Yes, In kind or No), Receipt sent, Packet sent: one place works
+  // them out, for the card, the list and the Receipts & packets tab. The
+  // receipt from this app carries the packet link, so it counts for both.
+  // (Nate, Nov 22)
+  function rcItemFor(s) {
+    return s ? ((S.receipts && S.receipts.items) || []).filter(function (i) { return Number(i.row) === Number(s.row); })[0] || null : null;
+  }
+  function sponsorAt(row) { return S.book ? sponsors().filter(function (x) { return Number(x.row) === Number(row); })[0] || null : null; }
+  function stepsOf(s, it) {
+    if (it === undefined) it = rcItemFor(s);
+    var signed = s ? isIn(s) : !!it, paid = !!it || (signed && (s.paid || s.inKind));
+    var kind = (s && s.inKind) || (it && it.inKind);
+    var day = function (d) { return d ? fmtDay(String(d).slice(0, 10)) : ''; };
+    var out = { it: it };
+    out.paid = { done: paid, label: !signed ? 'Not signed up' : kind ? 'In kind' : paid ? 'Yes' : 'No' };
+    var rc = { done: false, label: 'No', can: '' };
+    if (!paid) rc.label = 'No, not paid yet';
+    else if (!it) rc.label = 'No, add their email first';
+    else if (it.status === 'sent') { rc.done = true; rc.label = 'Yes, ' + day(it.at); }
+    else if (it.status === 'skip') { rc.done = true; rc.label = it.elsewhere ? 'Yes, ' + day(it.at) + ' (outside the app)' : 'Not needed'; }
+    else rc.can = 'send';
+    var pk = { done: false, label: 'No', can: '' };
+    if (it && it.thanked) { pk.done = true; pk.label = 'Yes, ' + day(it.thanked) + (it.thankedElsewhere ? ' (outside the app)' : ''); }
+    else if (it && it.status === 'sent') { pk.done = true; pk.label = 'Yes, with the receipt'; }
+    else if (s && packetFor(s)) { pk.done = true; pk.label = 'Yes, they sent theirs back'; }
+    else if (!paid) pk.label = 'No, not paid yet';
+    else if (!it) pk.label = 'No, add their email first';
+    else if (it.status === 'ready') pk.label = 'No, it goes with the receipt';
+    else pk.can = 'send';
+    out.receipt = rc; out.packet = pk;
+    return out;
+  }
+  // The list card's three little lines.
+  function stepChips(s) {
+    var st = stepsOf(s), esc = A().esc;
+    var chip = function (q, x) { return '<span class="st-chip ' + (x.done ? 'ok' : 'no') + '"><span aria-hidden="true">' + (x.done ? '✓' : '✗') + '</span> ' + q + (x.done ? '' : ': No') + '</span>'; };
+    var paidChip = '<span class="st-chip ' + (st.paid.done ? 'ok' : 'no') + '"><span aria-hidden="true">' + (st.paid.done ? '✓' : '✗') + '</span> ' + (st.paid.label === 'In kind' ? 'Paid in kind' : st.paid.done ? 'Paid' : 'Paid: No') + '</span>';
+    return '<div class="st-chips">' + paidChip + chip('Receipt', st.receipt) + chip('Packet', st.packet) + '</div>';
+  }
+  // A first tap asks, a second does it. Never sends anything to a sponsor.
+  function armed(btn, ask) {
+    if (btn.dataset.armed) return true;
+    btn.dataset.armed = '1'; btn.dataset.was = btn.textContent; btn.textContent = ask || 'Tap again to confirm';
+    clearTimeout(btn._t); btn._t = setTimeout(function () { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = btn.dataset.was; } }, 6000);
+    return false;
+  }
+  // Read the receipts list fresh, then redraw everything that shows it.
+  function refreshReceipts() {
+    return A().apiPost({ action: 'receiptList' }).then(function (res) {
+      if (!res || !res.ok) return;
+      A().keep('receiptList', res);
+      S.receipts = res; renderReceipts(); render();
+      if (S.current) renderSteps(S.current);
+    });
+  }
+
   function matches(s) {
+    if (!FILTERS[S.filter]) S.filter = 'signed';
     if (!FILTERS[S.filter](s)) return false;
     if (S.owner && s.owner !== S.owner) return false;
     if (S.area && s.area !== S.area) return false;
@@ -277,52 +338,58 @@
       S.receipts = res;
       renderReceipts();
       render();
+      if (S.current) renderSteps(S.current);
       if (S.packets) renderPackets();
     }).catch(function () { /* the box stays hidden */ });
   }
 
+  // Receipts & packets: one row per paid sponsor with two lines, Receipt
+  // and Packet, each Yes or No. Send shows only where it's still No, next to
+  // "Mark as sent" for one done outside the app. Rows with both done fold
+  // into Done, with nothing to send again up front. (Nate, Nov 22)
   function renderReceipts() {
     var box = $('#spReceipts'), esc = A().esc, R = S.receipts;
     renderQuick();
     if (!R) { box.classList.add('hidden'); return; }
-    var ready = R.items.filter(function (i) { return i.status === 'ready'; });
-    var web = [];
-    var sent = R.items.filter(function (i) { return i.status === 'sent' || i.status === 'skip'; });
     if (!R.items.length && !(R.copies || []).length) { box.classList.add('hidden'); return; }
     var set = R.settings || {};
     var notes = [];
     if (set.missing && set.missing.length) notes.push('Still needed before receipts can go out: ' + setupWords(set.missing) + '.');
     else if (!set.live) notes.push('Test mode: receipts go to the test address, not the sponsor.');
     if (!set.sender) notes.push('The league email address is not set up yet, so nothing can go to a sponsor.');
-    else if (set.live && set.via === 'mine') notes.push('Receipts go out under the league name from the app owner\'s Gmail, and replies go to the league address.');
-    if (!set.packet) notes.push('No sponsor packet link set, so receipts go without it.');
     var can = canEdit();
-    var row = function (i) {
-      var acts = !can ? '<button class="btn small" data-rc="preview" type="button">' + (i.status === 'sent' ? 'Open receipt' : 'Preview') + '</button>'
-        : i.status === 'ready'
-        ? '<button class="btn small primary" data-rc="preview" type="button">Preview and send</button>' +
-          '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
-        : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : i.elsewhere ? 'Sent another way' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
-            // Every row here can get the short thank-you with the packet link,
-            // whether the receipt went from this app or another way. (Nov 22)
-            (i.thanked ? '<span class="rc-state">Thank-you sent ' + esc(i.thanked) + '</span>'
-              : '<button class="btn small" data-rc="thanks" type="button">Send thank-you + packet</button>') +
-            (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>'
-              : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
-      return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
-        '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
-        (i.online ? '<span class="rc-path">Paid online: send this one, not Crossbar’s receipt</span>' : '') +
-        (i.inKind ? '<span class="rc-path">Paid in kind: the receipt describes the gift and shows no dollar amount</span>' : '') + '</div>' +
-        '<div class="rc-acts">' + acts + '</div><div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
+    var withSteps = R.items.map(function (i) { return { i: i, st: stepsOf(sponsorAt(i.row), i) }; });
+    var todo = withSteps.filter(function (x) { return !x.st.receipt.done || !x.st.packet.done; });
+    var done = withSteps.filter(function (x) { return x.st.receipt.done && x.st.packet.done; });
+    var line = function (q, x, btns) {
+      return '<div class="rc-line ' + (x.done ? 'ok' : 'no') + '"><span class="rc-q">' + q + '</span>' +
+        '<b class="rc-a"><span aria-hidden="true">' + (x.done ? '✓ ' : '✗ ') + '</span>' + esc(x.label) + '</b>' +
+        (btns ? '<span class="rc-acts">' + btns + '</span>' : '') + '</div>';
+    };
+    var row = function (x, isDone) {
+      var i = x.i, st = x.st, rb = '', pb = '', tuck = [];
+      if (can && st.receipt.can === 'send') rb = '<button class="btn small primary" data-rc="preview" type="button">Send receipt</button>' +
+        '<button class="btn small" data-rc="rcmark" type="button">Mark as sent</button>';
+      if (can && st.packet.can === 'send') pb = '<button class="btn small primary" data-rc="thanks" type="button">Send packet</button>' +
+        '<button class="btn small" data-rc="pkmark" type="button">Mark as sent</button>';
+      // The rarely needed ones, small and out of the way.
+      if (i.status === 'sent') tuck.push('<button class="linkish" data-rc="preview" type="button">View receipt</button>');
+      if (can && st.receipt.can === 'send') tuck.push('<button class="linkish" data-rc="rcnone" type="button">No receipt needed</button>');
+      if (can && i.status === 'skip') tuck.push('<button class="linkish" data-rc="undo" type="button">Undo receipt</button>');
+      if (can && i.thankedElsewhere) tuck.push('<button class="linkish" data-rc="pkundo" type="button">Undo packet</button>');
+      return '<li class="rc-item rc-two" data-key="' + esc(i.key) + '">' +
+        '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span></div>' +
+        '<div class="rc-lines">' + line('Receipt', st.receipt, rb) + line('Packet', st.packet, pb) + '</div>' +
+        (tuck.length && (isDone || can) ? '<div class="rc-tuck">' + tuck.join('<span class="sep"> · </span>') + '</div>' : '') +
+        '<div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
     };
     box.innerHTML = '<details class="rc-box"' + (S.rcOpen ? ' open' : '') + '>' +
-      '<summary class="rc-h">' + (ready.length ? 'Receipts ready to send ' + countBadge(ready.length) : 'Receipts: all caught up') + '</summary>' +
-      '<p class="hint rc-note">Sponsors get this receipt with the packet link, whether they paid by check or online. Plain donations that aren’t for a sponsorship keep Crossbar’s own receipt and never show here.</p>' +
+      '<summary class="rc-h">' + (todo.length ? 'Receipts &amp; packets to send ' + countBadge(todo.length) : 'Receipts &amp; packets: all done') + '</summary>' +
       (notes.length ? '<p class="hint rc-note">' + esc(notes.join(' ')) + '</p>' : '') +
-      '<ul class="rc-list">' + ready.map(row).join('') + '</ul>' +
-      (web.length || sent.length ? '<details class="rc-more"><summary>Sent or not needed (' + (web.length + sent.length) + ')</summary><ul class="rc-list">' +
-        web.concat(sent).map(row).join('') + '</ul></details>' : '') +
-      copiesHtml(R.copies || []) +
+      (todo.length ? '<ul class="rc-list">' + todo.map(function (x) { return row(x, false); }).join('') + '</ul>' : '<p class="hint">Every paid sponsor has their receipt and packet.</p>') +
+      (done.length ? '<details class="rc-more"><summary>Done (' + done.length + ')</summary><ul class="rc-list">' +
+        done.map(function (x) { return row(x, true); }).join('') + '</ul>' + copiesHtml(R.copies || []) + '</details>'
+        : copiesHtml(R.copies || [])) +
       '</details>';
     keepOpen(box, 'rcOpen');
     box.classList.remove('hidden');
@@ -488,32 +555,29 @@
   function receiptAct(btn) {
     var li = btn.closest('.rc-item'), key = li.dataset.key, how = btn.dataset.rc, msg = li.querySelector('.rc-msg');
     var item = S.receipts.items.filter(function (i) { return i.key === key; })[0];
-    // Send lives in the preview, so every receipt is seen before it goes.
+    // Send lives in the preview, so every email is seen before it goes.
     if (how === 'copy') return showCopy(rowPreview(li), li.dataset.copy, msg);
     if (how === 'preview') return showReceipt(rowPreview(li), key, msg, { send: canEdit() && item && item.status === 'ready' });
     if (how === 'thanks') return showThanks(rowPreview(li), key, msg);
-    // Not needed asks first whether it went out another way: then the sheet
-    // gets the Receipt sent date, so the spotlight draft can go ahead.
-    if (how === 'skip') {
-      var acts = btn.closest('.rc-acts');
-      acts.dataset.was = acts.innerHTML;
-      acts.innerHTML = '<span class="rc-ask">Sent another way?</span>' +
-        '<button class="btn small primary" data-rc="skipsent" type="button">Yes, already sent</button>' +
-        '<button class="btn small" data-rc="skipnone" type="button">No, skip it</button>' +
-        '<button class="btn small" data-rc="skipback" type="button">Cancel</button>';
-      return;
-    }
-    if (how === 'skipback') { var a2 = btn.closest('.rc-acts'); a2.innerHTML = a2.dataset.was || ''; return; }
-    if (how !== 'skipsent' && how !== 'skipnone' && how !== 'undo') return;
-    var body = { action: 'receiptMark', key: key, how: how === 'undo' ? 'undo' : 'skip' };
-    if (how === 'skipsent') body.elsewhere = true;
-    Array.prototype.forEach.call(btn.closest('.rc-acts').querySelectorAll('button'), function (b) { b.disabled = true; });
+    var ask = { rcmark: 'Tap again: receipt already sent', rcnone: 'Tap again: no receipt needed', pkmark: 'Tap again: packet already sent',
+      undo: 'Tap again to undo', pkundo: 'Tap again to undo' }[how];
+    if (!ask) return;
+    if (!armed(btn, ask)) return;
+    markStep(how, key, msg);
+  }
+  // Mark as sent (or not needed, or undo) for a receipt or a packet. Changes
+  // what the app shows only; nothing goes to the sponsor.
+  function markStep(how, key, msg) {
+    var body = how === 'pkmark' ? { action: 'receiptThanksMark', key: key }
+      : how === 'pkundo' ? { action: 'receiptThanksMark', key: key, undo: true }
+      : { action: 'receiptMark', key: key, how: how === 'undo' ? 'undo' : 'skip' };
+    if (how === 'rcmark') body.elsewhere = true;
     msg.textContent = 'Saving…';
-    A().apiPost(body).then(function (res) {
-      if (!res.ok) { btn.disabled = false; msg.textContent = res.error || 'That did not go through.'; return; }
-      $('#spStatus').textContent = res.message || 'Saved.';
-      loadReceipts();
-    }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Nothing was sent. Try again.'; });
+    return A().apiPost(body).then(function (res) {
+      if (!res.ok) { msg.textContent = res.error || 'That did not go through.'; return; }
+      msg.innerHTML = '<span class="sp-done">✓ ' + A().esc(res.message || 'Saved.') + '</span>';
+      return refreshReceipts();
+    }).catch(function () { msg.textContent = 'Could not reach the backend. Nothing changed. Try again.'; });
   }
 
   // ---------- follow-ups ----------
@@ -1275,8 +1339,14 @@
 
   // A clear "done" line after a change.
   function doneNote(text) {
-    var st = $('#spEditStatus');
-    st.innerHTML = '<span class="sp-done">✓ ' + A().esc(text) + '</span>';
+    var html = '<span class="sp-done">✓ ' + A().esc(text) + '</span>';
+    $('#spEditStatus').innerHTML = html;
+    var m = $('#spStepMsg'); if (m) m.innerHTML = html;
+  }
+  // A line for the card that also shows when the details are folded.
+  function say(text) {
+    $('#spEditStatus').textContent = text;
+    var m = $('#spStepMsg'); if (m) m.textContent = text;
   }
 
   function canEdit() { return !!(S.book && S.book.writable && S.book.canEdit); }
@@ -1284,7 +1354,7 @@
   function showEditActs(s) {
     var can = canEdit();
     $('#spEditActs').classList.toggle('hidden', !can);
-    $('#spPaidBtn').classList.toggle('hidden', !can || s.paid);
+    $('#spPaidBtn').classList.add('hidden');   // on the card's Paid line now
     var st = contactState(s);
     $('#spContactBtn').classList.toggle('hidden', !can || st !== 'none');
     $('#spNoBtn').classList.toggle('hidden', !can || s.paid || st === 'not');
@@ -1333,13 +1403,13 @@
 
   function saveRow(values, done) {
     var s = S.current;
-    $('#spEditStatus').textContent = 'Saving…';
+    say('Saving…');
     return A().apiPost({ action: 'sponsorEdit', row: s.row, company: s.company, values: values }).then(function (res) {
-      if (!res.ok) { $('#spEditStatus').textContent = res.error || 'That did not save.'; return; }
-      $('#spEditStatus').textContent = res.message || 'Saved.';
+      if (!res.ok) { say(res.error || 'That did not save.'); return; }
+      say(res.message || 'Saved.');
       S.editing = false;
       return load().then(function () { if (done) done(); });
-    }).catch(function () { $('#spEditStatus').textContent = 'Could not reach the backend. Nothing was saved. Try again.'; });
+    }).catch(function () { say('Could not reach the backend. Nothing was saved. Try again.'); });
   }
 
   // What the open edit form would change, column by column.
@@ -1385,7 +1455,7 @@
 
   function setColumn(re, missing, value, said, after) {
     var t = mainTab(), c = colOf(t, re), row = S.current.row;
-    if (c < 0) { $('#spEditStatus').textContent = missing; return; }
+    if (c < 0) { say(missing); return; }
     var values = {}; values[t.headers[c]] = value;
     saveRow(values, function () { open(row); doneNote(said); if (after) after(row); });
   }
@@ -1393,6 +1463,48 @@
   function markContacted() { setColumn(/^contacted/, 'The sheet has no Contacted? column.', 'Yes', 'Contacted. Saved to the sheet.'); }
   function markNotSponsoring() { setColumn(/^contacted/, 'The sheet has no Contacted? column.', 'Not sponsoring', 'Not sponsoring. No follow-up emails go to them.'); }
   function markPaid() { setColumn(/^paid/, 'The sheet has no Paid? column.', 'Yes', 'Paid.', receiptAfterPaid); }
+  // Paid with goods or services: Paid? Yes and Paid how "In kind".
+  function markInKind() {
+    var t = mainTab(), pc = colOf(t, /^paid\??$/), hc = colOf(t, /^(paid how|payment method|paid by)/), row = S.current.row;
+    if (pc < 0 || hc < 0) { say('The sheet needs its Paid? and Paid how columns for this.'); return; }
+    var values = {}; values[t.headers[pc]] = 'Yes'; values[t.headers[hc]] = 'In kind';
+    saveRow(values, function () { open(row); doneNote('Marked paid in kind.'); receiptAfterPaid(row); });
+  }
+
+  // The card's three lines: Paid, Receipt sent, Packet sent. Yes or No, Send
+  // only where it's still No, Mark as sent for one done outside the app.
+  function renderSteps(s) {
+    var box = $('#spSteps'), esc = A().esc;
+    if (!box || !s) return;
+    if (!isIn(s)) {
+      box.innerHTML = '<p class="hint">Not signed up for ' + esc(S.book.season) + ' yet. Their contact details are below.</p>';
+      $('#spMoreBox').open = true;
+      return;
+    }
+    var st = stepsOf(s), can = canEdit(), it = st.it;
+    var line = function (q, x, btns) {
+      return '<li class="st-line ' + (x.done ? 'ok' : 'no') + '"><span class="st-q">' + q + '</span>' +
+        '<b class="st-a"><span aria-hidden="true">' + (x.done ? '✓ ' : '✗ ') + '</span>' + esc(x.label) + '</b>' +
+        (btns ? '<span class="st-acts">' + btns + '</span>' : '') + '</li>';
+    };
+    var b = function (k, label, main) { return '<button class="btn small' + (main ? ' primary' : '') + '" type="button" data-st="' + k + '">' + label + '</button>'; };
+    var pay = can && !st.paid.done ? b('paid', 'Mark as paid', true) + b('inkind', 'Mark as in kind') : '';
+    var rc = can && st.receipt.can === 'send' ? b('rcsend', 'Send receipt', true) + b('rcmark', 'Mark as sent') : '';
+    var pk = can && st.packet.can === 'send' ? b('pksend', 'Send packet', true) + b('pkmark', 'Mark as sent') : '';
+    box.innerHTML = '<ul class="st-list">' + line('Paid', st.paid, pay) + line('Receipt sent', st.receipt, rc) + line('Packet sent', st.packet, pk) + '</ul>' +
+      (it && it.status === 'sent' ? '<p class="st-tuck"><button class="linkish" type="button" data-st="rcview">View the receipt</button></p>' : '');
+  }
+  function stepAct(btn) {
+    var s = S.current; if (!s) return;
+    var k = btn.dataset.st, it = rcItemFor(s), msg = $('#spStepMsg'), pv = $('#spReceipt');
+    if (k === 'rcsend' || k === 'rcview') { pv.innerHTML = ''; return it && showReceipt(pv, it.key, msg, { send: k === 'rcsend' && canEdit() && it.status === 'ready' }); }
+    if (k === 'pksend') { pv.innerHTML = ''; return it && showThanks(pv, it.key, msg); }
+    var ask = { paid: 'Tap again: ' + s.company + ' paid', inkind: 'Tap again: paid in kind', rcmark: 'Tap again: receipt already sent', pkmark: 'Tap again: packet already sent' }[k];
+    if (!ask || !armed(btn, ask)) return;
+    if (k === 'paid') return markPaid();
+    if (k === 'inkind') return markInKind();
+    if (it) markStep(k, it.key, msg);
+  }
 
   function assignTo() {
     var who = person($('#spAssignTo').value.trim()), s = S.current;
@@ -1573,10 +1685,7 @@
     if (String(s.contacted).trim()) out.push(pill('Contacted' + (/^(y|yes|x|true)$/i.test(String(s.contacted).trim()) ? '' : ': ' + String(s.contacted).trim()), 'done'));
     else if (!isIn(s)) out.push(pill('Not contacted', 'dim'));
     if (String(s.prevContact || '').trim()) out.push(pill('Reached out last year: ' + String(s.prevContact).trim(), 'dim'));
-    if (p) out.push(pill('Packet in' + (p.when ? ' ' + fmtDay(p.when) : ''), 'done'));
-    else if (isIn(s) && s.paid && S.packets) out.push(pill('Packet waiting', 'todo'));
-    if (w) out.push(w.had ? pill('Welcomed', 'done') : pill('Needs welcome', 'todo'));
-    if (needsOwner(s)) out.push(pill('Needs a new owner', 'todo'));
+    if (needsOwner(s) && !isIn(s)) out.push(pill('Needs a new owner', 'todo'));
     return out.length ? '<div class="pills">' + out.join('') + '</div>' : '';
   }
   function cardWho(s) {
@@ -1660,7 +1769,16 @@
     // The default view is this season's sponsors; name it with the season.
     var yo = $('#spFilter option[value="signed"]');
     if (yo) yo.textContent = S.book.season + ' sponsors';
-    $('#spFilter').value = S.filter;
+    // The short list, plus the older views once "More views…" is picked
+    // (or a count asks for one of them).
+    var sel = $('#spFilter');
+    Object.keys(FILTER_MORE).forEach(function (v) {
+      var o = sel.querySelector('option[value="' + v + '"]'), want = S.moreFilters || v === S.filter;
+      if (want && !o) { o = document.createElement('option'); o.value = v; o.textContent = FILTER_MORE[v]; o.dataset.more = '1'; sel.appendChild(o); }
+      else if (!want && o) sel.removeChild(o);
+    });
+    var mv = sel.querySelector('option[value="__more"]'); if (mv) mv.hidden = !!S.moreFilters;
+    sel.value = S.filter;
 
     // Owner picker: whoever the sheet lists, as written there.
     var owners = {};
@@ -1688,19 +1806,15 @@
         (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
-          cardPills(s) + cardWho(s) +
-          facts([
-            s.area || '',
-            s.team ? 'Team: ' + s.team : '',
-            packetNote(s),
-            upgradeFor(s) ? 'Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay' : ''
-          ]) +
-          (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '') +
-          (s.notes ? '<details class="sp-more"><summary>Notes</summary><div class="sp-note-full">' + esc(s.notes) + '</div></details>' : '') +
+          cardPills(s) +
+          // Teams tab: where they go. Everywhere else: the three lines, and
+          // for someone not in yet, who has them. (Nate, Nov 22)
+          (S.mode === 'teams'
+            ? '<div class="sub">' + esc(s.team ? 'Team: ' + s.team : 'No team yet') + '</div>'
+            : isIn(s) ? stepChips(s) + (upgradeFor(s) ? facts(['Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay']) : '')
+            : cardWho(s) + (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '')) +
         '</div>' +
-        // The receipt button sits on the right, right under the status.
-        (cardReceipt(s) ? '<div class="sp-card-side">' + cardBadge(s) + cardReceipt(s) + '</div>' : cardBadge(s)) +
-        (cardReceipt(s) ? '<div class="sp-card-rc sp-card-pane"><div class="rc-preview hidden"></div></div>' : '') +
+        (isIn(s) || S.mode === 'teams' ? '' : cardBadge(s)) +
       '</li>';
     }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
@@ -1773,6 +1887,14 @@
     var s = sponsors().find(function (x) { return x.row === row; });
     if (!s) return;
     S.current = s;
+    // Opened from Teams: where they go (team, logo, banner). Anywhere else:
+    // getting them in (the three lines). Never both. (Nate, Nov 22)
+    var teamsView = S.mode === 'teams';
+    $('#sponsorSheet').classList.toggle('mode-teams', teamsView);
+    $('#sponsorSheet').classList.toggle('mode-intake', !teamsView);
+    $('#spMoreBox').open = false;
+    $('#spStepMsg').textContent = '';
+    renderSteps(s);
     var esc = A().esc, t = mainTab();
     $('#spTitle').textContent = s.company;
     A().setBadge($('#spBadge'), s.tier || (s.tierPrev ? 'Last year: ' + s.tierPrev : ''), 'muted');
@@ -1800,6 +1922,7 @@
     renderBanner(s);
     showEditActs(s);
     $('#spReceipt').classList.add('hidden'); $('#spReceipt').innerHTML = '';
+    if (!isIn(s)) $('#spMoreBox').open = true;
     var mapUrl = s.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.address) : '';
     $('#spWalkIn').classList.toggle('hidden', !s.walkIn);
     $('#spWalkIn').innerHTML = s.walkIn ? '<b>Walk-in only.</b> Stop by in person with the printed form; they mail it back with a check or money order.' +
@@ -1997,7 +2120,14 @@
   // ---------- wire up ----------
 
   function wire() {
-    $('#spFilter').addEventListener('change', function (e) { S.filter = e.target.value; render(); });
+    // The short Show list; the older views come back when a count asks for one.
+    var more = $('#spFilterMore');
+    if (more && more.content) Array.prototype.forEach.call(more.content.querySelectorAll('option'), function (o) { FILTER_MORE[o.value] = o.textContent; });
+    $('#spFilter').addEventListener('change', function (e) {
+      if (e.target.value === '__more') { S.moreFilters = true; e.target.value = S.filter; render(); return; }
+      S.filter = e.target.value; render();
+    });
+    $('#spSteps').addEventListener('click', function (e) { var b = e.target.closest('button[data-st]'); if (b) stepAct(b); });
     $('#spSearch').addEventListener('input', function (e) { S.search = e.target.value; render(); });
     $('#spOwner').addEventListener('change', function (e) { S.owner = e.target.value; render(); });
     $('#spRefresh').addEventListener('click', function () { load(true); });
@@ -2479,7 +2609,8 @@
     if (S.quick && !ed) closeQuick();
   }
   function goSub(sub) {
-    var b = document.querySelector('.tab-btn[data-view="sponsors"][data-sp="' + sub + '"]');
+    if (TAB_OF[sub]) S.focusJob = sub;
+    var b = document.querySelector('.tab-btn[data-view="sponsors"][data-sp="' + (TAB_OF[sub] || sub) + '"]');
     if (b) b.click(); else if (window.Sponsors) window.Sponsors.show(sub);
   }
   function closeQuick() {
@@ -2599,31 +2730,38 @@
   // next to Sponsors. Each shows only its own box, opened; Sponsors shows the
   // list without them. A tab shows only when its box can be used.
   var SP_BOX = { receipts: '#spReceipts', followups: '#spNudges', outreach: '#spOutreach', welcome: '#spWelcome', add: '#spAddBox', pay: '#spPayBox' };
+  // The tabs and the jobs on each (Nate, Nov 22: far fewer tabs). Teams is
+  // the sponsor list again, opening each one on where it goes.
+  var SP_TAB = { receipts: ['receipts'], outreach: ['outreach'], more: ['followups', 'welcome', 'add', 'pay'], teams: [] };
+  var TAB_OF = { followups: 'more', welcome: 'more', add: 'more', pay: 'more' };
   function applyMode() {
-    var view = $('#view-sponsors'), mode = SP_BOX[S.mode] ? S.mode : '';
+    var view = $('#view-sponsors'), tab = SP_TAB[S.mode] ? S.mode : '', jobs = SP_TAB[tab] || [];
     if (!view) return;
-    view.classList.toggle('sp-sub', !!mode);
+    view.classList.toggle('sp-sub', jobs.length > 0);
+    view.classList.toggle('sp-teams', tab === 'teams');
+    var focus = S.focusJob && jobs.indexOf(S.focusJob) >= 0 ? S.focusJob : jobs.length === 1 ? jobs[0] : '';
     Object.keys(SP_BOX).forEach(function (k) {
       var box = $(SP_BOX[k]); if (!box) return;
-      box.classList.toggle('sp-on', k === mode);
-      if (k === mode) {
+      box.classList.toggle('sp-on', jobs.indexOf(k) >= 0);
+      if (k === focus) {
         var d = box.tagName === 'DETAILS' ? box : box.querySelector('details.rc-box');
         if (d && !d.open) d.open = true;
+        if (S.focusJob === k) { S.focusJob = ''; setTimeout(function () { if (box.scrollIntoView) box.scrollIntoView({ block: 'start' }); }, 30); }
       }
     });
-    $('#spModeEmpty').classList.toggle('hidden', !mode || !$(SP_BOX[mode]).classList.contains('hidden'));
+    var shown = jobs.some(function (k) { var b = $(SP_BOX[k]); return b && !b.classList.contains('hidden'); });
+    $('#spModeEmpty').classList.toggle('hidden', !jobs.length || shown);
     syncSpTabs();
   }
   // What's waiting on each tab, as a blue circle with the number on it.
-  // Follow-ups counts the nudges ready in an open round and the paid sponsors
-  // still waiting on their info packet; both lists live in that tab.
   function tabCounts() {
     var c = {};
-    c.receipts = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
-    c.welcome = S.welcome ? S.welcome.items.filter(function (i) { return !i.had; }).length : 0;
+    c.receipts = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) {
+      var st = stepsOf(sponsorAt(i.row), i); return !st.receipt.done || !st.packet.done;
+    }).length : 0;
     c.outreach = S.outreach ? S.outreach.items.filter(orReady).length : 0;
     var nd = S.nudges && S.nudges.current && S.nudges.started ? S.nudges.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
-    c.followups = nd + (S.book && S.packets ? sponsors().filter(FILTERS.packetWaiting).length : 0);
+    c.more = nd + (S.welcome ? S.welcome.items.filter(function (i) { return !i.had; }).length : 0);
     c.banners = S.toOrder || 0;
     return c;
   }
@@ -2640,12 +2778,12 @@
   }
   function syncSpTabs() {
     $$('.tab-btn[data-sp]').forEach(function (b) {
-      var box = $(SP_BOX[b.dataset.sp]);
-      var can = box && (!box.classList.contains('hidden') || b.dataset.sp === S.mode);
+      var t = b.dataset.sp, jobs = SP_TAB[t] || [];
+      var can = t === S.mode || (t === 'teams' ? !!S.book : jobs.some(function (k) { var x = $(SP_BOX[k]); return x && !x.classList.contains('hidden'); }));
       b.classList.toggle('hidden', !can);
     });
     var c = tabCounts();
-    var what = { receipts: 'ready to send', welcome: 'to welcome', outreach: 'ready for outreach', followups: 'to follow up' };
+    var what = { receipts: 'to send', outreach: 'ready for outreach', more: 'waiting' };
     Object.keys(what).forEach(function (k) {
       var b = document.querySelector('.tab-btn[data-sp="' + k + '"]');
       if (b) tabBadge(b, c[k] || 0, what[k]);
@@ -2656,7 +2794,9 @@
 
   window.Sponsors = {
     show: function (sub) {
-      S.mode = SP_BOX[sub] ? sub : '';
+      if (TAB_OF[sub]) S.focusJob = sub;
+      sub = TAB_OF[sub] || sub;
+      S.mode = SP_TAB[sub] ? sub : '';
       applyMode();
       if (typeof firebase === 'undefined' || !firebase.apps.length || !firebase.auth().currentUser) return;
       if (!S.book) load(); else render();

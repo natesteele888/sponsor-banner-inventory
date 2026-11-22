@@ -202,6 +202,7 @@ function route_(action, data) {
     if (action === 'receiptMark') return receiptMark(data);
     if (action === 'receiptThanksPreview') return receiptThanksPreview(data);
     if (action === 'receiptThanksSend') return receiptThanksSend(data);
+    if (action === 'receiptThanksMark') return receiptThanksMark(data);
     if (action === 'nudgeList') return ok(snapRead_('nudges', false, nudgeList));
     if (action === 'nudgePreview') return nudgePreview(data);
     if (action === 'nudgeSend') return nudgeSend(data);

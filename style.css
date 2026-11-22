@@ -798,3 +798,35 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .banner-switch { margin: 0 0 14px; }
 /* Under Follow-ups, after the rounds: paid sponsors still waiting on their info packet. */
 .rc-box + .pk-box { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+
+/* ---------- Clean intake (Nate, Nov 22) ----------
+   The sponsor card shows three yes/no lines and nothing else up front:
+   Paid, Receipt sent, Packet sent. Team, logo and banner open from the Teams
+   tab instead, never on the intake card. */
+#sponsorSheet.mode-intake .sp-teamview, #sponsorSheet.mode-teams .sp-intake, .sp-gone { display: none !important; }
+.st-list { list-style: none; margin: 6px 0 10px; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.st-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.st-line:first-child { border-top: 0; }
+.st-q { flex: 0 0 110px; font-size: 14px; color: var(--ink2); }
+.st-a { flex: 1 1 140px; font-size: 15.5px; }
+.st-line.ok .st-a { color: var(--green); }
+.st-line.no .st-a { color: var(--gold); }
+.st-acts { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 0 100%; }
+.st-tuck { margin: 0 0 8px; font-size: 13px; }
+.sp-more-box { margin: 10px 0; border-top: 1px solid var(--line); padding-top: 8px; }
+.sp-more-box > summary { cursor: pointer; font-size: 13.5px; color: var(--ink2); font-weight: 600; padding: 4px 0; }
+#spStepMsg:empty { display: none; }
+.st-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
+.st-chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+.st-chip.ok { color: var(--green); background: var(--green-bg); }
+.st-chip.no { color: var(--gold); background: var(--gold-bg); }
+.rc-two .rc-lines { flex: 1 0 100%; display: grid; gap: 4px; }
+.rc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.rc-q { flex: 0 0 64px; font-size: 13px; color: var(--ink2); }
+.rc-a { font-size: 14px; flex: 1 1 140px; }
+.rc-line.ok .rc-a { color: var(--green); }
+.rc-line.no .rc-a { color: var(--gold); }
+.rc-line .rc-acts { flex: 1 0 100%; padding-left: 74px; }
+.rc-tuck { flex: 1 0 100%; font-size: 12.5px; color: var(--ink3); }
+#view-sponsors.sp-teams #spQuick, #view-sponsors.sp-teams #spReports { display: none !important; }
+@media (max-width: 480px) { .rc-line .rc-acts { padding-left: 0; } .st-q { flex-basis: 100%; } }
