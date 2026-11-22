@@ -302,8 +302,11 @@
         : i.status === 'ready'
         ? '<button class="btn small primary" data-rc="preview" type="button">Preview and send</button>' +
           '<button class="btn small" data-rc="skip" type="button">Not needed</button>'
-        : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
-            (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>' : '<button class="btn small" data-rc="undo" type="button">Undo</button>');
+        : '<span class="rc-state">' + (i.status === 'sent' ? 'Receipt sent' : i.elsewhere ? 'Sent another way' : 'Marked done') + (i.at ? ' ' + esc(i.at) : '') + '</span>' +
+            (i.status === 'sent' ? '<button class="btn small" data-rc="preview" type="button">Open receipt</button>'
+              : (i.thanked ? '<span class="rc-state">Thank-you sent ' + esc(i.thanked) + '</span>'
+                : '<button class="btn small" data-rc="thanks" type="button">Send thank-you + packet</button>') +
+                '<button class="btn small" data-rc="undo" type="button">Undo</button>');
       return '<li class="rc-item" data-key="' + esc(i.key) + '">' +
         '<div class="rc-who"><b>' + esc(i.company) + '</b><span>' + esc(i.amount) + ' · ' + esc(i.email) + '</span>' +
         (i.online ? '<span class="rc-path">Paid online: send this one, not Crossbar’s receipt</span>' : '') +
@@ -422,6 +425,42 @@
     }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; return false; });
   }
 
+  // The thank-you with the packet link and no receipt, for a receipt that went
+  // out another way. Preview, then Send twice; only their own address in To.
+  function showThanks(pv, key, msg) {
+    var esc = A().esc;
+    msg.textContent = 'Building the preview…';
+    return A().apiPost({ action: 'receiptThanksPreview', key: key }).then(function (res) {
+      msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+      if (!res.ok) return false;
+      var item = ((S.receipts && S.receipts.items) || []).filter(function (i) { return i.key === key; })[0] || {};
+      var can = canEdit() && !res.thanked && res.sendOn;
+      var to = res.live ? (item.email || res.to) : 'the test address (test mode)';
+      var said = framePane(pv, res.subject, res.html,
+        can ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '',
+        can ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + ' only, no CC, when you tap Send. No receipt in it.</p>'
+            : (!res.sendOn && !res.thanked ? '<p class="hint rc-pv-to">Preview only. Sending turns on once the new sponsor link is live.</p>' : ''));
+      var sendBtn = pv.querySelector('[data-pv="send"]');
+      if (sendBtn) sendBtn.addEventListener('click', function () {
+        if (!sendBtn.dataset.armed) {
+          sendBtn.dataset.armed = '1';
+          sendBtn.textContent = res.live ? 'Tap again to send to ' + item.email : 'Tap again to send a test';
+          setTimeout(function () { if (sendBtn.isConnected && !sendBtn.disabled) { delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; } }, 6000);
+          return;
+        }
+        sendBtn.disabled = true; said.textContent = 'Sending…';
+        A().apiPost({ action: 'receiptThanksSend', key: key }).then(function (r) {
+          if (!r.ok) { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; said.textContent = r.error || 'That did not go through.'; return; }
+          said.innerHTML = '<span class="sp-done">✓ ' + esc(r.message || 'Sent.') + '</span>';
+          if (r.live) sendBtn.remove(); else { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; }
+          loadReceipts();
+        }).catch(function () { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; said.textContent = 'Could not reach the backend. It may not have gone. Refresh before trying again.'; });
+      });
+      if (pv.scrollIntoView) pv.scrollIntoView({ block: 'nearest' });
+      return true;
+    }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; return false; });
+  }
+
   // Right after Mark paid: that sponsor's receipt opens in the sponsor sheet,
   // ready to check and Send. Nothing is sent from here on its own.
   function receiptAfterPaid(row) {
@@ -450,10 +489,25 @@
     // Send lives in the preview, so every receipt is seen before it goes.
     if (how === 'copy') return showCopy(rowPreview(li), li.dataset.copy, msg);
     if (how === 'preview') return showReceipt(rowPreview(li), key, msg, { send: canEdit() && item && item.status === 'ready' });
-    if (how !== 'skip' && how !== 'undo') return;
-    btn.disabled = true;
+    if (how === 'thanks') return showThanks(rowPreview(li), key, msg);
+    // Not needed asks first whether it went out another way: then the sheet
+    // gets the Receipt sent date, so the spotlight draft can go ahead.
+    if (how === 'skip') {
+      var acts = btn.closest('.rc-acts');
+      acts.dataset.was = acts.innerHTML;
+      acts.innerHTML = '<span class="rc-ask">Sent another way?</span>' +
+        '<button class="btn small primary" data-rc="skipsent" type="button">Yes, already sent</button>' +
+        '<button class="btn small" data-rc="skipnone" type="button">No, skip it</button>' +
+        '<button class="btn small" data-rc="skipback" type="button">Cancel</button>';
+      return;
+    }
+    if (how === 'skipback') { var a2 = btn.closest('.rc-acts'); a2.innerHTML = a2.dataset.was || ''; return; }
+    if (how !== 'skipsent' && how !== 'skipnone' && how !== 'undo') return;
+    var body = { action: 'receiptMark', key: key, how: how === 'undo' ? 'undo' : 'skip' };
+    if (how === 'skipsent') body.elsewhere = true;
+    Array.prototype.forEach.call(btn.closest('.rc-acts').querySelectorAll('button'), function (b) { b.disabled = true; });
     msg.textContent = 'Saving…';
-    A().apiPost({ action: 'receiptMark', key: key, how: how }).then(function (res) {
+    A().apiPost(body).then(function (res) {
       if (!res.ok) { btn.disabled = false; msg.textContent = res.error || 'That did not go through.'; return; }
       $('#spStatus').textContent = res.message || 'Saved.';
       loadReceipts();

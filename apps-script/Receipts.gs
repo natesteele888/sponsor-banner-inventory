@@ -107,7 +107,7 @@ function receiptRows_() {
     });
     if (before) { row.total = row.amount; row.given = row.amount - before / 100; }
     var done = log[row.key];
-    if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; }
+    if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; row.elsewhere = !!done.elsewhere; row.thanked = done.thanked || ''; }
     else row.status = 'ready';
     out.push(row);
   });
@@ -197,6 +197,34 @@ function receiptEmail_(r, s, when) {
     .concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }))
     .concat(['', noGoods, '', 'Sincerely,', RECEIPT_ORG, (s.issuer || 'NOT SET'), '', taxLine])
     .join('\n');
+  if (s.thanksOnly) return thanksEmail_(r, s, thanks, e, col);
+  return { subject: subject, html: html, text: text };
+}
+
+// A thank-you with the packet link and no receipt, for a sponsor whose
+// receipt went out another way (Crossbar's, say). Same look as the receipt
+// email: the logo, the thank-you, the packet card and the footer.
+function thanksEmail_(r, s, thanks, e, col) {
+  var subject = 'Thank you for sponsoring ' + RECEIPT_ORG + ' in ' + SEASON;
+  var html =
+    '<div class="rc-outer" style="background:#F7F7F7;padding:30px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
+    '<div class="rc-head" style="' + col + 'text-align:center;padding:0 0 24px">' +
+      '<img src="' + e(leagueLogoUrl_()) + '" width="240" height="100" alt="' + e(RECEIPT_ORG) + '" style="display:inline-block;width:240px;height:100px;border:0">' +
+    '</div>' +
+    '<div class="rc-ty" style="' + col + 'margin-bottom:20px;font-size:20px;font-weight:bold;line-height:1.35;color:#0a1628">' + e(thanks) + '</div>' +
+    '<table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'margin-bottom:20px;background:#EEF3FF;border:1px solid #C9D6FF;border-radius:14px;border-collapse:separate">' +
+      '<tr><td style="padding:14px 18px">' +
+        '<div style="font-size:15px;font-weight:bold;margin-bottom:3px;color:#0a1628">One more step: your sponsor info packet</div>' +
+        '<div style="font-size:13px;line-height:1.45;margin-bottom:10px;color:#3B4458">Send us your logo and business details. It takes about five minutes.</div>' +
+        '<a href="' + e(s.packetUrl) + '" style="display:inline-block;background:#2E52E8;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:9px 16px;border-radius:8px">Fill out your sponsor packet</a>' +
+      '</td></tr></table>' +
+    '<div style="' + col + 'font-size:14px;line-height:1.5;color:#3B4458">Questions? Just reply to this email.<br><b>' + e(RECEIPT_ORG) + '</b></div>' +
+    '<div class="rc-foot" style="' + col + 'padding:18px 0 0;text-align:center;font-size:11px;line-height:1.5;color:#999999">' +
+      e(RECEIPT_ORG) + (s.address ? ' · ' + e(s.address) : '') +
+    '</div>' +
+    '</div>';
+  var text = [thanks, '', 'One more step: your sponsor info packet', 'Send us your logo and business details. It takes about five minutes.',
+    'Fill out your sponsor packet: ' + s.packetUrl, '', 'Questions? Just reply to this email.', RECEIPT_ORG].join('\n');
   return { subject: subject, html: html, text: text };
 }
 
@@ -303,7 +331,7 @@ function receiptList() {
     copies: receiptCopies_(),
     settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().ready, via: senderSettings_().via },
     items: receiptRows_().map(function (r) {
-      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', online: !!r.online, inKind: !!r.inKind };
+      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', elsewhere: !!r.elsewhere, thanked: r.thanked || '', online: !!r.online, inKind: !!r.inKind };
     })
   };
 }
@@ -426,15 +454,76 @@ function receiptMark(data) {
   if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
   var key = String(data.key || ''), how = String(data.how || '');
   var log = receiptLog_();
+  // "Not needed" can mean the receipt went out another way (someone sent it
+  // from their own email). Then the sheet's Receipt sent gets today's date,
+  // as a send from here would, so the spotlight draft isn't left waiting.
+  // Undo takes that date back off. (Nate, Nov 22)
   if (how === 'undo') {
-    if (log[key] && log[key].how === 'sent') return fail('A sent receipt stays marked sent.');
+    var was = log[key];
+    if (was && was.how === 'sent') return fail('A sent receipt stays marked sent.');
     delete log[key];
+    saveReceiptLog_(log);
+    if (was && was.elsewhere && was.company) noteOnBoardCopy_(was.company, 'Receipt sent', '');
+    return ok({ message: 'Back in the queue.' });
   } else if (how === 'skip') {
-    if (!findReceiptRow_(key)) return fail('That row is no longer marked paid with an email.');
-    log[key] = { how: how, at: dayOf_(new Date()) };
-  } else return fail('Unknown choice.');
-  saveReceiptLog_(log);
-  return ok({ message: 'Saved.' });
+    var r = findReceiptRow_(key);
+    if (!r) return fail('That row is no longer marked paid with an email.');
+    var at = dayOf_(new Date()), elsewhere = data.elsewhere === true;
+    log[key] = elsewhere ? { how: how, at: at, elsewhere: true, company: r.company } : { how: how, at: at };
+    saveReceiptLog_(log);
+    if (elsewhere) noteOnBoardCopy_(r.company, 'Receipt sent', at);
+    return ok({ message: elsewhere ? 'Marked as sent another way. Receipt sent on the sheet is ' + at + '.' : 'Marked not needed.' });
+  }
+  return fail('Unknown choice.');
+}
+
+// ---------- thank-you with the packet link, no receipt ----------
+// Only for a receipt marked Not needed. Preview first, then one tap sends it
+// to the sponsor's own address alone, no CC. Never on a schedule.
+function thanksSetup_(data) {
+  if (!canEditSponsors_()) return { err: 'Only the sponsorship editors can send this.' };
+  var r = findReceiptRow_(data && data.key);
+  if (!r) return { err: 'That row is no longer marked paid with an email.' };
+  if (r.status !== 'skip') return { err: 'This one still needs its receipt. Mark it Not needed first.' };
+  var s = receiptSettings_();
+  s.packetUrl = sponsorPageLink_(r) || s.packetUrl;
+  if (!s.packetUrl) return { err: 'There is no sponsor packet link set, so there is nothing to send.' };
+  s.thanksOnly = true;
+  return { r: r, s: s, m: receiptEmail_(r, s) };
+}
+// Sending stays off until the script setting THANKS_PACKET_SEND is "on":
+// the packet link has to be on the league's own address first. (Nov 22)
+function thanksSendOn_() {
+  return String(PropertiesService.getScriptProperties().getProperty('THANKS_PACKET_SEND') || '').trim().toLowerCase() === 'on';
+}
+function receiptThanksPreview(data) {
+  var t = thanksSetup_(data);
+  if (t.err) return fail(t.err);
+  return ok({ subject: t.m.subject, html: receiptDoc_(t.m.html, t.m.subject), to: t.s.live ? t.r.email : (t.s.testTo ? 'test address' : ''),
+              live: t.s.live, thanked: t.r.thanked || '', sendOn: thanksSendOn_() });
+}
+function receiptThanksSend(data) {
+  if (!thanksSendOn_()) return fail('This thank-you is preview only for now. Sending turns on once the new sponsor link is live.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return fail('Someone else is sending one right now. Try again in a moment.');
+  try {
+    var t = thanksSetup_(data);
+    if (t.err) return fail(t.err);
+    if (t.r.thanked) return fail('The thank-you already went on ' + t.r.thanked + '.');
+    if (!t.s.live && !t.s.testTo) return fail('Receipts are in test mode with no test address set.');
+    var to = t.s.live ? t.r.email : t.s.testTo;
+    var how = leagueSend_({ kind: 'receipt', company: t.r.company, to: to, cc: '', editorCc: '', subject: t.m.subject, text: t.m.text, html: t.m.html, live: t.s.live, attachments: null });
+    if (!how.ok) return fail(how.error);
+    var at = dayOf_(new Date());
+    if (t.s.live) {
+      var log = receiptLog_();
+      if (log[t.r.key]) { log[t.r.key].thanked = at; saveReceiptLog_(log); }
+    }
+    return ok({ message: t.s.live ? 'Thank-you sent to ' + t.r.email + '.' : 'Test thank-you sent to the test address.', at: at, live: t.s.live });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ---------- heads-up email to Nate ----------
