@@ -206,6 +206,12 @@ function receiptEmail_(r, s, when) {
 // email: the logo, the thank-you, the packet card and the footer.
 function thanksEmail_(r, s, thanks, e, col) {
   var subject = 'Thank you for sponsoring ' + RECEIPT_ORG + ' in ' + SEASON;
+  // An in-kind sponsor gave goods or services, so the thank-you says that and
+  // nothing about money. (Nathan, Nov 22)
+  if (r.inKind) {
+    subject = 'Thank you for your in-kind sponsorship of ' + RECEIPT_ORG + ' in ' + SEASON;
+    thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for your in-kind donation to ' + RECEIPT_ORG + ' this season!';
+  }
   var html =
     '<div class="rc-outer" style="background:#F7F7F7;padding:30px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
     '<div class="rc-head" style="' + col + 'text-align:center;padding:0 0 24px">' +
