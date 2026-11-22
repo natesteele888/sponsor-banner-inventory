@@ -47,13 +47,13 @@
   </div>
   <nav class="tabs" aria-label="Sections">
     <button class="tab-btn" data-view="sponsors">Sponsors</button>
-    <!-- The Sponsors tab's jobs, each its own tab (sponsors.js shows the one box). -->
-    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="receipts">Receipts</button>
-    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="followups">Follow-ups</button>
+    <!-- Few tabs (Nate, Nov 22): getting a sponsor in (Receipts & packets),
+         finding new ones (Outreach), and where they go once they're in (Teams).
+         Follow-ups, Welcome, Add and Record payment sit together under More. -->
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="receipts">Receipts &amp; packets</button>
     <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="outreach">Outreach</button>
-    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="welcome">Welcome</button>
-    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="add">Add sponsor</button>
-    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="pay">Record payment</button>
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="teams">Teams</button>
+    <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="more">More</button>
     <!-- 2027 banners, Banner stock and Fields live under one tab (app.js BANNER_VIEWS). -->
     <button class="tab-btn" data-view="season" data-group="banners">Banners</button>
   </nav>
@@ -105,13 +105,19 @@
       <div class="filters">
         <label>Show <select id="spFilter">
           <option value="signed" selected>This season's sponsors</option>
-          <option value="all">All sponsors, every year</option>
-          <option value="paid">Paid</option>
+          <option value="todo">Still needs something</option>
           <option value="unpaid">Not paid yet</option>
+          <option value="paid">Paid</option>
+          <option value="inKind">In kind</option>
+          <option value="mine" hidden>My sponsors</option>
+          <option value="all">All sponsors, every year</option>
+          <option value="__more">More views…</option>
+        </select></label>
+        <!-- The rest of the old views: reachable from the counts, not listed (sponsors.js FILTER_MORE). -->
+        <template id="spFilterMore">
           <option value="needsReceipt">Paid, needs a receipt</option>
           <option value="committed">Committed (money)</option>
           <option value="paidCash">Paid (money)</option>
-          <option value="inKind">In kind</option>
           <option value="packetWaiting">Paid, waiting on their info packet</option>
           <option value="needsWelcome">Needs a welcome email</option>
           <option value="notContacted">Not contacted</option>
@@ -119,9 +125,8 @@
           <option value="pastNotContacted">Past sponsors, nobody has reached out</option>
           <option value="needsOwner">Needs a new owner</option>
           <option value="walkIn">Walk-in only</option>
-          <option value="mine" hidden>My sponsors</option>
           <option value="noTeam">Signed up, no team</option>
-        </select></label>
+        </template>
         <label>Owner <select id="spOwner"><option value="">Everyone</option></select></label>
         <label>Town <select id="spArea"><option value="">Every town</option></select></label>
         <button class="btn small" id="spRefresh" type="button">Refresh</button>
@@ -403,19 +408,24 @@
 </section>
 
 <!-- SPONSOR DETAIL: one row of the sponsorship sheet, plus their team -->
-<section id="sponsorSheet" class="sheet hidden" role="dialog" aria-label="Sponsor">
+<section id="sponsorSheet" class="sheet hidden mode-intake" role="dialog" aria-label="Sponsor">
   <div class="sheet-top">
     <button class="btn small" id="spClose">Close</button>
     <span id="spBadge" class="badge"></span>
   </div>
   <div class="sheet-body">
     <h2 id="spTitle" class="ss-title"></h2>
-    <div id="spMarks" class="sp-marks"></div>
-    <p id="spWalkIn" class="sp-walkin-note hidden"></p>
-    <div class="sp-layout">
-    <div class="sp-main">
-    <div id="spFields"></div>
-    <div id="spEditActs" class="sheet-acts hidden">
+    <!-- Getting the sponsor in: three yes/no lines and nothing else up front
+         (Nate, Nov 22). Paid, Receipt sent, Packet sent; Send only where the
+         answer is still No, and Mark as sent for anything done outside the app. -->
+    <div class="sp-intake">
+      <div id="spSteps" class="sp-steps"></div>
+      <div id="spStepMsg" class="status" role="status"></div>
+      <div id="spReceipt" class="rc-preview sp-receipt hidden" aria-live="polite"></div>
+      <details id="spMoreBox" class="sp-more-box">
+        <summary>Contact and sheet details</summary>
+        <div id="spFields"></div>
+        <div id="spEditActs" class="sheet-acts hidden">
       <button class="btn small" id="spEditBtn" type="button">Edit row</button>
       <button class="btn small primary hidden" id="spSaveBtn" type="button">Save changes</button>
       <button class="btn small" id="spContactBtn" type="button">Mark contacted</button>
@@ -429,14 +439,19 @@
       </div>
       <span id="spEditStatus" class="status" role="status"></span>
     </div>
-    <div id="spReceipt" class="rc-preview sp-receipt hidden" aria-live="polite"></div>
-    <p><button class="btn small hidden" id="spFormBtn" type="button">Print form</button></p>
-
-    <h3 class="ss-h">Changes</h3>
-    <div id="spChanges"></div>
+        <p><button class="btn small hidden" id="spFormBtn" type="button">Print form</button></p>
+      </details>
+      <!-- Kept for the code that fills them; not shown on the intake card. -->
+      <div class="sp-gone" aria-hidden="true">
+        <div id="spMarks" class="sp-marks"></div>
+        <p id="spWalkIn" class="sp-walkin-note hidden"></p>
+        <div id="spChanges"></div>
+      </div>
     </div>
-
-    <aside class="sp-side">
+    <!-- Where the sponsor goes once they're in: team, logo, banner. Opened
+         from the Teams tab, never on the intake card (Nate, Nov 22). -->
+    <div class="sp-teamview">
+    <div class="sp-side">
     <h3 class="ss-h">Banner on file</h3>
     <div id="spBanner" class="sp-banner"></div>
 
@@ -465,7 +480,7 @@
       <button class="btn small hidden" id="spLogoRemove" type="button">Remove</button>
       <span id="spLogoStatus" class="status"></span>
     </div>
-    </aside>
+    </div>
     </div>
   </div>
 </section>

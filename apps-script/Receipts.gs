@@ -107,7 +107,7 @@ function receiptRows_() {
     });
     if (before) { row.total = row.amount; row.given = row.amount - before / 100; }
     var done = log[row.key];
-    if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; row.elsewhere = !!done.elsewhere; row.thanked = done.thanked || ''; }
+    if (done && done.how !== 'website') { row.status = done.how; row.at = done.at; row.elsewhere = !!done.elsewhere; row.thanked = done.thanked || ''; row.thankedElsewhere = !!done.thankedElsewhere; }
     else row.status = 'ready';
     out.push(row);
   });
@@ -205,12 +205,15 @@ function receiptEmail_(r, s, when) {
 // receipt went out another way (Crossbar's, say). Same look as the receipt
 // email: the logo, the thank-you, the packet card and the footer.
 function thanksEmail_(r, s, thanks, e, col) {
-  var subject = 'Thank you for sponsoring ' + RECEIPT_ORG + ' in ' + SEASON;
+  var subject = 'Thank you for sponsoring ' + RECEIPT_ORG + ' in ' + SEASON, kindLine = '';
   // An in-kind sponsor gave goods or services, so the thank-you says that and
   // nothing about money. (Nathan, Nov 22)
   if (r.inKind) {
     subject = 'Thank you for your in-kind sponsorship of ' + RECEIPT_ORG + ' in ' + SEASON;
     thanks = 'Thank you' + (r.company ? ', ' + r.company + ',' : '') + ' for your in-kind donation to ' + RECEIPT_ORG + ' this season!';
+    // What it counts as: their level and the value the sheet gives it. (Nathan, Nov 22)
+    var lvl = String(r.tier || '').trim(), val = r.amount > 0 ? money_(r.amount) : '';
+    if (lvl || val) kindLine = 'Your donation' + (val ? ', valued at ' + val + ',' : '') + ' makes you ' + (lvl ? (/^[aeiou]/i.test(lvl) ? 'an ' : 'a ') + lvl + ' sponsor' : 'one of our sponsors') + ' for ' + SEASON + '.';
   }
   var html =
     '<div class="rc-outer" style="background:#F7F7F7;padding:30px 12px;font-family:Arial,Helvetica,sans-serif;color:#0B1120">' +
@@ -218,6 +221,7 @@ function thanksEmail_(r, s, thanks, e, col) {
       '<img src="' + e(leagueLogoUrl_()) + '" width="240" height="100" alt="' + e(RECEIPT_ORG) + '" style="display:inline-block;width:240px;height:100px;border:0">' +
     '</div>' +
     '<div class="rc-ty" style="' + col + 'margin-bottom:20px;font-size:20px;font-weight:bold;line-height:1.35;color:#0a1628">' + e(thanks) + '</div>' +
+    (kindLine ? '<div class="rc-kind" style="' + col + 'margin:-8px auto 20px;font-size:15px;line-height:1.45;color:#3B4458">' + e(kindLine) + '</div>' : '') +
     '<table role="presentation" class="rc-packet" cellpadding="0" cellspacing="0" width="100%" style="' + col + 'margin-bottom:20px;background:#EEF3FF;border:1px solid #C9D6FF;border-radius:14px;border-collapse:separate">' +
       '<tr><td style="padding:14px 18px">' +
         '<div style="font-size:15px;font-weight:bold;margin-bottom:3px;color:#0a1628">One more step: your sponsor info packet</div>' +
@@ -229,8 +233,8 @@ function thanksEmail_(r, s, thanks, e, col) {
       e(RECEIPT_ORG) + (s.address ? ' · ' + e(s.address) : '') +
     '</div>' +
     '</div>';
-  var text = [thanks, '', 'One more step: your sponsor info packet', 'Send us your logo and business details. It takes about five minutes.',
-    'Fill out your sponsor packet: ' + s.packetUrl, '', 'Questions? Just reply to this email.', RECEIPT_ORG].join('\n');
+  var text = [thanks].concat(kindLine ? [kindLine] : []).concat(['', 'One more step: your sponsor info packet', 'Send us your logo and business details. It takes about five minutes.',
+    'Fill out your sponsor packet: ' + s.packetUrl, '', 'Questions? Just reply to this email.', RECEIPT_ORG]).join('\n');
   return { subject: subject, html: html, text: text };
 }
 
@@ -337,7 +341,7 @@ function receiptList() {
     copies: receiptCopies_(),
     settings: { missing: s.missing, live: s.live, testTo: s.testTo ? true : false, packet: true, sender: senderSettings_().ready, via: senderSettings_().via },
     items: receiptRows_().map(function (r) {
-      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', elsewhere: !!r.elsewhere, thanked: r.thanked || '', online: !!r.online, inKind: !!r.inKind };
+      return { key: r.key, row: r.row, company: r.company, email: r.email, amount: r.inKind ? 'In kind' : money_(r.given || r.amount), status: r.status, at: r.at || '', elsewhere: !!r.elsewhere, thanked: r.thanked || '', thankedElsewhere: !!r.thankedElsewhere, online: !!r.online, inKind: !!r.inKind };
     })
   };
 }
@@ -508,6 +512,25 @@ function receiptThanksPreview(data) {
   if (t.err) return fail(t.err);
   return ok({ subject: t.m.subject, html: receiptDoc_(t.m.html, t.m.subject), to: t.s.live ? t.r.email : (t.s.testTo ? 'test address' : ''),
               live: t.s.live, thanked: t.r.thanked || '', sendOn: thanksSendOn_() });
+}
+// The packet went out some other way (their own email, in person): one tap
+// marks it sent, so the row reads done. Undo takes it back off. Never sends.
+function receiptThanksMark(data) {
+  if (!canEditSponsors_()) return fail('Only the sponsorship editors can change this.');
+  if (!underRateLimit()) return fail('Too many changes in the last hour — try again shortly.');
+  var key = String(data && data.key || ''), r = findReceiptRow_(key);
+  if (!r) return fail('That row is no longer marked paid with an email.');
+  var log = receiptLog_(), e = log[key];
+  if (!e || (e.how !== 'sent' && e.how !== 'skip')) return fail('Mark the receipt first, then the packet.');
+  if (data.undo) {
+    if (!e.thankedElsewhere) return fail('That packet went from the app, so it stays marked sent.');
+    delete e.thanked; delete e.thankedElsewhere;
+  } else {
+    if (e.thanked) return ok({ message: 'Already marked sent on ' + e.thanked + '.' });
+    e.thanked = dayOf_(new Date()); e.thankedElsewhere = true;
+  }
+  saveReceiptLog_(log);
+  return ok({ message: data.undo ? 'Packet back to not sent.' : 'Packet marked sent.' });
 }
 function receiptThanksSend(data) {
   if (!thanksSendOn_()) return fail('This thank-you is preview only for now. Sending turns on once the new sponsor link is live.');
