@@ -1682,9 +1682,13 @@
     if (s.tier) out.push(pill(s.tier + (s.amountText && !s.inKind ? ' ' + s.amountText : ''), 'lv lv-' + levelKey(s.tier)));
     else if (s.tierPrev) out.push(pill('Last year: ' + s.tierPrev, 'lv-prev'));
     if (isIn(s) && s.inKind) out.push(pill('In kind', 'kind'));
-    if (String(s.contacted).trim()) out.push(pill('Contacted' + (/^(y|yes|x|true)$/i.test(String(s.contacted).trim()) ? '' : ': ' + String(s.contacted).trim()), 'done'));
-    else if (!isIn(s)) out.push(pill('Not contacted', 'dim'));
-    if (String(s.prevContact || '').trim()) out.push(pill('Reached out last year: ' + String(s.prevContact).trim(), 'dim'));
+    // Who reached out only matters until they're in; after that the card is
+    // just the three lines (Nate, Nov 22).
+    if (!isIn(s)) {
+      if (String(s.contacted).trim()) out.push(pill('Contacted' + (/^(y|yes|x|true)$/i.test(String(s.contacted).trim()) ? '' : ': ' + String(s.contacted).trim()), 'done'));
+      else out.push(pill('Not contacted', 'dim'));
+      if (String(s.prevContact || '').trim()) out.push(pill('Reached out last year: ' + String(s.prevContact).trim(), 'dim'));
+    }
     if (needsOwner(s) && !isIn(s)) out.push(pill('Needs a new owner', 'todo'));
     return out.length ? '<div class="pills">' + out.join('') + '</div>' : '';
   }
