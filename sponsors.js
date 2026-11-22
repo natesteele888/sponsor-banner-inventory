@@ -1736,7 +1736,7 @@
   }
   // Not contacted: straight to Outreach, showing the ones ready to send.
   function goOutreachReady() {
-    S.orFilter = { status: OR_READY, owner: '' };
+    S.orFilter = { status: 'Not contacted', owner: '' };
     goSub('outreach');
     renderOutreach();
   }
@@ -2209,12 +2209,23 @@
   function orKey(i) { return i.row + '|' + i.company; }
   // Not contacted, has an email, nothing holding it, not sent: ready to go.
   var OR_READY = '__ready';
-  function orReady(i) { return i.status === 'Not contacted' && !!i.email && !i.hold.length && !i.sent; }
+  function orReady(i) { return i.status === 'Not contacted' && !!i.email && !i.hold.length && !i.sent && !i.review; }
+  // Which group a row sits in (Nate, Nov 22): ready ones on top as the next
+  // batch, then ones that need a look, then what's already gone; anything that
+  // can't be sent goes to Needs attention at the end, and businesses set aside
+  // go to For review at the very bottom.
+  function orGroup(i) {
+    if (i.sent) return 'sent';
+    if (i.review) return 'review';
+    if (!i.email || i.hold.length) return 'attn';
+    if (i.look.length) return 'look';
+    return 'ready';
+  }
   function orShown() {
     var O = S.outreach, f = S.orFilter || { status: 'Not contacted', owner: '' };
     return O.items.filter(function (i) {
       if (f.status === OR_READY) { if (!orReady(i)) return false; }
-      else if (f.status && i.status !== f.status) return false;
+      else if (f.status && i.status !== f.status && !i.review) return false;
       if (f.owner === '-') return !i.owner;
       if (f.owner && i.owner !== f.owner) return false;
       return true;
@@ -2222,12 +2233,57 @@
   }
   function orPicked() {
     var O = S.outreach;
-    return O.items.filter(function (i) { return O.picked[orKey(i)] && !i.hold.length && !i.sent; });
+    return O.items.filter(function (i) { return O.picked[orKey(i)] && !i.hold.length && !i.sent && !i.review && !!i.email; });
   }
   function orSender() {
     var O = S.outreach, ok = O.senders.filter(function (x) { return x.ok; });
     var cur = O.senders.filter(function (x) { return x.id === S.orSender && x.ok; })[0];
     return cur || ok[0] || null;
+  }
+
+  function orRow(i, oneByOne) {
+    var O = S.outreach, esc = A().esc, k = orKey(i), g = orGroup(i);
+    var can = g === 'ready' || g === 'look', on = can && !!O.picked[orKey(i)];
+    var tuck = [];
+    if (!i.sent) tuck.push(i.review ? '<button class="linkish" type="button" data-or="unreview">Back to outreach</button>'
+                                    : '<button class="linkish" type="button" data-or="review">Set aside for review</button>');
+    return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row">' +
+      (oneByOne ? '' : can ? '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + '>' : '') +
+      '<div class="or-main"><b>' + esc(i.company) + '</b>' +
+      '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet) + ',' + (i.past === 'last' ? ' · sponsored last season' : i.past ? ' · past sponsor' : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
+      (i.sent ? '<p class="or-flag">Emailed ' + esc(fmtDay(i.sent.at)) + '.</p>' : '') +
+      (g === 'review' ? '' : i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('')) +
+      (g === 'look' || g === 'review' ? i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('') : '') +
+      '</div>' + (can ? '<button class="btn small" type="button" data-or="preview">Preview</button>' : '') +
+      '</div>' + (oneByOne && can && O.linksOk ? '<div class="rc-acts">' + (S.orOpen && S.orOpen[k]
+        ? '<button class="btn small primary" type="button" data-or="done">I sent it</button>' + (S.orOpen[k].allow ? '' : gmailLinks(S.orOpen[k]))
+        : oneByOne === 'allow' ? '<button class="btn small primary" type="button" data-or="allow">' + (i.look.length ? 'Looked, send from my Gmail' : 'Send from my Gmail') + '</button>'
+        : '<button class="btn small primary" type="button" data-or="open">' + (i.look.length ? 'Looked, open in Gmail' : 'Open in Gmail') + '</button>') + '</div>' : '') +
+      '<div class="or-tuck">' + tuck.join('') + '</div>' +
+      '<div class="rc-preview hidden"></div></li>';
+  }
+  function orGroups(shown, oneByOne, lim) {
+    var O = S.outreach, by = { ready: [], look: [], sent: [], attn: [], review: [] };
+    shown.forEach(function (i) { by[orGroup(i)].push(i); });
+    var list = function (rows) { return '<ul class="or-list">' + rows.map(function (i) { return orRow(i, oneByOne); }).join('') + '</ul>'; };
+    var box = function (key, title, hint, rows, open) {
+      if (!rows.length) return '';
+      return '<details class="rc-box or-grp or-' + key + '"' + (open ? ' open' : '') + '><summary><b>' + title + ' (' + rows.length + ')</b></summary>' +
+        (hint ? '<p class="hint">' + hint + '</p>' : '') + list(rows) + '</details>';
+    };
+    var n = orPicked().length;
+    var out = '<section class="or-grp or-ready"><h4>Ready to send (' + by.ready.length + ')</h4>' +
+      (by.ready.length
+        ? (oneByOne ? '' : '<p class="hint">The next batch of ' + lim + ' is ticked. Send it, and the next batch comes up ticked.</p>' +
+            '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span>' +
+            (n ? '<button class="linkish" type="button" data-or="clear">Untick all</button>' : '<button class="linkish" type="button" data-or="pick">Tick the next ' + lim + '</button>') + '</div>') +
+          list(by.ready)
+        : '<p class="hint">Nothing is ready to send right now.</p>') + '</section>';
+    out += box('look', 'Needs a look first', 'Preview each one and tick it if it looks right. It goes with the next batch.', by.look, false);
+    out += box('sent', 'Already emailed', '', by.sent, false);
+    out += box('attn', 'Needs attention, can’t be sent', 'These have no email address or something on the sheet stops them. Fix the sheet and they move up.', by.attn, false);
+    out += box('review', 'For review', 'Set aside. Nothing goes to these until you put them back.', by.review, true);
+    return out;
   }
 
   function renderOutreach() {
@@ -2246,10 +2302,15 @@
     owners.sort();
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(label) + '</option>'; };
     var sender = orSender(), compose = !!(sender && sender.how === 'compose'), allow = !!(sender && sender.how === 'allow');
-    var oneByOne = compose || allow;
-    var shown = orShown(), picked = orPicked();
+    var oneByOne = allow ? 'allow' : compose ? 'compose' : '';
+    var shown = orShown();
     var lim = Math.min(O.batchMax, O.dayLeft);
-    var html = '<h3>Outreach · ' + notYet.length + ' not contacted yet' + (noMail ? ', ' + noMail + ' with no email' : '') + '</h3>' +
+    // The next batch comes ticked, so sending is Send and Tap again.
+    if (!oneByOne && !S.orUnpicked && !orPicked().length) {
+      shown.filter(function (i) { return orGroup(i) === 'ready'; }).slice(0, lim).forEach(function (i) { O.picked[orKey(i)] = 1; });
+    }
+    var nReady = shown.filter(function (i) { return orGroup(i) === 'ready'; }).length;
+    var html = '<h3>Outreach · ' + nReady + ' ready to send' + (noMail ? ' · ' + noMail + ' with no email' : '') + '</h3>' +
       (allow
         ? '<p class="hint">Each email goes from your own Gmail, signed by you. The first time, Google asks you to Allow it once (only "send email as you"). Tap Send on a row, then Back to the app on the page that opens. Your emails link to the levels on the league site.</p>'
         : compose
@@ -2261,29 +2322,11 @@
         '<label>From <select data-or="sender">' + O.senders.map(function (x) {
           return '<option value="' + esc(x.id) + '"' + (sender && x.id === sender.id ? ' selected' : '') + (x.ok ? '' : ' disabled') + '>' + esc(x.label) + (x.ok ? '' : ' (not set up)') + '</option>';
         }).join('') + '</select></label>' +
-        '<label>Status <select data-or="status">' + opt(OR_READY, 'Ready to send', f.status) + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
+        '<label>Status <select data-or="status">' + opt('', 'Any', f.status) + statuses.map(function (s) { return opt(s, s, f.status); }).join('') + '</select></label>' +
         '<label>Owner <select data-or="owner">' + opt('', 'Anyone', f.owner) + opt('-', 'No owner', f.owner) + owners.map(function (s) { return opt(s, s, f.owner); }).join('') + '</select></label>' +
       '</div>' +
       (sender ? '' : '<p class="or-flag hold">' + esc(O.senders.map(function (x) { return x.why; }).filter(Boolean).join(' ')) + '</p>') +
-      (oneByOne ? '' : '<div class="rc-acts"><button class="btn small" type="button" data-or="pick">Tick the first ' + lim + ' ready</button>' +
-      '<button class="btn small" type="button" data-or="clear">Untick all</button></div>') +
-      '<ul class="or-list">' + (shown.length ? shown.map(function (i) {
-        var k = orKey(i), held = !!(i.hold.length || i.sent), on = !held && !!O.picked[k];
-        return '<li class="or-item" data-k="' + esc(k) + '"><div class="or-row">' +
-          (oneByOne ? '' : '<input type="checkbox" aria-label="Send to ' + esc(i.company) + '"' + (on ? ' checked' : '') + (held ? ' disabled' : '') + '>') +
-          '<div class="or-main"><b>' + esc(i.company) + '</b>' +
-          '<div class="or-to">' + (i.email ? 'To ' + esc(i.email) : 'No email') + ' · Hi ' + esc(i.greet) + ',' + (i.past === 'last' ? ' · sponsored last season' : i.past ? ' · past sponsor' : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</div>' +
-          (i.sent ? '<p class="or-flag">Emailed ' + esc(fmtDay(i.sent.at)) + '.</p>' : '') +
-          i.hold.map(function (t) { return '<p class="or-flag hold">' + esc(t) + '</p>'; }).join('') +
-          i.look.map(function (t) { return '<p class="or-flag look">Look: ' + esc(t) + '</p>'; }).join('') +
-          '</div>' + (i.email && !i.sent ? '<button class="btn small" type="button" data-or="preview">Preview</button>' : '') +
-          '</div>' + (oneByOne && !held && i.email && O.linksOk ? '<div class="rc-acts">' + (S.orOpen && S.orOpen[k]
-            ? '<button class="btn small primary" type="button" data-or="done">I sent it</button>' + (S.orOpen[k].allow ? '' : gmailLinks(S.orOpen[k]))
-            : allow ? '<button class="btn small primary" type="button" data-or="allow">' + (i.look.length ? 'Looked, send from my Gmail' : 'Send from my Gmail') + '</button>'
-            : '<button class="btn small primary" type="button" data-or="open">' + (i.look.length ? 'Looked, open in Gmail' : 'Open in Gmail') + '</button>') + '</div>' : '') +
-          '<div class="rc-preview hidden"></div></li>';
-      }).join('') : '<li class="or-item hint">Nobody matches these filters.</li>') + '</ul>' +
-      (oneByOne ? '' : '<div class="or-foot"><button class="btn primary" type="button" data-or="send"></button><span class="hint or-count"></span></div>') +
+      orGroups(shown, oneByOne, lim) +
       '<div class="rc-msg or-msg" role="status">' + (S.orLast || '') + '</div>';
     box.innerHTML = html;
     orFoot();
@@ -2315,7 +2358,7 @@
         $('#spOutreach .or-msg').textContent = 'That’s the most for one batch. Send these first.';
         return;
       }
-      if (t.checked) O.picked[key] = 1; else delete O.picked[key];
+      if (t.checked) O.picked[key] = 1; else { delete O.picked[key]; if (!orPicked().length) S.orUnpicked = true; }
       orFoot();
     }
   }
@@ -2324,13 +2367,26 @@
     var O = S.outreach, esc = A().esc, msg = $('#spOutreach .or-msg'), k = btn.dataset.or;
     if (k === 'pick') {
       var room = Math.min(O.batchMax, O.dayLeft) - orPicked().length;
+      S.orUnpicked = false;
       orShown().forEach(function (i) {
-        if (room > 0 && !i.hold.length && !i.look.length && !i.sent && !O.picked[orKey(i)]) { O.picked[orKey(i)] = 1; room--; }
+        if (room > 0 && orGroup(i) === 'ready' && !O.picked[orKey(i)]) { O.picked[orKey(i)] = 1; room--; }
       });
       renderOutreach();
       return;
     }
-    if (k === 'clear') { O.picked = {}; renderOutreach(); return; }
+    if (k === 'clear') { O.picked = {}; S.orUnpicked = true; renderOutreach(); return; }
+    if (k === 'review' || k === 'unreview') {
+      var rl = btn.closest('.or-item'), ri = O.items.filter(function (i) { return orKey(i) === rl.dataset.k; })[0];
+      if (!ri) return;
+      btn.disabled = true; msg.textContent = 'Saving…';
+      A().apiPost({ action: 'outreachReview', row: ri.row, company: ri.company, undo: k === 'unreview' }).then(function (r) {
+        if (!r.ok) { btn.disabled = false; msg.textContent = r.error || 'That did not save.'; return; }
+        delete O.picked[orKey(ri)];
+        S.orLast = '<span class="sp-done">✓ ' + esc(r.message) + '</span>';
+        loadOutreach();
+      }).catch(function () { btn.disabled = false; msg.textContent = 'Could not reach the backend. Try again.'; });
+      return;
+    }
     if (k === 'preview') {
       var li = btn.closest('.or-item'), it = O.items.filter(function (i) { return orKey(i) === li.dataset.k; })[0];
       var pv = rowPreview(li), sender = orSender();

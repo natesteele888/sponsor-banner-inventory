@@ -830,3 +830,12 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .rc-tuck { flex: 1 0 100%; font-size: 12.5px; color: var(--ink3); }
 #view-sponsors.sp-teams #spQuick, #view-sponsors.sp-teams #spReports { display: none !important; }
 @media (max-width: 480px) { .rc-line .rc-acts { padding-left: 0; } .st-q { flex-basis: 100%; } }
+
+/* Outreach groups: ready on top, needs attention and for review at the end */
+.or-grp { margin-top: 12px; }
+.or-grp > h4 { margin: 0 0 4px; font-size: 15px; }
+.or-grp.rc-box { border-top: 1px solid var(--line); padding-top: 8px; }
+.or-attn .or-main b, .or-review .or-main b { color: var(--ink2); }
+.or-tuck { font-size: 12.5px; margin-top: 2px; }
+.or-tuck .linkish { font-weight: 500; color: var(--ink3); }
+.or-foot .linkish { font-size: 13px; }
