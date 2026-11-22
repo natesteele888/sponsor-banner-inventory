@@ -16,7 +16,7 @@
  * That's the one-time Allow. Nothing about a sponsor is written in this file.
  */
 
-var APP_URL_DEFAULT = 'https://natesteele888.github.io/sponsor-banner-inventory/';
+var APP_URL_DEFAULT = 'https://lybs-sponsors.web.app/';
 var KINDS = { outreach: 1, welcome: 1 };
 var EMAIL_RE = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
 

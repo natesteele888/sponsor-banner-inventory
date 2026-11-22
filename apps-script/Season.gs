@@ -64,7 +64,7 @@ var TIER_AMOUNTS = { 'MVP': 500, 'Championship': 750 };
 
 // What the sponsor email says and links to.
 var INFO_DEADLINE = 'March 20';
-var APP_URL = 'https://natesteele888.github.io/sponsor-banner-inventory/';
+var APP_URL = 'https://lybs-sponsors.web.app/';
 var INTAKE_URL = APP_URL + 'intake.html';
 var LEAGUE_CC = 'info@lunenburgybs.com';
 var SIGNATURE_NAME = 'Nate Steele';
