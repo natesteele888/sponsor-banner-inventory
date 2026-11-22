@@ -208,7 +208,7 @@
     if (!paid) rc.label = 'No, not paid yet';
     else if (!it) rc.label = 'No, add their email first';
     else if (it.status === 'sent') { rc.done = true; rc.label = 'Yes, ' + day(it.at); }
-    else if (it.status === 'skip') { rc.done = true; rc.label = it.elsewhere ? 'Yes, ' + day(it.at) + ' (outside the app)' : 'Not needed'; }
+    else if (it.status === 'skip') { rc.done = true; rc.label = it.elsewhere ? 'Yes, ' + day(it.at) + ' (outside the app)' : 'Yes, marked done'; }
     else rc.can = 'send';
     var pk = { done: false, label: 'No', can: '' };
     if (it && it.thanked) { pk.done = true; pk.label = 'Yes, ' + day(it.thanked) + (it.thankedElsewhere ? ' (outside the app)' : ''); }
