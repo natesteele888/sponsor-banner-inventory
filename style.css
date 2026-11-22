@@ -722,7 +722,8 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
   .sp-quick-btns .sp-q[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
   .banner-switch { margin: 2px 0 12px; }
 }
-@media (max-width: 360px) { .sp-quick-btns .sp-q { font-size: 12px; padding: 0 4px; } .sp-quick-btns .sp-q span { display: none; } }
+@media (max-width: 420px) { .sp-quick-btns .sp-q { padding: 0 4px; } .sp-quick-btns .sp-q span { display: none; } }
+@media (max-width: 340px) { .sp-quick-btns .sp-q { font-size: 12px; } }
 .sp-quick-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .sp-quick-panel input[type="search"], .sp-quick-panel textarea { width: 100%; box-sizing: border-box; font-size: 16px; }
 .sp-q-list { list-style: none; margin: 10px 0 0; padding: 0; }
