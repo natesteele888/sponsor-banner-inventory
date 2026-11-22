@@ -819,7 +819,9 @@
       list.map(function (s) {
         // Matched by sheet row, the way the card's badge is; the key alone can miss.
         var rc = (S.receipts && S.receipts.items || []).filter(function (i) { return Number(i.row) === Number(s.row); })[0] || receiptItem(s.key);
-        var how = rc && rc.status === 'sent' ? 'Receipt with their packet link sent' + (rc.at ? ' ' + fmtDay(String(rc.at).slice(0, 10)) : '')
+        // In kind: no receipt; their packet link comes from their card.
+        var how = s.inKind ? 'Paid in kind. Send their packet link from their card'
+          : rc && rc.status === 'sent' ? 'Receipt with their packet link sent' + (rc.at ? ' ' + fmtDay(String(rc.at).slice(0, 10)) : '')
           : 'Receipt not sent yet, so they don’t have the packet link';
         return '<li class="pk-item"><b>' + esc(s.company) + '</b> <span class="hint">' + esc((s.tier ? s.tier + '. ' : '') + how + '.') + '</span></li>';
       }).join('') + '</ul>';
@@ -1533,6 +1535,8 @@
   // The one thing to know about a sponsor, in color only when money is involved.
   function cardBadge(s) {
     var badge = A().badge;
+    // Paid in kind: no receipt goes out, so there is nothing to chase.
+    if (isIn(s) && s.paid && s.inKind) return badge('Paid in kind', 'ok');
     if (isIn(s) && s.paid) {
       // Paid: say whether the receipt went out, so who needs an email shows at a glance.
       var rc = receiptState(s);
