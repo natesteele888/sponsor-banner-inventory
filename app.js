@@ -510,16 +510,28 @@
 
   // sub: one of the Sponsors tab's own tabs (Receipts, Follow-ups, Add
   // sponsor, Record payment), or nothing for the sponsor list.
+  // 2027 banners, Banner stock and Fields sit under the one Banners tab, with
+  // a three-button switch on top. The tab opens the last one looked at.
+  var BANNER_VIEWS = ['season', 'list', 'fields'];
+  var lastBanner = 'season';
   function showView(name, sub) {
     sub = name === 'sponsors' ? String(sub || '') : '';
     $$('.view').forEach(function (v) { v.classList.add('hidden'); });
     $('#view-' + name).classList.remove('hidden');
     var tab = name === 'add' ? 'list' : name; // adding a banner is part of Banner stock
+    var inBanners = BANNER_VIEWS.indexOf(tab) >= 0;
+    if (inBanners) lastBanner = tab;
     $$('.tab-btn').forEach(function (b) {
-      var on = b.dataset.view === tab && String(b.dataset.sp || '') === sub;
+      var on = inBanners ? b.dataset.group === 'banners'
+        : b.dataset.view === tab && String(b.dataset.sp || '') === sub;
       b.classList.toggle('active', on);
       if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
+    var sw = $('#bannerSwitch');
+    if (sw) {
+      sw.classList.toggle('hidden', !inBanners);
+      $$('#bannerSwitch [data-bview]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.bview === tab)); });
+    }
     if (name === 'fields' && window.Fields) window.Fields.show();
     if (name === 'season' && window.Season) window.Season.show();
     if (name === 'sponsors' && window.Sponsors) window.Sponsors.show(sub);
@@ -532,7 +544,7 @@
 
     $$('.tab-btn[data-view]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        showView(btn.dataset.view, btn.dataset.sp);
+        showView(btn.dataset.group === 'banners' ? lastBanner : btn.dataset.view, btn.dataset.sp);
         // On a phone the bar scrolls sideways: keep the tapped tab in sight.
         if (btn.scrollIntoView) btn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       });
@@ -545,6 +557,9 @@
     $('#bannerFilter').addEventListener('change', function (e) {
       state.filter = e.target.value;
       renderList();
+    });
+    $$('#bannerSwitch [data-bview]').forEach(function (b) {
+      b.addEventListener('click', function () { showView(b.dataset.bview); });
     });
     $('#addOpen').addEventListener('click', function () { showView('add'); });
     $('#addBack').addEventListener('click', function () { showView('list'); });
@@ -573,6 +588,7 @@
 
     // A home-screen shortcut (manifest.json) opens a tab by its #name.
     var start = String(location.hash || '').slice(1);
+    if (start === 'banners') start = 'season';
     showView(['sponsors', 'season', 'list', 'fields'].indexOf(start) >= 0 ? start : 'sponsors');
     wireSignIn();
   }

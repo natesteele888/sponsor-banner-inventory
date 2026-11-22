@@ -500,7 +500,15 @@
 
   function renderNudges() {
     var box = $('#spNudges'), esc = A().esc, N = S.nudges;
-    if (!N || !N.rounds || !N.rounds.length) { box.classList.add('hidden'); return; }
+    // Paid sponsors still waiting on their info packet sit in this tab too.
+    var pk = packetWaiting(), pkBox = pk ? '<div class="pk-box">' + pk + '</div>' : '';
+    S.pkLast = pk;
+    if (!N || !N.rounds || !N.rounds.length) {
+      box.innerHTML = pkBox;
+      box.classList.toggle('hidden', !pkBox);
+      applyMode();
+      return;
+    }
     var ready = N.items.filter(function (i) { return i.status === 'ready'; });
     var done = N.items.filter(function (i) { return i.status !== 'ready'; });
     var set = N.settings || {}, notes = [];
@@ -536,7 +544,7 @@
       '<details class="rc-more"><summary>Schedule</summary><ul class="rc-list">' + N.rounds.map(function (r) {
         return '<li class="rc-item" data-round="' + esc(r.date) + '"><div class="rc-who"><b>' + esc(fmtDay(r.date)) + '</b><span>' + esc(r.label) + '</span></div>' +
           '<div class="rc-acts"><button class="btn small" data-nd="sample" type="button">Preview</button></div><div class="rc-msg" role="status"></div><div class="rc-preview hidden"></div></li>';
-      }).join('') + '</ul></details></details>';
+      }).join('') + '</ul></details></details>' + pkBox;
     keepOpen(box, 'ndOpen');
     box.classList.remove('hidden');
     applyMode();
@@ -809,7 +817,8 @@
     if (!list.length) return '';
     return '<h2 class="rc-h">Paid, waiting on their info packet (' + list.length + ')</h2><ul class="rc-list pk-wait">' +
       list.map(function (s) {
-        var rc = receiptItem(s.key);
+        // Matched by sheet row, the way the card's badge is; the key alone can miss.
+        var rc = (S.receipts && S.receipts.items || []).filter(function (i) { return Number(i.row) === Number(s.row); })[0] || receiptItem(s.key);
         var how = rc && rc.status === 'sent' ? 'Receipt with their packet link sent' + (rc.at ? ' ' + fmtDay(String(rc.at).slice(0, 10)) : '')
           : 'Receipt not sent yet, so they don’t have the packet link';
         return '<li class="pk-item"><b>' + esc(s.company) + '</b> <span class="hint">' + esc((s.tier ? s.tier + '. ' : '') + how + '.') + '</span></li>';
@@ -883,10 +892,11 @@
   function renderPackets() {
     var box = $('#spPackets'), esc = A().esc, P = S.packets;
     if (!P) { box.classList.add('hidden'); return; }
-    var waitBox = packetWaiting();
+    // The paid sponsors still waiting on theirs are listed under Follow-ups.
+    renderNudges();
     if (!P.rows.length) {
-      box.innerHTML = waitBox;
-      box.classList.toggle('hidden', !waitBox);
+      box.innerHTML = '';
+      box.classList.add('hidden');
       return;
     }
     var t = { headers: P.headers };
@@ -914,7 +924,7 @@
           (onList(r) ? '<p class="hint pk-on">On the sponsor list.</p>' :
             canAdd && get(r, 'biz') ? '<p class="pk-add"><button type="button" class="btn pk-add-btn" data-row="' + r.row + '">Add to sponsor list</button> <span class="hint" aria-live="polite"></span></p>' : '') +
           body + '</details></li>';
-      }).join('') + '</ul>' + waitBox;
+      }).join('') + '</ul>';
     box.classList.remove('hidden');
     $$('#spPackets .pk-add-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1394,13 +1404,20 @@
     return { amount: hit.committed, est: daysBetween(hit.date, iso) > 7, from: hit.date };
   }
 
-  // This season on a date: today's live total, or the day's kept snapshot.
-  function nowOn(iso) {
-    var h = S.history;
-    if (iso >= h.today) return S.committed;
-    var hit = null;
-    (h.snaps || []).forEach(function (s) { if (s.date <= iso) hit = s; });
-    return hit && daysBetween(hit.date, iso) <= 7 ? hit.committed : null;
+  // Two thin lines on one dollar scale, one on top of the other: last season
+  // (grey) with a tick and a date at each saved total, so you can read off
+  // "last year got here by Feb 9", and this season so far (blue). Always open;
+  // nothing to expand or pick.
+  function yoyWaypoints(prev, fin) {
+    var pts = (prev.points || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.committed - b.committed; });
+    var out = [], top = 0;
+    pts.forEach(function (p) {
+      // A running total only goes up: a later, lower figure is left out.
+      if (!(p.committed > top) || p.committed >= fin) return;
+      top = p.committed;
+      out.push({ amount: p.committed, date: p.date });
+    });
+    return out;
   }
 
   function renderYoY() {
@@ -1420,64 +1437,38 @@
     var thenText = then == null ? 'no record this early' : (then.est ? 'about ' : '') + fmtMoney(then.amount);
     var esc = A().esc;
 
-    // Last year's month starts, for the table under the bars.
-    var season = Number(h.season);
-    var marks = ['11-01', '12-01', '01-01', '02-01', '03-01', '04-01', '05-01'].map(function (md) {
-      var y = md >= '07' ? season - 1 : season;
-      return y + '-' + md;
-    });
-    var rows = marks.map(function (iso) {
-      var p = prevOn(lastYear(iso));
-      var n = nowOn(iso);
-      var prevCell = p == null ? 'no record' : (p.est ? 'about ' : '') + fmtMoney(p.amount);
-      var nowCell = iso > h.today ? '' : (n == null ? 'not kept' : fmtMoney(n));
-      return '<tr><td>' + dayLabel(iso) + '</td><td>' + nowCell + '</td><td>' + prevCell + '</td></tr>';
-    }).join('');
-    var tre = pts.filter(function (p) { return p.treasurer; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var way = yoyWaypoints(prev, fin);
     // When last year's drive hadn't started yet, say when last year reached today's total.
-    var reached = tre.concat(pts.filter(function (p) { return !p.treasurer; })).sort(function (a, b) { return a.date < b.date ? -1 : 1; })
-      .filter(function (p) { return now > 0 && p.committed >= now; })[0];
+    var reached = way.filter(function (w) { return now > 0 && w.amount >= now; })[0];
     if ((!then || !then.amount) && reached) thenText += ' (last year got here by ' + dayLabel(reached.date) + ')';
 
-    var est = [];
-    if (prev.sheetCreated) est.push('Last year\'s sheet was started ' + dayLabel(prev.sheetCreated) + '.');
-    if (pts.length) est.push('Its totals come from the sheet\'s saved versions, the first on ' + dayLabel(pts.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0].date) + ', so "about" means the nearest saved version was more than a week away.');
-    else est.push('Its saved versions couldn\'t be read, so only its final total shows.');
-    if (tre.length) est.push('The treasurer\'s figures: ' + tre.map(function (p) { return esc(dayLabel(p.date)) + ' ' + fmtMoney(p.committed); }).join(', ') + '.');
-    est.push('This year\'s totals are kept once a day from ' + dayLabel((h.snaps && h.snaps[0] && h.snaps[0].date) || h.today) + ' on.');
+    // Every saved total gets a tick; dates are written only where they have room.
+    var GAP = 11, END = 13, kept = [], last = -100;
+    way.forEach(function (w) {
+      var x = pct(w.amount);
+      if (x - last >= GAP && pct(fin) - x >= END) { kept.push(w); last = x; }
+    });
+    var ticks = way.map(function (w) { return '<i class="yoy-tick" style="left:' + pct(w.amount) + '%"></i>'; }).join('');
+    var dates = kept.map(function (w) {
+      return '<span class="yoy-date" style="left:' + pct(w.amount) + '%">' + esc(dayLabel(w.date)) + '</span>';
+    }).join('') + '<span class="yoy-date end" style="left:' + pct(fin) + '%">Final</span>';
+    var thenTick = then && then.amount > 0 ? '<i class="yoy-tick today" style="left:' + pct(then.amount) + '%" title="This date last year"></i>' : '';
 
-    // One bar: its number printed on it (inside when there's room, just past
-    // its end when it's short), nothing to hover.
-    var bar = function (cls, v, label, extra) {
-      var w = pct(v), inside = w >= 34;
-      return '<div class="yoy-row">' +
-        '<div class="yoy-lab">' + label + '</div>' +
-        '<div class="yoy-track">' +
-          '<div class="yoy-fill ' + cls + '" style="width:' + w + '%">' + (inside ? '<span class="yoy-num">' + fmtMoney(v) + '</span>' : '') + '</div>' +
-          (inside ? '' : '<span class="yoy-num out" style="left:' + w + '%">' + fmtMoney(v) + '</span>') +
-          (extra || '') +
-        '</div></div>';
-    };
-    var thenMark = '', thenNote = '';
-    if (then && then.amount > 0) {
-      var tl = pct(then.amount);
-      thenMark = '<i class="yoy-then" style="left:' + tl + '%"></i>';
-      thenNote = '<div class="yoy-thenlab" style="left:' + Math.min(tl, 62) + '%">' + (then.est ? 'about ' : '') + fmtMoney(then.amount) + ' by ' + dayLabel(h.today) + ' last year' + '</div>';
-    }
+    var label = prev.season + ' sponsor money ' + fmtMoney(fin) + ' by the end' +
+      (way.length ? ', reaching ' + way.map(function (w) { return fmtMoney(w.amount) + ' by ' + dayLabel(w.date); }).join(', ') : '') +
+      '. ' + h.season + ' so far ' + fmtMoney(now) + '.';
 
     box.innerHTML =
-      '<summary>' +
-        '<span class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + prev.season + ' final ' + fmtMoney(fin) +
-        ' <span class="yoy-open">Compare years ›</span></span>' +
-      '</summary>' +
-      '<div class="yoy-bars" role="img" aria-label="' + prev.season + ' sponsor money ' + fmtMoney(fin) + (then && then.amount > 0 ? ', ' + fmtMoney(then.amount) + ' by this date' : '') + '. ' + h.season + ' so far ' + fmtMoney(now) + '.">' +
-        bar('prev', fin, '<b>' + prev.season + '</b> sponsor money, the whole season' + (then && then.amount > 0 ? '. The line is where it stood on this date.' : ''), thenMark) +
-        thenNote +
-        bar('now', now, '<b>' + h.season + '</b> so far') +
-      '</div>' +
-      '<table class="yoy-table"><thead><tr><th></th><th>' + h.season + '</th><th>' + prev.season + '</th></tr></thead><tbody>' + rows +
-        '<tr class="yoy-final"><td>Final</td><td></td><td>' + fmtMoney(fin) + '</td></tr></tbody></table>' +
-      '<p class="yoy-note">' + est.join(' ') + '</p>';
+      '<div class="yoy-line"><b>' + fmtMoney(now) + '</b> committed · this time last year ' + thenText + ' · ' + esc(prev.season) + ' final ' + fmtMoney(fin) + '</div>' +
+      '<div class="yoy-chart" role="img" aria-label="' + esc(label) + '">' +
+        '<div class="yoy-dates" aria-hidden="true">' + dates + '</div>' +
+        '<div class="yoy-lines" aria-hidden="true">' +
+          '<i class="yoy-l prev" style="width:' + pct(fin) + '%"></i>' +
+          '<i class="yoy-l now" style="width:' + pct(now) + '%"></i>' +
+          ticks + thenTick +
+        '</div>' +
+        '<div class="yoy-key" aria-hidden="true"><span class="k prev">' + esc(prev.season) + '</span><span class="k now">' + esc(h.season) + ' so far</span></div>' +
+      '</div>';
     box.classList.remove('hidden');
   }
 
@@ -1607,6 +1598,8 @@
     $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
     applyMode();
     renderQuick();
+    // The packet-waiting list under Follow-ups follows the sheet; redrawn only when it changes.
+    if (packetWaiting() !== S.pkLast) renderNudges();
 
     // The default view is this season's sponsors; name it with the season.
     var yo = $('#spFilter option[value="signed"]');
@@ -2421,24 +2414,11 @@
       b.classList.toggle('hidden', k === 'add' ? !canAdd : !ed);
       b.setAttribute('aria-pressed', String(S.quick === k));
     });
-    var n = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
-    var wl = S.welcome ? S.welcome.items.filter(function (i) { return !i.had; }).length : 0;
-    var pk = S.packets ? sponsors().filter(FILTERS.packetWaiting).length : 0;
-    var or = S.outreach ? S.outreach.items.filter(orReady).length : 0;
-    var plural = function (k, one, many) { return k + ' ' + (k === 1 ? one : many); };
-    var links = [
-      n ? '<button class="linkish" type="button" data-q="receipts">' + plural(n, 'receipt', 'receipts') + ' ready to check and send ›</button>' : '',
-      wl ? '<button class="linkish" type="button" data-q="welcome">' + plural(wl, 'welcome email', 'welcome emails') + ' to send ›</button>' : '',
-      or ? '<button class="linkish" type="button" data-q="outreach">' + plural(or, 'business', 'businesses') + ' ready for outreach ›</button>' : '',
-      pk ? '<button class="linkish" type="button" data-q="packets">' + plural(pk, 'paid sponsor', 'paid sponsors') + ' waiting on their packet ›</button>' : '',
-      S.toOrder ? '<button class="linkish" type="button" data-q="banners">' + plural(S.toOrder, 'banner', 'banners') + ' to order ›</button>' : ''
-    ].filter(Boolean);
-    var todo = $('#spQuickTodo');
-    todo.classList.toggle('hidden', !links.length || !ed);
-    todo.innerHTML = links.join('');
+    // What's waiting shows as a number on its own tab (syncSpTabs), not as links here.
+    syncSpTabs();
     if (ed && !S.toOrderAsked && window.Season && window.Season.counts) {
       S.toOrderAsked = true;
-      window.Season.counts().then(function (c) { if (c && c.order !== S.toOrder) { S.toOrder = c.order; renderQuick(); } }).catch(function () { });
+      window.Season.counts().then(function (c) { if (c && c.order !== S.toOrder) { S.toOrder = c.order; syncSpTabs(); } }).catch(function () { });
     }
     if (S.quick && !ed) closeQuick();
   }
@@ -2456,14 +2436,6 @@
     if (k === 'receipts') { closeQuick(); goSub('receipts'); return; }
     if (k === 'welcome') { closeQuick(); S.wlFilter = 'needs'; goSub('welcome'); renderWelcome(); return; }
     if (k === 'outreach') { closeQuick(); goOutreachReady(); return; }
-    if (k === 'packets') { closeQuick(); showCount('packetWaiting'); return; }
-    if (k === 'banners') {
-      closeQuick();
-      var sb = document.querySelector('.tab-btn[data-view="season"]');
-      if (window.Season && window.Season.filter) window.Season.filter('order');
-      if (sb) sb.click();
-      return;
-    }
     if (S.quick === k) { closeQuick(); return; }
     S.quick = k; S.quickRow = 0; S.quickQ = '';
     $$('#spQuick .sp-q').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.q === k)); });
@@ -2586,17 +2558,44 @@
     $('#spModeEmpty').classList.toggle('hidden', !mode || !$(SP_BOX[mode]).classList.contains('hidden'));
     syncSpTabs();
   }
+  // What's waiting on each tab, as a blue circle with the number on it.
+  // Follow-ups counts the nudges ready in an open round and the paid sponsors
+  // still waiting on their info packet; both lists live in that tab.
+  function tabCounts() {
+    var c = {};
+    c.receipts = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
+    c.welcome = S.welcome ? S.welcome.items.filter(function (i) { return !i.had; }).length : 0;
+    c.outreach = S.outreach ? S.outreach.items.filter(orReady).length : 0;
+    var nd = S.nudges && S.nudges.current && S.nudges.started ? S.nudges.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
+    c.followups = nd + (S.book && S.packets ? sponsors().filter(FILTERS.packetWaiting).length : 0);
+    c.banners = S.toOrder || 0;
+    return c;
+  }
+  function tabBadge(b, n, what) {
+    if (!b.dataset.label) b.dataset.label = b.textContent.replace(/\s*\(\d+\)$/, '').trim();
+    b.textContent = b.dataset.label;
+    if (n) {
+      var i = document.createElement('span');
+      i.className = 'tab-badge';
+      i.textContent = n > 99 ? '99+' : String(n);
+      i.setAttribute('aria-label', n + ' ' + what);
+      b.appendChild(i);
+    }
+  }
   function syncSpTabs() {
     $$('.tab-btn[data-sp]').forEach(function (b) {
       var box = $(SP_BOX[b.dataset.sp]);
       var can = box && (!box.classList.contains('hidden') || b.dataset.sp === S.mode);
       b.classList.toggle('hidden', !can);
     });
-    var rb = document.querySelector('.tab-btn[data-sp="receipts"]');
-    if (rb) {
-      var n = S.receipts && S.receipts.items ? S.receipts.items.filter(function (i) { return i.status === 'ready'; }).length : 0;
-      rb.textContent = 'Receipts' + (n ? ' (' + n + ')' : '');
-    }
+    var c = tabCounts();
+    var what = { receipts: 'ready to send', welcome: 'to welcome', outreach: 'ready for outreach', followups: 'to follow up' };
+    Object.keys(what).forEach(function (k) {
+      var b = document.querySelector('.tab-btn[data-sp="' + k + '"]');
+      if (b) tabBadge(b, c[k] || 0, what[k]);
+    });
+    var bb = document.querySelector('.tab-btn[data-group="banners"]');
+    if (bb) tabBadge(bb, c.banners || 0, 'banners to order');
   }
 
   window.Sponsors = {
