@@ -463,32 +463,24 @@ body.board-view .scrim, body.board-view .sheet { display: none !important; }
 }
 
 /* Year over year: one thin bar like a usage meter, tap for the waypoints. */
-.yoy { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: -4px 0 10px; }
-.yoy summary { list-style: none; cursor: pointer; display: block; }
-.yoy summary::-webkit-details-marker { display: none; }
-.yoy-line { display: block; font-size: 12px; color: var(--ink2); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.yoy { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 6px; margin: -4px 0 10px; }
+.yoy-line { display: block; font-size: 12px; color: var(--ink2); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
 .yoy-line b { color: var(--ink); }
-/* Tapped open: two plain bars, the numbers printed on them, nothing to hover. */
-.yoy-open { color: var(--blue); font-weight: 600; white-space: nowrap; }
-.yoy[open] .yoy-open { display: none; }
-.yoy-bars { margin: 8px 0 4px; }
-.yoy-row { margin: 0 0 12px; }
-.yoy-lab { font-size: 12.5px; color: var(--ink2); margin-bottom: 4px; }
-.yoy-lab b { color: var(--ink); }
-.yoy-track { position: relative; height: 26px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
-.yoy-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; display: flex; align-items: center; justify-content: flex-end; min-width: 3px; }
-.yoy-fill.prev { background: #6B7385; }
-.yoy-fill.now { background: var(--blue); }
-.yoy-num { font: 700 14px 'DM Sans', sans-serif; color: #fff; padding: 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.yoy-num.out { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; color: var(--ink); }
-.yoy-then { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); }
-.yoy-thenlab { position: relative; font-size: 12px; font-weight: 600; color: var(--ink); margin: -8px 0 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.yoy-thenlab::before { content: '▲ '; }
-.yoy-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.yoy-table th, .yoy-table td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--line); }
-.yoy-table th:first-child, .yoy-table td:first-child { text-align: left; color: var(--ink2); }
-.yoy-final td { font-weight: 600; border-bottom: 0; }
-.yoy-note { font-size: 11px; color: var(--ink2); margin: 8px 0 0; line-height: 1.4; }
+/* Two thin lines, one on top of the other, on one dollar scale (Nate, Nov 21). */
+.yoy-chart { margin: 0 2px; }
+.yoy-dates { position: relative; height: 16px; font-size: 11px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.yoy-date { position: absolute; bottom: 1px; transform: translateX(-50%); white-space: nowrap; }
+.yoy-date.end { transform: translateX(-100%); font-weight: 600; color: var(--ink); }
+.yoy-lines { position: relative; height: 12px; }
+.yoy-l { position: absolute; left: 0; height: 4px; border-radius: 2px; min-width: 2px; }
+.yoy-l.prev { top: 1px; background: #8A92A6; }
+.yoy-l.now { top: 7px; background: #2E52E8; }
+.yoy-tick { position: absolute; top: -2px; width: 2px; height: 8px; margin-left: -1px; border-radius: 1px; background: var(--ink2); }
+.yoy-tick.today { top: -3px; height: 16px; background: var(--ink); }
+.yoy-key { display: flex; gap: 14px; margin-top: 4px; font-size: 11px; color: var(--ink2); }
+.yoy-key .k::before { content: ''; display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.yoy-key .k.prev::before { background: #8A92A6; }
+.yoy-key .k.now::before { background: #2E52E8; }
 
 /* Sponsors-only accounts have no Dashboard to go back to. */
 body.no-dash .hbtn.home { display: none !important; }
@@ -599,6 +591,29 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible {
   box-shadow: 0 0 0 3px rgba(124,155,255,.28), 0 0 22px 4px rgba(124,155,255,.55); transform: translateY(-2px); filter: brightness(1.1); outline: none; }
 @media (prefers-reduced-motion: reduce) { .lv-act[data-up] { transition: none; } .lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible { transform: none; } }
+/* The Upgrade button moves like the website's registration banner button
+   (Nate, Nov 21): a soft sheen sweeps across, a light stroke travels round the
+   edge (slow, fast, slow) and a slow pulse, every 5 seconds. Lower levels get
+   no button at all. Still for reduced motion. */
+@property --lv-up-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.lv-act[data-up] { position: relative; isolation: isolate; overflow: hidden; animation: lv-up-pulse 5s ease-in-out infinite; }
+.lv-act[data-up] > span { position: relative; z-index: 2; }
+.lv-act[data-up]::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 60%; z-index: 1; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.07) 30%, rgba(255,255,255,.26) 50%, rgba(255,255,255,.07) 70%, rgba(255,255,255,0) 100%);
+  transform: translateX(-130%); animation: lv-up-sheen 5s cubic-bezier(.45,0,.25,1) infinite; }
+.lv-act[data-up]::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; z-index: 1; pointer-events: none;
+  background: conic-gradient(from var(--lv-up-a), rgba(255,255,255,0) 0deg, rgba(255,255,255,0) 200deg, rgba(255,255,255,.55) 285deg, #fff 330deg, rgba(255,255,255,0) 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: lv-up-stroke 5s cubic-bezier(.65,0,.35,1) infinite; }
+.lv-act[data-up]:hover, .lv-act[data-up]:active, .lv-act[data-up]:focus-visible { animation: none; }
+@keyframes lv-up-sheen { 0% { transform: translateX(-130%); } 45%, 100% { transform: translateX(230%); } }
+@keyframes lv-up-stroke { 0% { --lv-up-a: 0deg; opacity: 0; } 8% { opacity: 1; } 62% { opacity: 1; } 70%, 100% { --lv-up-a: 360deg; opacity: 0; } }
+@keyframes lv-up-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(46,82,232,0); } 35% { box-shadow: 0 0 0 5px rgba(46,82,232,.22), 0 0 14px 2px rgba(124,155,255,.32); } 70% { box-shadow: 0 0 0 0 rgba(46,82,232,0); } }
+@media (prefers-reduced-motion: reduce) {
+  .lv-act[data-up], .lv-act[data-up]::before, .lv-act[data-up]::after { animation: none; }
+  .lv-act[data-up]::before, .lv-act[data-up]::after { display: none; }
+}
 .lv-lock { font-size: 12px; color: var(--green); font-weight: 600; margin: 0; text-align: center; }
 .lv-lock-up { color: var(--blue); }
 .lv-perks { list-style: none; margin: 2px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
@@ -696,7 +711,6 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-quick-btns .sp-q span { font-size: 18px; }
 .sp-quick-btns .sp-q[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
 @media (max-width: 420px) { .sp-quick-btns { grid-template-columns: 1fr; } .sp-quick-btns .sp-q { min-height: 48px; } }
-.sp-quick-todo { margin: 8px 0 0; }
 .sp-quick-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .sp-quick-panel input[type="search"], .sp-quick-panel textarea { width: 100%; box-sizing: border-box; font-size: 16px; }
 .sp-q-list { list-style: none; margin: 10px 0 0; padding: 0; }
@@ -740,7 +754,6 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 /* Every count is a button: tap it to see who's behind it. */
 .stat.stat-tap { font: inherit; color: inherit; cursor: pointer; width: 100%; -webkit-appearance: none; appearance: none; }
 .stat.stat-tap:hover, .stat.stat-tap.on { border-color: var(--blue); }
-.sp-quick-todo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 
 /* Sponsor cards (Nate, Nov 21): the level in its own color and short status
    pills under the name, owner and contact in bold, the notes behind a tap. */
@@ -762,4 +775,14 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-more { margin-top: 4px; font-size: 13px; color: var(--ink3); }
 .sp-more summary { cursor: pointer; color: var(--blue); font-weight: 600; width: max-content; }
 .sp-note-full { white-space: pre-line; margin-top: 4px; color: var(--ink2); overflow-wrap: anywhere; }
-.yoy-fill.now .yoy-num { color: var(--card); }
+
+/* What's waiting on a tab: a blue circle with a white number (Nate, Nov 21).
+   The same blue in light and dark, ringed in white on the selected tab. */
+.tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  margin-left: 6px; border-radius: 10px; background: #2E52E8; color: #fff; font: 700 12px 'DM Sans', sans-serif;
+  line-height: 1; vertical-align: 1px; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.tab-btn.active .tab-badge { box-shadow: 0 0 0 2px #fff; }
+/* Inside Banners: 2027 banners, all banner stock and fields, one tap each. */
+.banner-switch { margin: 0 0 14px; }
+/* Under Follow-ups, after the rounds: paid sponsors still waiting on their info packet. */
+.rc-box + .pk-box { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }

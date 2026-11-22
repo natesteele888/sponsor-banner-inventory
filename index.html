@@ -51,9 +51,8 @@
     <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="welcome">Welcome</button>
     <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="add">Add sponsor</button>
     <button class="tab-btn sp-tab hidden" data-view="sponsors" data-sp="pay">Record payment</button>
-    <button class="tab-btn" data-view="season">2027 banners</button>
-    <button class="tab-btn" data-view="list">Banner stock</button>
-    <button class="tab-btn" data-view="fields">Fields</button>
+    <!-- 2027 banners, Banner stock and Fields live under one tab (app.js BANNER_VIEWS). -->
+    <button class="tab-btn" data-view="season" data-group="banners">Banners</button>
   </nav>
 </header>
 
@@ -82,15 +81,14 @@
         <button class="btn sp-q" data-q="paid" type="button"><span aria-hidden="true">✓</span> Mark paid</button>
         <button class="btn sp-q" data-q="note" type="button"><span aria-hidden="true">✎</span> Add a note</button>
       </div>
-      <p id="spQuickTodo" class="sp-quick-todo hidden"></p>
       <div id="spQuickPanel" class="sp-quick-panel hidden" aria-live="polite"></div>
     </div>
     <!-- The numbers, tucked away until wanted. -->
     <details id="spReports" class="sp-reports">
       <summary id="spReportsSum">Numbers and reports</summary>
       <div id="spSummary" class="season-summary"></div>
-      <!-- This year's committed total next to last year's at the same date (sponsors.js, History.gs). -->
-      <details id="spYoY" class="yoy hidden"></details>
+      <!-- This year's committed total next to last year's, two thin lines with dates (sponsors.js, History.gs). -->
+      <div id="spYoY" class="yoy hidden"></div>
       <!-- When the website was last looked at for sponsor payments (sponsors.js, Season.gs websiteCheck). -->
       <div id="spWeb" class="sp-web hidden" aria-live="polite"></div>
     </details>
@@ -172,6 +170,13 @@
     <section id="spPackets" class="rcpt pk hidden"></section>
     <div id="spOther" class="sp-other"></div>
   </section>
+
+  <!-- Inside Banners: the three banner pages, one tap each (app.js). -->
+  <div id="bannerSwitch" class="sp-quick-btns banner-switch hidden" role="group" aria-label="Banners">
+    <button class="btn sp-q" data-bview="season" type="button">2027 banners</button>
+    <button class="btn sp-q" data-bview="list" type="button">All banner stock</button>
+    <button class="btn sp-q" data-bview="fields" type="button">Fields</button>
+  </div>
 
   <!-- LIST VIEW -->
   <section id="view-list" class="view">

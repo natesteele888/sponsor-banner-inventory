@@ -102,7 +102,7 @@
                 : '<div class="lv-lock">Your info for this level goes below.</div>')
         : below ? ''
         : on ? '<div class="lv-lock lv-lock-up">Picked. How to pay the difference is below.</div>'
-        : '<button type="button" class="btn primary lv-act" data-up="' + esc(l.name) + '">Upgrade for ' + money(l.owed) + '</button>';
+        : '<button type="button" class="btn primary lv-act" data-up="' + esc(l.name) + '"><span>Upgrade for ' + money(l.owed) + '</span></button>';
       var list = perks(l).map(function (p) {
         return '<li class="' + (p[0] ? 'lv-yes' : 'lv-no') + '">' + esc(p[1]) + '</li>';
       }).join('');
