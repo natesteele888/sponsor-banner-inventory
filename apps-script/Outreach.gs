@@ -329,7 +329,7 @@ function outreachSend(data) {
       try { pdf = DriveApp.getFileById(s.packetFile).getBlob(); }
       catch (e) { return fail('The packet PDF (OUTREACH_PACKET_FILE) doesn’t open. Nothing was sent.'); }
     }
-    var mail = senderSettings_(), who = sponsorMe_() || String(WHO.email || '').split('@')[0];
+    var mail = senderSettings_(), who = sponsorMe_();
     var results = [], seen = {}, marks = [];
     items.forEach(function (it) {
       var res = { row: Number(it.row), company: String(it.company || '') };
@@ -439,14 +439,18 @@ function outreachSent(data) {
     if (!email || String(data.email || '').toLowerCase() !== email.toLowerCase()) return fail('The address on the sheet changed. Nothing was marked.');
     log[key] = { at: dayOf_(new Date()), by: String(WHO.email || ''), via: 'gmail', to: email.toLowerCase() };
     saveOutreachLog_(log);
-    outreachMark_([f.r], sponsorMe_() || String(WHO.email || '').split('@')[0]);
+    outreachMark_([f.r], sponsorMe_());
     return ok({ message: f.r.company + ' is marked as emailed.' });
   } finally {
     lock.releaseLock();
   }
 }
 
-// Contacted? gets who sent it; Status follows to Contacted. Returns how many rows changed.
+// After a send: Contacted? says Yes, LYBS Owner becomes whoever sent it (when
+// nobody owns the row yet), and Status follows to Contacted, so the business
+// moves out of Outreach into the contacted group. who is the sender's name
+// from SPONSOR_PEOPLE; with no name for them, Owner is left blank rather than
+// guessed. Returns how many rows changed.
 function outreachMark_(rows, who) {
   if (!rows.length) return 0;
   forgetBoardRows_();
@@ -454,22 +458,31 @@ function outreachMark_(rows, who) {
   try { sh = writableSponsorSheet_(); } catch (e) { console.log('outreach mark: ' + e); return 0; }
   if (!sh) return 0;
   var t = sponsorHead_(sh), n = 0;
-  var cCon = -1, cCo = -1;
+  var cCon = -1, cCo = -1, cOwn = -1;
   t.head.forEach(function (h, i) {
     if (cCon < 0 && /^contacted/i.test(h)) cCon = i;
     if (cCo < 0 && /^(company|business)/i.test(h)) cCo = i;
+    if (cOwn < 0 && /^lybs owner/i.test(h)) cOwn = i;
   });
   if (cCon < 0 || cCo < 0) return 0;
+  who = String(who || '').trim();
   rows.forEach(function (r) {
     var i = r.row - 1, before = t.v[i];
     if (!before || companyKey_(before[cCo]) !== companyKey_(r.company)) return;
     try {
-      if (sh.getRange(r.row, cCon + 1).getFormulas()[0][0]) return;
-      var after = before.slice(); after[cCon] = who;
-      sh.getRange(r.row, cCon + 1).setValue(who);
-      logChanges_(sh, [{ company: r.company, what: t.head[cCon], from: before[cCon] || '', to: who }]);
+      var after = before.slice(), log = [];
+      var put = function (c, v) {
+        if (c < 0 || sh.getRange(r.row, c + 1).getFormulas()[0][0]) return;
+        if (String(before[c] == null ? '' : before[c]) === v) return;
+        sh.getRange(r.row, c + 1).setValue(v);
+        after[c] = v;
+        log.push({ company: r.company, what: t.head[c], from: before[c] || '', to: v });
+      };
+      if (!stReached_(before[cCon])) put(cCon, 'Yes');
+      if (who && cOwn >= 0 && !String(before[cOwn] == null ? '' : before[cOwn]).trim()) put(cOwn, who);
+      if (log.length) logChanges_(sh, log);
       followStatus_(sh, t, r.row, before, after, r.company);
-      n++;
+      if (log.length) n++;
     } catch (e) { console.log('outreach mark row ' + r.row + ': ' + e); }
   });
   SpreadsheetApp.flush();
