@@ -221,6 +221,28 @@
     out.receipt = rc; out.packet = pk;
     return out;
   }
+  // Where a sponsor stands, in the order the work goes (Nate, Nov 23):
+  // contacted and waiting on a reply, said yes but not paid, paid and needs
+  // their packet, packet sent, packet received. '' for anyone not reached out
+  // to yet (they live in Outreach) or who said no.
+  var STAGES = [
+    { k: 'contacted', t: 'Contacted, waiting on reply', h: 'Reached out to, no answer yet.' },
+    { k: 'yes', t: 'Said yes, not paid', h: 'Signed up at a level. Mark paid when the money comes in.' },
+    { k: 'paid', t: 'Paid, needs packet', h: 'Send the receipt, which carries their packet link.' },
+    { k: 'sent', t: 'Packet sent', h: 'Waiting for them to fill in their packet.' },
+    { k: 'received', t: 'Packet received', h: 'All done.' }
+  ];
+  function stageOf(s) {
+    if (!s) return '';
+    if (isIn(s)) {
+      var st = stepsOf(s);
+      if (!st.paid.done) return 'yes';
+      if (packetFor(s)) return 'received';
+      return st.packet.done ? 'sent' : 'paid';
+    }
+    return contactState(s) === 'yes' ? 'contacted' : '';
+  }
+
   // The list card's three little lines.
   function stepChips(s) {
     var st = stepsOf(s), esc = A().esc;
@@ -247,7 +269,10 @@
 
   function matches(s) {
     if (!FILTERS[S.filter]) S.filter = 'signed';
-    if (!FILTERS[S.filter](s)) return false;
+    // The main list is the five sections; the Show list is for Teams only.
+    // A search looks at everyone on the sheet.
+    if (S.mode === 'teams') { if (!FILTERS[S.filter](s)) return false; }
+    else if (!S.search && !stageOf(s)) return false;
     if (S.owner && s.owner !== S.owner) return false;
     if (S.area && s.area !== S.area) return false;
     if (S.search) {
@@ -1722,6 +1747,14 @@
   }
   // A count was tapped: the list filtered to them, or the box where they're worked.
   function showCount(k) {
+    if (/^stage:/.test(k)) {
+      S.owner = ''; S.area = ''; S.search = '';
+      var sb0 = $('#spSearch'); if (sb0) sb0.value = '';
+      if (S.mode) goList(); else render();
+      var sec = $('#spList .sp-sec[data-stage="' + k.slice(6) + '"]');
+      if (sec && sec.scrollIntoView) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     if (k === 'outreach' && canEdit() && S.outreach) { goOutreachReady(); return; }
     if (k === 'outreach') k = 'notContacted';
     if (!FILTERS[k]) return;
@@ -1757,10 +1790,9 @@
       stat(fmtMoney(committed), 'committed', 'money', 'committed') +
       stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money', 'paidCash') +
       (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money', 'inKind') : '') +
-      stat(inn.length, S.book.season + ' sponsors', '', 'signed') +
-      stat(all.filter(FILTERS.notContacted).length, 'not contacted', '', 'outreach') +
-      stat(all.filter(FILTERS.lapsed).length, 'past, not back yet', '', 'lapsed') +
-      stat(all.filter(needsOwner).length, 'need a new owner', '', 'needsOwner');
+      STAGES.map(function (g) {
+        return stat(all.filter(function (s) { return stageOf(s) === g.k; }).length, g.t.toLowerCase(), '', 'stage:' + g.k);
+      }).join('');
     $$('#spSummary [data-show]').forEach(function (b) { b.addEventListener('click', function () { showCount(b.dataset.show); }); });
     S.committed = committed;
     renderYoY();
@@ -1804,7 +1836,7 @@
     var items = all.filter(matches).sort(function (a, b) {
       return (b.amount - a.amount) || a.company.localeCompare(b.company);
     });
-    $('#spList').innerHTML = items.map(function (s) {
+    var card = function (s) {
       var logo = logoFor(s);
       return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '">' +
         (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
@@ -1820,7 +1852,16 @@
         '</div>' +
         (isIn(s) || S.mode === 'teams' ? '' : cardBadge(s)) +
       '</li>';
-    }).join('') || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
+    };
+    var html;
+    if (S.mode === 'teams' || S.search) html = items.map(card).join('');
+    else html = STAGES.map(function (g) {
+      var rows = items.filter(function (s) { return stageOf(s) === g.k; });
+      if (g.k === 'contacted') rows.sort(function (a, b) { return a.company.localeCompare(b.company); });
+      return '<li class="sp-sec" data-stage="' + g.k + '"><h3>' + esc(g.t) + ' <span class="sp-sec-n">' + rows.length + '</span></h3>' +
+        '<p class="hint">' + esc(rows.length ? g.h : 'Nobody here right now.') + '</p></li>' + rows.map(card).join('');
+    }).join('');
+    $('#spList').innerHTML = html || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
 
     // Opening the notes stays on the card.
     $$('#spList .sp-more').forEach(function (d) {
