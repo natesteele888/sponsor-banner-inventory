@@ -446,14 +446,14 @@ body.board-view .scrim, body.board-view .sheet { display: none !important; }
 /* The money totals, then the four counts, all on one row on wider screens.
    On phones the money gets its own row and the four counts share the next
    one, four across. k3 means there's an in-kind total too. */
-#spSummary { grid-template-columns: repeat(2, minmax(0, 1.6fr)) repeat(4, minmax(0, 1fr)); }
-#spSummary.k3 { grid-template-columns: repeat(3, minmax(0, 1.6fr)) repeat(4, minmax(0, 1fr)); }
+#spSummary { grid-template-columns: repeat(2, minmax(0, 1.6fr)) repeat(5, minmax(0, 1fr)); }
+#spSummary.k3 { grid-template-columns: repeat(3, minmax(0, 1.6fr)) repeat(5, minmax(0, 1fr)); }
 #spSummary .stat b { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: clamp(20px, 5vw, 28px); }
 #spSummary .stat.money b { color: var(--blue); }
 @media (max-width: 560px) {
   #spSummary { grid-template-columns: repeat(12, minmax(0, 1fr)); }
   #spSummary.k3 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  #spSummary .stat { grid-column: span 3; padding: 7px 3px; }
+  #spSummary .stat { grid-column: span 4; padding: 7px 3px; }
   #spSummary .stat.money { grid-column: span 6; }
   #spSummary.k3 .stat.money { grid-column: span 4; }
   #spSummary .stat.money b { font-size: 28px; }

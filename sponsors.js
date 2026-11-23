@@ -162,6 +162,9 @@
     // Signed up, and one of Paid, Receipt sent, Packet sent is still No.
     todo: function (s) { if (!isIn(s)) return false; var st = stepsOf(s); return !st.paid.done || !st.receipt.done || !st.packet.done; },
     notContacted: function (s) { return !String(s.contacted).trim(); },
+    // Reached out to, not signed up yet, hasn't said no (Nate, Nov 23: the
+    // businesses emailed from Outreach land here).
+    contacted: function (s) { return !isIn(s) && contactState(s) === 'yes'; },
     lapsed: function (s) { return s.past && !isIn(s); },
     pastNotContacted: function (s) { return s.past && !isIn(s) && contactState(s) === 'none'; },
     walkIn: function (s) { return s.walkIn; },
@@ -1713,7 +1716,7 @@
     if (isIn(s)) return s.inKind ? badge('In kind', 'ok') : badge('Not paid yet', 'warn');
     if (FILTERS.lapsed(s)) return badge('Past sponsor', 'muted');
     if (!String(s.contacted).trim()) return badge('Not contacted', 'muted');
-    return badge('Contacted', 'muted');
+    return badge('Contacted' + (s.owner ? ' by ' + s.owner : ''), 'muted');
   }
 
   // Every count is a button that shows who's behind it.
@@ -1759,6 +1762,7 @@
       (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money', 'inKind') : '') +
       stat(inn.length, S.book.season + ' sponsors', '', 'signed') +
       stat(all.filter(FILTERS.notContacted).length, 'not contacted', '', 'outreach') +
+      stat(all.filter(FILTERS.contacted).length, 'contacted, waiting', '', 'contacted') +
       stat(all.filter(FILTERS.lapsed).length, 'past, not back yet', '', 'lapsed') +
       stat(all.filter(needsOwner).length, 'need a new owner', '', 'needsOwner');
     $$('#spSummary [data-show]').forEach(function (b) { b.addEventListener('click', function () { showCount(b.dataset.show); }); });
