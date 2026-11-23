@@ -244,18 +244,40 @@
     out.receipt = rc; out.packet = pk;
     return out;
   }
-  // Where a sponsor stands, in the order the work goes (Nate, Nov 23):
-  // contacted and waiting on a reply, said yes but not paid, paid and needs
-  // their packet, packet sent, packet received. '' for anyone not reached out
-  // to yet (they live in Outreach) or who said no.
+  // Where a sponsor stands, end point first (Nate, Nov 23): packet received,
+  // packet sent, paid and needs their packet, needs a payment nudge, said yes
+  // but not paid, contacted and waiting on a reply. '' for anyone not reached
+  // out to yet (they live in Outreach) or who said no. Each section folds
+  // shut; Contacted starts shut, since it's the long one.
   var STAGES = [
-    { k: 'contacted', t: 'Contacted, waiting on reply', h: 'Reached out to, no answer yet.' },
-    { k: 'nudge', t: 'Needs a payment nudge', h: 'Signed up 2 or more weeks ago and not paid. Preview the reminder, then tap Send.' },
-    { k: 'yes', t: 'Said yes, not paid', h: 'Signed up at a level. Mark paid when the money comes in.' },
-    { k: 'paid', t: 'Paid, needs packet', h: 'Send the receipt, which carries their packet link.' },
-    { k: 'sent', t: 'Packet sent', h: 'Waiting for them to fill in their packet.' },
-    { k: 'received', t: 'Packet received', h: 'All done.' }
+    { k: 'received', t: 'Packet received', s: 'Received', h: 'All done.' },
+    { k: 'sent', t: 'Packet sent', s: 'Sent', h: 'Waiting for them to fill in their packet.' },
+    { k: 'paid', t: 'Paid, needs packet', s: 'Paid', h: 'Send the receipt, which carries their packet link.' },
+    { k: 'nudge', t: 'Needs a payment nudge', s: 'Nudge', h: 'Signed up 2 or more weeks ago and not paid. Preview the reminder, then tap Send.' },
+    { k: 'yes', t: 'Said yes, not paid', s: 'Said yes', h: 'Signed up at a level. Mark paid when the money comes in.' },
+    { k: 'contacted', t: 'Contacted, waiting on reply', s: 'Contacted', h: 'Reached out to, no answer yet.' }
   ];
+  var SEC_SHUT_DEFAULT = { contacted: true };
+  var SEC_KEY = 'lybsSpSecShut';
+  function secShut() {
+    var v = null;
+    try { v = JSON.parse(localStorage.getItem(SEC_KEY) || 'null'); } catch (e) { }
+    return v && typeof v === 'object' ? v : Object.assign({}, SEC_SHUT_DEFAULT);
+  }
+  function setSecShut(k, shut) {
+    var v = secShut(); v[k] = !!shut;
+    try { localStorage.setItem(SEC_KEY, JSON.stringify(v)); } catch (e) { }
+  }
+  // Fold one section open or shut in place, without redrawing the list.
+  function showSec(k, open) {
+    var sec = document.querySelector('#spList .sp-sec[data-stage="' + k + '"]');
+    if (!sec) return;
+    sec.classList.toggle('shut', !open);
+    var b = sec.querySelector('.sp-sec-btn');
+    if (b) b.setAttribute('aria-expanded', String(open));
+    $$('#spList .season-card[data-stage="' + k + '"]').forEach(function (c) { c.hidden = !open; });
+    setSecShut(k, !open);
+  }
   function stageOf(s) {
     if (!s) return '';
     if (isIn(s)) {
@@ -1901,10 +1923,13 @@
     var items = all.filter(matches).sort(function (a, b) {
       return (b.amount - a.amount) || a.company.localeCompare(b.company);
     });
+    var shut = S.mode === 'teams' || S.search ? {} : secShut();
     var card = function (s) {
       var logo = logoFor(s);
       var nudgeHere = S.mode !== 'teams' && canEdit() && payNudgeDue(s);
-      return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '">' +
+      var stg = S.mode === 'teams' || S.search ? '' : stageOf(s);
+      return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '"' +
+        (stg ? ' data-stage="' + stg + '"' + (shut[stg] ? ' hidden' : '') : '') + '>' +
         (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
           '<div class="name">' + esc(s.company) + '</div>' +
@@ -1923,13 +1948,36 @@
     };
     var html;
     if (S.mode === 'teams' || S.search) html = items.map(card).join('');
-    else html = STAGES.map(function (g) {
-      var rows = items.filter(function (s) { return stageOf(s) === g.k; });
-      if (g.k === 'contacted') rows.sort(function (a, b) { return a.company.localeCompare(b.company); });
-      return '<li class="sp-sec" data-stage="' + g.k + '"><h3>' + esc(g.t) + ' <span class="sp-sec-n">' + rows.length + '</span></h3>' +
-        '<p class="hint">' + esc(rows.length ? g.h : 'Nobody here right now.') + '</p></li>' + rows.map(card).join('');
-    }).join('');
+    else {
+      var byStage = {};
+      STAGES.forEach(function (g) {
+        byStage[g.k] = items.filter(function (s) { return stageOf(s) === g.k; });
+        if (g.k === 'contacted') byStage[g.k].sort(function (a, b) { return a.company.localeCompare(b.company); });
+      });
+      // Jump chips: one per section with its count; a tap opens it and goes there.
+      html = '<li class="sp-jump" aria-label="Jump to a section">' + STAGES.map(function (g) {
+        return '<button type="button" class="sp-jump-chip" data-jump="' + g.k + '">' + esc(g.s) + ' <span class="sp-sec-n">' + byStage[g.k].length + '</span></button>';
+      }).join('') + '</li>' +
+      STAGES.map(function (g) {
+        var rows = byStage[g.k], isShut = !!shut[g.k];
+        return '<li class="sp-sec' + (isShut ? ' shut' : '') + '" data-stage="' + g.k + '" id="spSec-' + g.k + '">' +
+          '<h3><button type="button" class="sp-sec-btn" aria-expanded="' + (!isShut) + '" data-sec="' + g.k + '">' +
+            '<span class="sp-sec-chev" aria-hidden="true">▾</span>' + esc(g.t) + ' <span class="sp-sec-n">' + rows.length + '</span></button></h3>' +
+          '<p class="hint">' + esc(rows.length ? g.h : 'Nobody here right now.') + '</p></li>' + rows.map(card).join('');
+      }).join('');
+    }
     $('#spList').innerHTML = html || '<p class="hint">' + (all.length ? 'No sponsors match that.' : 'The sheet has no sponsors on it yet.') + '</p>';
+
+    $$('#spList .sp-sec-btn').forEach(function (b) {
+      b.addEventListener('click', function () { showSec(b.dataset.sec, b.getAttribute('aria-expanded') !== 'true'); });
+    });
+    $$('#spList .sp-jump-chip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        showSec(b.dataset.jump, true);
+        var sec = document.getElementById('spSec-' + b.dataset.jump);
+        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
 
     // Opening the notes stays on the card.
     $$('#spList .sp-more').forEach(function (d) {
