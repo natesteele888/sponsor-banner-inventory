@@ -209,6 +209,9 @@ function route_(action, data) {
     if (action === 'nudgeSend') return nudgeSend(data);
     if (action === 'nudgeMark') return nudgeMark(data);
     if (action === 'nudgeRound') return nudgeRound(data);
+    if (action === 'payNudgeList') return ok(payNudgeList());
+    if (action === 'payNudgePreview') return payNudgePreview(data);
+    if (action === 'payNudgeSend') return payNudgeSend(data);
     if (action === 'sponsorPackets') return ok(snapRead_('packets', false, sponsorPackets));
     if (action === 'packetAdd') return packetAdd(data);
     if (action === 'sponsorUpgrades') return ok(snapRead_('upgrades', false, function () { return { upgrades: sponsorUpgrades() }; }));
@@ -244,7 +247,8 @@ var SNAP_TTL = 600;            // 10 minutes
 var SNAP_CHUNK = 30000;        // characters per cache entry (each entry holds up to 100 KB)
 var SNAP_READ_ONLY = { list: 1, image: 1, seasonList: 1, sponsorBook: 1, walkInForm: 1, sponsorHistory: 1, receiptList: 1,
   receiptPreview: 1, receiptCopyGet: 1, nudgeList: 1, nudgePreview: 1, sponsorPackets: 1, sponsorUpgrades: 1, spotlightSponsors: 1,
-  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, sponsorBoardView: 1, outreachList: 1, outreachPreview: 1, outreachCompose: 1, welcomeList: 1, welcomePreview: 1 };
+  sponsorLogoList: 1, websiteCheck: 1, sponsorSheet: 1, sponsorBoardView: 1, outreachList: 1, outreachPreview: 1, outreachCompose: 1, welcomeList: 1, welcomePreview: 1,
+  payNudgeList: 1, payNudgePreview: 1 };
 
 function snapGen_() { try { return CacheService.getScriptCache().get('snapGen') || '0'; } catch (e) { return '0'; } }
 function forgetSnaps_() { try { CacheService.getScriptCache().put('snapGen', Date.now() + '.' + Math.floor(Math.random() * 1e6), 21600); } catch (e) { } }

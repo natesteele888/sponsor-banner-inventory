@@ -122,7 +122,9 @@
       notes: colOf(t, /^notes?$/),
       address: colOf(t, /^address/),
       walkIn: colOf(t, /^walk.?in/),
-      how: colOf(t, /^(paid how|payment method|paid by)/)
+      how: colOf(t, /^(paid how|payment method|paid by)/),
+      signed: colOf(t, /^signed up/),
+      lastFollow: colOf(t, /^last follow/)
     };
     var picks = {};
     (S.book.teams || []).forEach(function (p) { picks[p.key] = p; });
@@ -141,7 +143,7 @@
         owedBanner: yes(get('owedBanner')), owedPlaque: yes(get('owedPlaque')),
         sheetTeam: get('team'), pick: pick, notes: get('notes'),
         address: get('address'), area: townOf(get('address')), walkIn: yes(get('walkIn')),
-        how: get('how'), inKind: IN_KIND.test(get('how')) || PAID_IN_KIND.test(get('notes')),
+        how: get('how'), signed: sheetDay(get('signed')), lastFollow: sheetDay(get('lastFollow')), inKind: IN_KIND.test(get('how')) || PAID_IN_KIND.test(get('notes')),
         team: hasTeam(pick) ? [pick.division, pick.team].filter(Boolean).join(' · ') : get('team')
       };
     }).filter(Boolean);
@@ -149,6 +151,27 @@
 
   // Signed up for this season: an amount on the sheet ("NONE"/$0 doesn't count).
   function isIn(s) { return s.amount > 0; }
+  // A day as the sheet shows it ("2026-11-23", "11/23/2026", or "2026-11-23
+  // Payment reminder") as yyyy-mm-dd, or ''.
+  function sheetDay(v) {
+    v = String(v || '').trim();
+    var p2 = function (n) { return ('0' + Number(n)).slice(-2); };
+    var m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]);
+    m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\b/);
+    return m ? (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + p2(m[1]) + '-' + p2(m[2]) : '';
+  }
+  function todayDay() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  // Signed up, not paid, and two weeks or more since they signed up (or since
+  // the last reminder): time for a payment nudge. Its own section, not Needs
+  // attention. (Nate, Nov 23)
+  var PAY_NUDGE_DAYS = 14;
+  function payNudgeFrom(s) { return s.lastFollow > s.signed ? s.lastFollow : s.signed; }
+  function payNudgeDue(s) {
+    if (!s || !isIn(s) || s.paid || s.inKind || !/@/.test(String(s.email || ''))) return false;
+    var from = payNudgeFrom(s);
+    return !!from && Math.round((Date.parse(todayDay() + 'T12:00:00Z') - Date.parse(from + 'T12:00:00Z')) / 864e5) >= PAY_NUDGE_DAYS;
+  }
   // Paid in goods or services (Paid how says "In kind", or with no Paid how
   // column, the notes say "paid in kind"): counted on its own, never as cash.
   var IN_KIND = /\bin.?kind\b/i, PAID_IN_KIND = /\bpaid in.?kind\b/i;
@@ -227,6 +250,7 @@
   // to yet (they live in Outreach) or who said no.
   var STAGES = [
     { k: 'contacted', t: 'Contacted, waiting on reply', h: 'Reached out to, no answer yet.' },
+    { k: 'nudge', t: 'Needs a payment nudge', h: 'Signed up 2 or more weeks ago and not paid. Preview the reminder, then tap Send.' },
     { k: 'yes', t: 'Said yes, not paid', h: 'Signed up at a level. Mark paid when the money comes in.' },
     { k: 'paid', t: 'Paid, needs packet', h: 'Send the receipt, which carries their packet link.' },
     { k: 'sent', t: 'Packet sent', h: 'Waiting for them to fill in their packet.' },
@@ -236,7 +260,7 @@
     if (!s) return '';
     if (isIn(s)) {
       var st = stepsOf(s);
-      if (!st.paid.done) return 'yes';
+      if (!st.paid.done) return payNudgeDue(s) ? 'nudge' : 'yes';
       if (packetFor(s)) return 'received';
       return st.packet.done ? 'sent' : 'paid';
     }
@@ -901,6 +925,47 @@
     return '<div class="sp-card-rc">' +
       '<button class="btn small" type="button" data-card-rc="' + esc(it.key) + '">' + label + '</button>' +
       '<div class="rc-msg" role="status"></div></div>';
+  }
+
+  // A sponsor who needs a payment nudge: the reminder, right on its card.
+  // Preview opens it there; Send still needs its own two taps. Never automatic.
+  function cardPayNudge(s) {
+    var esc = A().esc;
+    return '<div class="sp-card-rc sp-card-nudge">' +
+      '<button class="btn small" type="button" data-card-nudge="' + esc(String(s.row)) + '">Preview reminder</button>' +
+      '<span class="hint"> ' + esc((s.lastFollow > s.signed ? 'Last reminder ' : 'Signed up ') + fmtDay(payNudgeFrom(s))) + '</span>' +
+      '<div class="rc-msg" role="status"></div></div>';
+  }
+  function showPayNudge(pv, row, msg) {
+    var esc = A().esc;
+    msg.textContent = 'Building the preview…';
+    return A().apiPost({ action: 'payNudgePreview', row: row }).then(function (res) {
+      msg.textContent = res.ok ? '' : (res.error || 'Could not build the preview.');
+      if (!res.ok) return false;
+      var to = res.live ? res.to : 'the test address (test mode)';
+      var can = canEdit() && res.due;
+      var said = framePane(pv, res.subject, res.html,
+        can ? '<button class="btn small primary" type="button" data-pv="send">Send</button>' : '',
+        can ? '<p class="hint rc-pv-to">Goes to ' + esc(to) + (res.via === 'mine' ? ' under the league name (replies go to the league address)' : ' from the league address') + ', only when you tap Send.</p>' : '');
+      var sendBtn = pv.querySelector('[data-pv="send"]');
+      var reset = function () { sendBtn.disabled = false; delete sendBtn.dataset.armed; sendBtn.textContent = 'Send'; };
+      if (sendBtn) sendBtn.addEventListener('click', function () {
+        if (!sendBtn.dataset.armed) {
+          sendBtn.dataset.armed = '1';
+          sendBtn.textContent = res.live ? 'Tap again to send to ' + res.to : 'Tap again to send a test';
+          setTimeout(function () { if (sendBtn.isConnected && !sendBtn.disabled) reset(); }, 6000);
+          return;
+        }
+        sendBtn.disabled = true; said.textContent = 'Sending…';
+        A().apiPost({ action: 'payNudgeSend', key: res.key }).then(function (r) {
+          if (!r.ok) { reset(); said.textContent = r.error || 'That did not go through.'; return; }
+          said.innerHTML = '<span class="sp-done">✓ ' + esc(r.message || 'Sent.') + '</span>';
+          if (r.sent) sendBtn.hidden = true; else reset();
+        }).catch(function () { reset(); said.textContent = 'Could not reach the backend. It may not have gone. Refresh before trying again.'; });
+      });
+      if (pv.scrollIntoView) pv.scrollIntoView({ block: 'nearest' });
+      return true;
+    }).catch(function () { msg.textContent = 'Could not reach the backend. Try again.'; return false; });
   }
 
   function upgradeFor(s) { return s && S.upgrades ? S.upgrades[s.key] || null : null; }
@@ -1838,6 +1903,7 @@
     });
     var card = function (s) {
       var logo = logoFor(s);
+      var nudgeHere = S.mode !== 'teams' && canEdit() && payNudgeDue(s);
       return '<li class="banner-card season-card" role="button" tabindex="0" data-row="' + s.row + '">' +
         (logo ? '<img class="sp-card-logo" alt="" src="data:' + logo.mime + ';base64,' + logo.base64 + '">' : '') +
         '<div class="info">' +
@@ -1849,8 +1915,10 @@
             ? '<div class="sub">' + esc(s.team ? 'Team: ' + s.team : 'No team yet') + '</div>'
             : isIn(s) ? stepChips(s) + (upgradeFor(s) ? facts(['Upgrade to ' + upgradeFor(s).to + ' asked, ' + fmtMoney(upgradeLeft(s, upgradeFor(s))) + ' to pay']) : '')
             : cardWho(s) + (s.walkIn ? '<div class="sub sp-walkin">Walk-in only' + (s.address ? ': ' + esc(s.address) : '') + '</div>' : '')) +
+          (nudgeHere ? cardPayNudge(s) : '') +
         '</div>' +
         (isIn(s) || S.mode === 'teams' ? '' : cardBadge(s)) +
+        (nudgeHere ? '<div class="sp-card-pane"><div class="rc-preview hidden"></div></div>' : '') +
       '</li>';
     };
     var html;
@@ -1877,6 +1945,15 @@
         // The preview opens full width under the card's own details.
         showReceipt(rowPreview(box.closest('.season-card').querySelector('.sp-card-pane')), key, box.querySelector('.rc-msg'), { send: canEdit() && item && item.status === 'ready' });
       });
+    });
+    $$('#spList .sp-card-nudge').forEach(function (box) {
+      // The reminder and its preview stay on the card: no detail opens.
+      var pane = box.closest('.season-card').querySelector('.sp-card-pane');
+      [box, pane].forEach(function (el) {
+        if (el) ['click', 'keydown'].forEach(function (ev) { el.addEventListener(ev, function (e) { e.stopPropagation(); }); });
+      });
+      var btn = box.querySelector('button[data-card-nudge]');
+      if (btn && pane) btn.addEventListener('click', function () { showPayNudge(rowPreview(pane), Number(btn.dataset.cardNudge), box.querySelector('.rc-msg')); });
     });
     $$('#spList .season-card').forEach(function (card) {
       card.addEventListener('click', function () { open(Number(card.dataset.row)); });
