@@ -2057,8 +2057,9 @@
     var s = sponsors().find(function (x) { return x.row === row; });
     if (!s) return;
     S.current = s;
-    // Opened from Teams: where they go (team, logo, banner). Anywhere else:
-    // getting them in (the three lines). Never both. (Nate, Nov 22)
+    // Opened from Teams: where they go (team, banner). Anywhere else: getting
+    // them in (the three lines). Never both. (Nate, Nov 22) The logo shows
+    // in both, so it can be added from the main list too. (Nate, Nov 23)
     var teamsView = S.mode === 'teams';
     $('#sponsorSheet').classList.toggle('mode-teams', teamsView);
     $('#sponsorSheet').classList.toggle('mode-intake', !teamsView);

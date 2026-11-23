@@ -804,6 +804,7 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
    Paid, Receipt sent, Packet sent. Team, logo and banner open from the Teams
    tab instead, never on the intake card. */
 #sponsorSheet.mode-intake .sp-teamview, #sponsorSheet.mode-teams .sp-intake, .sp-gone { display: none !important; }
+.sp-logoview { margin-top: 14px; }
 .st-list { list-style: none; margin: 6px 0 10px; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .st-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .st-line:first-child { border-top: 0; }
