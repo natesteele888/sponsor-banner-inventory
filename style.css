@@ -846,4 +846,14 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .sp-sec h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
 .sp-sec-n { font-size: 13px; font-weight: 700; color: var(--ink2); background: var(--line); border-radius: 999px; padding: 1px 9px; }
 .sp-sec .hint { margin: 2px 0 0; }
+.sp-sec-btn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 0; font: inherit; color: inherit; }
+.sp-sec-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+.sp-sec-chev { display: inline-block; width: 1em; transition: transform .15s; }
+.sp-sec.shut .sp-sec-chev { transform: rotate(-90deg); }
+.sp-sec.shut .hint { display: none; }
+.sp-jump { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; padding: 0 2px; }
+.sp-jump-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.sp-jump-chip .sp-sec-n { font-size: 12px; padding: 0 7px; }
+.sp-sec { scroll-margin-top: 70px; }
+#spList .season-card[hidden] { display: none; }
 #view-sponsors:not(.sp-teams) .sp-show { display: none; }
