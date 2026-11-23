@@ -9,6 +9,7 @@
  *
  * Who fits: Contacted? has a name or "Yes" (not blank, "No" or "Not
  * sponsoring"), Paid? is not yes, and the row has an email.
+ * Anyone signed up and not paid gets the payment nudge instead (PayNudge.gs).
  *
  * Script Properties (nothing private is written in this public file):
  *   NUDGE_DATES       the round dates, e.g. 2026-12-10, 2027-01-14 (default:
@@ -132,6 +133,8 @@ function nudgeRows_(round) {
     if (!row.company || !row.email || contactedState_(get(r, 'contacted')) !== 'yes' || isYes_(get(r, 'paid'))) return;
     // On the board's sheet a typed Status says it too: no nudge after a no or a payment.
     if (/^(paid|not sponsoring)$/i.test(get(r, 'status'))) return;
+    // Signed up and not paid: they get the payment nudge instead (PayNudge.gs).
+    if (/^signed up/i.test(get(r, 'status'))) return;
     row.key = companyKey_(row.company) + '|' + row.email.toLowerCase();
     var d = done[row.key];
     row.status = d ? d.how : 'ready';

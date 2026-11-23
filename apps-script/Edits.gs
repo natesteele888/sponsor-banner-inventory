@@ -87,7 +87,23 @@ function followStatus_(sh, t, row, before, after, company) {
   if (!next) return '';
   sh.getRange(row, c + 1).setValue(next);
   logChanges_(sh, [{ company: company, what: t.head[c], from: before[c] || '', to: next }]);
+  if (/^signed up/i.test(next)) stampSignedUp_(sh, t, row, company);
   return next;
+}
+
+// The day a sponsor signed up, for the payment nudge's two-week clock
+// (PayNudge.gs). Written once, the first time Status becomes "Signed up, not
+// paid", on a sheet with a "Signed up" column. Never written over.
+function stampSignedUp_(sh, t, row, company) {
+  var c = -1;
+  t.head.forEach(function (h, i) { if (c < 0 && /^signed up/i.test(h)) c = i; });
+  if (c < 0) return '';
+  var cell = sh.getRange(row, c + 1);
+  if (cell.getFormula() || String(cell.getDisplayValue()).trim()) return '';
+  var day = dayOf_(new Date());
+  cell.setValue(day);
+  logChanges_(sh, [{ company: company, what: t.head[c], from: '', to: day }]);
+  return day;
 }
 
 // ---------- change log ----------
@@ -334,6 +350,10 @@ function sponsorEdit(data) {
     }
     logChanges_(sh, log);
     var st = changed && !setStatus ? followStatus_(sh, t, row, before, after, t.v[row - 1][cCo >= 0 ? cCo : 0]) : '';
+    if (changed && setStatus) {
+      var cSt = t.head.findIndex(function (h) { return /^status$/i.test(h); });
+      if (cSt >= 0 && /^signed up/i.test(after[cSt]) && !/^signed up/i.test(before[cSt])) stampSignedUp_(sh, t, row, t.v[row - 1][cCo >= 0 ? cCo : 0]);
+    }
     return ok({ message: changed ? 'Saved.' : 'Nothing changed.', changed: changed, kept: kept, status: st });
   } finally {
     lock.releaseLock();
