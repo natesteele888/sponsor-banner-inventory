@@ -1714,9 +1714,11 @@
         : badge('Paid', 'ok');
     }
     if (isIn(s)) return s.inKind ? badge('In kind', 'ok') : badge('Not paid yet', 'warn');
+    // Reached out to this season comes first, past sponsors included.
+    if (contactState(s) === 'yes') return badge('Contacted', 'muted');
     if (FILTERS.lapsed(s)) return badge('Past sponsor', 'muted');
     if (!String(s.contacted).trim()) return badge('Not contacted', 'muted');
-    return badge('Contacted' + (s.owner ? ' by ' + s.owner : ''), 'muted');
+    return badge('Contacted', 'muted');
   }
 
   // Every count is a button that shows who's behind it.
