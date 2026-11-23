@@ -839,3 +839,11 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .or-tuck { font-size: 12.5px; margin-top: 2px; }
 .or-tuck .linkish { font-weight: 500; color: var(--ink3); }
 .or-foot .linkish { font-size: 13px; }
+
+/* The main list in five sections, in the order the work goes (Nate, Nov 23). */
+.sp-sec { list-style: none; margin: 22px 0 6px; padding: 0 2px; }
+.sp-sec:first-child { margin-top: 4px; }
+.sp-sec h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.sp-sec-n { font-size: 13px; font-weight: 700; color: var(--ink2); background: var(--line); border-radius: 999px; padding: 1px 9px; }
+.sp-sec .hint { margin: 2px 0 0; }
+#view-sponsors:not(.sp-teams) .sp-show { display: none; }
