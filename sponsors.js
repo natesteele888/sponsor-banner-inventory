@@ -1589,7 +1589,9 @@
     var box = $('#spSteps'), esc = A().esc;
     if (!box || !s) return;
     if (!isIn(s)) {
-      box.innerHTML = '<p class="hint">Not signed up for ' + esc(S.book.season) + ' yet. Their contact details are below.</p>';
+      box.innerHTML = '<p class="hint">Not signed up for ' + esc(S.book.season) + ' yet. Their contact details are below.</p>' +
+        (canEdit() ? becameBox(s) : '');
+      wireBecame(s);
       $('#spMoreBox').open = true;
       return;
     }
@@ -1606,9 +1608,87 @@
     box.innerHTML = '<ul class="st-list">' + line('Paid', st.paid, pay) + line('Receipt sent', st.receipt, rc) + line('Packet sent', st.packet, pk) + '</ul>' +
       (it && it.status === 'sent' ? '<p class="st-tuck"><button class="linkish" type="button" data-st="rcview">View the receipt</button></p>' : '');
   }
+  // ---------- became a sponsor ----------
+  // Someone not signed up yet said yes (a check in the mail, a call): pick the
+  // level, then whether they've paid and how, and save, without the edit
+  // screen. (Nate, Nov 24) Status and the Signed up day follow on the sheet.
+  var BC_LEVELS = [['Gameday', 0, 'Gameday', 'any amount'], ['All-Star', 300, 'All-Star', '$300'], ['MVP', 500, 'MVP', '$500'], ['Championship', 750, 'Championship', '$750+']];
+  var BC_PAY = [['', 'Not yet'], ['check', 'Check'], ['cash', 'Cash'], ['venmo', 'Venmo'], ['online', 'Crossbar'], ['inkind', 'In kind']];
+  function bcState(s) {
+    if (!S.bc || S.bc.row !== s.row) S.bc = { row: s.row, open: false, lv: '', amt: '', pay: '', ref: '' };
+    return S.bc;
+  }
+  function becameBox(s) {
+    var esc = A().esc, b = bcState(s);
+    if (!b.open) return '<p class="bc-open"><button class="btn primary" type="button" data-st="bcopen">Became a sponsor</button></p>';
+    var chip = function (k, v, label, sub, on) {
+      return '<button type="button" class="bc-chip" data-st="' + k + '" data-v="' + esc(v) + '" aria-pressed="' + on + '">' + esc(label) +
+        (sub ? ' <span>' + esc(sub) + '</span>' : '') + '</button>';
+    };
+    var paid = !!b.pay;
+    return '<div class="bc-form">' +
+      '<p class="bc-q">Which level?</p>' +
+      '<div class="bc-chips">' + BC_LEVELS.map(function (l) { return chip('bclv', l[0], l[2], l[3], b.lv === l[0]); }).join('') + '</div>' +
+      (b.lv ? '<label class="bc-field">Amount<input id="spBcAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="$" value="' + esc(b.amt) + '"></label>' : '') +
+      '<p class="bc-q">Paid yet?</p>' +
+      '<div class="bc-chips">' + BC_PAY.map(function (p) { return chip('bcpay', p[0], p[1], '', b.pay === p[0]); }).join('') + '</div>' +
+      (b.pay === 'check' ? '<label class="bc-field">Check number (optional)<input id="spBcRef" type="text" inputmode="numeric" autocomplete="off" value="' + esc(b.ref) + '"></label>' : '') +
+      '<p class="bc-acts"><button class="btn primary" type="button" data-st="bcsave">' + (paid ? 'Save as paid' : 'Save as signed up') + '</button>' +
+      '<button class="btn" type="button" data-st="bccancel">Cancel</button></p>' +
+      '<p class="hint">' + (paid ? 'Saves the level and the payment, then opens their receipt to look over. Nothing goes to them until you tap Send.'
+        : 'Saves the level. They move to Said yes, not paid, and Mark as paid is here when the money comes in.') + '</p>' +
+      '</div>';
+  }
+  function wireBecame(s) {
+    var b = S.bc;
+    var amt = $('#spBcAmt'); if (amt) amt.addEventListener('input', function () { b.amt = amt.value; });
+    var ref = $('#spBcRef'); if (ref) ref.addEventListener('input', function () { b.ref = ref.value; });
+  }
+  function becameAct(btn, s) {
+    var b = bcState(s), k = btn.dataset.st, msg = $('#spStepMsg');
+    msg.textContent = '';
+    if (k === 'bcopen') { b.open = true; renderSteps(s); return; }
+    if (k === 'bccancel') { S.bc = null; renderSteps(s); return; }
+    if (k === 'bclv') {
+      var lv = BC_LEVELS.filter(function (l) { return l[0] === btn.dataset.v; })[0];
+      var was = BC_LEVELS.filter(function (l) { return l[0] === b.lv; })[0];
+      // The level's usual price fills in, unless an amount was typed by hand.
+      if (!b.amt || (was && money(b.amt) === was[1])) b.amt = lv[1] ? fmtMoney(lv[1]) : '';
+      b.lv = lv[0]; renderSteps(s);
+      if (!b.amt) { var a = $('#spBcAmt'); if (a) a.focus(); }
+      return;
+    }
+    if (k === 'bcpay') { b.pay = btn.dataset.v; renderSteps(s); return; }
+    if (k !== 'bcsave') return;
+    var amt = money(b.amt);
+    if (!b.lv) { msg.textContent = 'Pick the level first.'; return; }
+    if (!(amt > 0)) { msg.textContent = 'Type the amount for ' + b.lv + '.'; var a2 = $('#spBcAmt'); if (a2) a2.focus(); return; }
+    if (!armed(btn, 'Tap again: ' + b.lv + ' ' + fmtMoney(amt) + (b.pay ? ', paid' : ''))) return;
+    var t = mainTab(), head = function (re) { var c = colOf(t, re); return c < 0 ? '' : t.headers[c]; };
+    var hTier = head(new RegExp('^tier selected ' + Number(S.book.season))), hAmt = head(/^amount/), hCon = head(/^contacted/);
+    var hPaid = head(/^paid\??$/), hHow = head(/^(paid how|payment method|paid by)/), hNotes = head(/^notes?$/);
+    if (!hAmt) { msg.textContent = 'The sheet has no Amount column.'; return; }
+    if (b.pay && !hPaid) { msg.textContent = 'The sheet has no Paid? column.'; return; }
+    var v = {};
+    v[hAmt] = String(amt);
+    if (hTier) v[hTier] = b.lv;
+    // Signing up means they answered: Contacted stays as it is, unless it was blank or said no.
+    if (hCon && contactState(s) !== 'yes') v[hCon] = 'Yes';
+    if (b.pay) {
+      v[hPaid] = 'Yes';
+      if (hHow) v[hHow] = PAY_HOW[b.pay];
+      var note = payNote({ how: b.pay, amount: amt, ref: b.pay === 'check' ? String(b.ref || '').trim() : '' });
+      if (hNotes) v[hNotes] = s.notes ? s.notes + '; ' + note : note;
+    }
+    var row = s.row, paid = !!b.pay, said = s.company + ' signed up at ' + b.lv + ', ' + fmtMoney(amt) + (paid ? ', paid ' + PAY_SAID[b.pay] + '.' : '. Not paid yet.');
+    S.bc = null;
+    saveRow(v, function () { open(row); doneNote(said); if (paid) receiptAfterPaid(row); });
+  }
+
   function stepAct(btn) {
     var s = S.current; if (!s) return;
     var k = btn.dataset.st, it = rcItemFor(s), msg = $('#spStepMsg'), pv = $('#spReceipt');
+    if (/^bc/.test(k)) return becameAct(btn, s);
     if (k === 'rcsend' || k === 'rcview') { pv.innerHTML = ''; return it && showReceipt(pv, it.key, msg, { send: k === 'rcsend' && canEdit() && it.status === 'ready' }); }
     if (k === 'pksend') { pv.innerHTML = ''; return it && showThanks(pv, it.key, msg); }
     var ask = { paid: 'Tap again: ' + s.company + ' paid', inkind: 'Tap again: paid in kind', rcmark: 'Tap again: receipt already sent', pkmark: 'Tap again: packet already sent' }[k];
@@ -1871,9 +1951,11 @@
     var committed = cash.reduce(function (n, s) { return n + s.amount; }, 0);
     var paidAmt = paid.reduce(function (n, s) { return n + s.amount; }, 0);
     var kindAmt = kind.reduce(function (n, s) { return n + s.amount; }, 0);
-    // Dollar amounts first and wider, so five-digit totals fit as well as three.
+    // How many have committed first (Nate, Nov 24: "eighteen have committed"),
+    // then the dollar amounts, wider so five-digit totals fit as well as three.
     $('#spSummary').classList.toggle('k3', kind.length > 0);
     $('#spSummary').innerHTML =
+      stat(inn.length, inn.length === 1 ? 'sponsor committed' : 'sponsors committed', 'money count', 'signed') +
       stat(fmtMoney(committed), 'committed', 'money', 'committed') +
       stat(fmtMoney(paidAmt), 'paid (' + paid.length + ')', 'money', 'paidCash') +
       (kind.length ? stat(fmtMoney(kindAmt), 'in kind (' + kind.length + ')', 'money', 'inKind') : '') +
@@ -1883,7 +1965,7 @@
     $$('#spSummary [data-show]').forEach(function (b) { b.addEventListener('click', function () { showCount(b.dataset.show); }); });
     S.committed = committed;
     renderYoY();
-    $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
+    $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + inn.length + ' sponsors · ' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
     applyMode();
     renderQuick();
     // The packet-waiting list under Follow-ups follows the sheet; redrawn only when it changes.

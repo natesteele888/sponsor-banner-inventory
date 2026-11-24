@@ -446,18 +446,20 @@ body.board-view .scrim, body.board-view .sheet { display: none !important; }
 /* The money totals, then the four counts, all on one row on wider screens.
    On phones the money gets its own row and the four counts share the next
    one, four across. k3 means there's an in-kind total too. */
-#spSummary { grid-template-columns: repeat(2, minmax(0, 1.6fr)) repeat(4, minmax(0, 1fr)); }
-#spSummary.k3 { grid-template-columns: repeat(3, minmax(0, 1.6fr)) repeat(4, minmax(0, 1fr)); }
+/* Nov 24: the sponsor count leads the top row (3 big tiles, 4 with in kind);
+   the six section counts follow, six across, or three across on phones. */
+#spSummary { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+#spSummary .stat { grid-column: span 2; }
+#spSummary .stat.money { grid-column: span 4; }
+#spSummary.k3 .stat.money { grid-column: span 3; }
 #spSummary .stat b { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: clamp(20px, 5vw, 28px); }
 #spSummary .stat.money b { color: var(--blue); }
+#spSummary .stat.money.count b { color: var(--ink); }
 @media (max-width: 560px) {
-  #spSummary { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  #spSummary.k3 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  #spSummary .stat { grid-column: span 3; padding: 7px 3px; }
-  #spSummary .stat.money { grid-column: span 6; }
-  #spSummary.k3 .stat.money { grid-column: span 4; }
-  #spSummary .stat.money b { font-size: 28px; }
-  #spSummary.k3 .stat.money b { font-size: 24px; }
+  #spSummary .stat { grid-column: span 4; padding: 7px 3px; }
+  #spSummary .stat.money { grid-column: span 4; }
+  #spSummary.k3 .stat.money { grid-column: span 6; }
+  #spSummary .stat.money b { font-size: 26px; }
   #spSummary .stat:not(.money) b { font-size: 22px; }
   #spSummary .stat span { display: block; font-size: 10.5px; line-height: 1.2; }
 }
@@ -808,6 +810,19 @@ body.no-dash a[href^="https://lybs-dashboard.web.app"] { pointer-events: none; c
 .st-list { list-style: none; margin: 6px 0 10px; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .st-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .st-line:first-child { border-top: 0; }
+/* Became a sponsor: level, then paid yet, on the card (Nate, Nov 24). */
+.bc-open { margin: 8px 0 4px; }
+.bc-form { border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px 4px; margin: 8px 0 10px; background: var(--card); }
+.bc-q { margin: 6px 0 6px; font-weight: 700; color: var(--ink); }
+.bc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.bc-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.bc-chip span { font-weight: 400; color: var(--ink2); font-size: 13px; }
+.bc-chip[aria-pressed="true"] { border-color: var(--blue); background: var(--blue); color: #fff; }
+.bc-chip[aria-pressed="true"] span { color: rgba(255,255,255,.85); }
+.bc-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.bc-field { display: block; margin: 2px 0 10px; font-size: 13px; color: var(--ink2); }
+.bc-field input { display: block; margin-top: 4px; max-width: 220px; width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 16px; min-height: 38px; }
+.bc-acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
 .st-q { flex: 0 0 110px; font-size: 14px; color: var(--ink2); }
 .st-a { flex: 1 1 140px; font-size: 15.5px; }
 .st-line.ok .st-a { color: var(--green); }
