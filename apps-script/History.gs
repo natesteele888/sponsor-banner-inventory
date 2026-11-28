@@ -186,5 +186,16 @@ function sponsorHistory() {
   catch (e) { console.log('prev season history failed: ' + e); prev = { season: PREV_SEASON, points: [], note: 'failed' }; }
   var tre = treasurerPoints_();
   if (tre.length) prev = JSON.parse(JSON.stringify(prev)), prev.points = (prev.points || []).concat(tre);
-  return { season: SEASON, today: dayOf_(new Date()), now: now, snaps: readSnaps_(), prev: prev };
+  var props = PropertiesService.getScriptProperties();
+  return { season: SEASON, today: dayOf_(new Date()), now: now, snaps: readSnaps_(), prev: prev,
+    goal: sponsorGoal_(props), deadline: String(props.getProperty('SPONSOR_DEADLINE') || 'March 20').trim() };
+}
+
+// This season's money goal for the board's progress bar (Nate, Nov 28: board
+// only, never on the website). Kept in the Script Property SPONSOR_GOAL, never
+// in the repo. No goal set: the app shows last season's lines instead.
+function sponsorGoal_(props) {
+  var raw = String((props || PropertiesService.getScriptProperties()).getProperty('SPONSOR_GOAL') || '');
+  var n = Math.round(Number(raw.replace(/[^0-9.]/g, '')));
+  return n > 0 ? n : 0;
 }

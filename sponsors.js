@@ -1780,10 +1780,71 @@
     return out;
   }
 
+  // The board's money bar (Nate, Nov 26-28): one bar from the first sign-up
+  // to the goal, green for money in, light blue for committed and not paid
+  // yet, a "We are here" marker, ticks every $5k. The goal lives in the
+  // backend (Script Property SPONSOR_GOAL), never in this public repo; with
+  // no goal set, last season's two lines show instead.
+  function shortDay(text) {
+    var m = String(text || '').match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})/);
+    return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() + ' ' + Number(m[2]) : String(text || '');
+  }
+  function goalStep(goal) { return goal <= 10000 ? 2500 : goal <= 40000 ? 5000 : goal <= 100000 ? 10000 : 25000; }
+  function goalLastYear(h) {
+    var prev = h.prev || {}, started = S.started;
+    if (!started) return '';
+    var pts = (prev.points || []).filter(function (p) { return p.committed > 0; })
+      .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var first = pts.length ? pts[0].date : '';
+    if (prev.sheetCreated && (!first || prev.sheetCreated < first)) first = prev.sheetCreated;
+    if (!first || first <= lastYear(started)) return '';
+    var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    var line = 'Last year we didn\'t start until ' + MONTHS[Number(first.slice(5, 7)) - 1] + '.';
+    if (h.today && h.season && h.today < String(h.season) + '-01-01') line += ' This year we\'re at ' + fmtMoney(S.committed) + ' before the new year.';
+    return line;
+  }
+  function renderGoal(box, h) {
+    var esc = A().esc;
+    var goal = h.goal, now = S.committed, paid = Math.min(S.paidAmt || 0, now), owed = Math.max(0, now - paid);
+    var pct = function (v) { return Math.max(0, Math.min(100, Math.round(v / goal * 1000) / 10)); };
+    var share = Math.round(now / goal * 100);
+    var step = goalStep(goal), ticks = '', marks = '';
+    for (var v = step; v < goal; v += step) {
+      ticks += '<i class="gb-tick" style="left:' + pct(v) + '%"></i>';
+      if (goal - v >= step * 0.75) marks += '<span style="left:' + pct(v) + '%">$' + (v % 1000 ? (v / 1000).toFixed(1) : v / 1000) + 'k</span>';
+    }
+    var here = pct(now), side = here < 18 ? ' lft' : here > 82 ? ' rgt' : '';
+    var start = S.started ? 'Started<br>' + esc(dayLabel(S.started)) : 'Start';
+    var goalK = goal % 1000 ? fmtMoney(goal) : '$' + goal / 1000 + 'k';
+    var by = h.deadline ? '<br>by ' + esc(shortDay(h.deadline)) : '';
+    var last = goalLastYear(h);
+    var label = fmtMoney(now) + ' committed of a ' + fmtMoney(goal) + ' goal, ' + share + ' percent. ' +
+      fmtMoney(paid) + ' paid, ' + fmtMoney(owed) + ' committed and not paid yet.';
+    box.innerHTML =
+      '<div class="gb-head"><strong>' + fmtMoney(now) + ' of ' + fmtMoney(goal) + '</strong>' +
+        '<span>' + share + '% of the goal' + (h.today ? ' by ' + esc(dayLabel(h.today)) : '') + '</span></div>' +
+      '<div class="gb-chart" role="img" aria-label="' + esc(label) + '">' +
+        '<div class="gb-bar" aria-hidden="true">' +
+          '<i class="gb-fill owed" style="width:' + pct(now) + '%"></i>' +
+          '<i class="gb-fill paid" style="width:' + pct(paid) + '%"></i>' + ticks +
+          '<span class="gb-here' + side + '" style="left:' + here + '%">We are here: ' + fmtMoney(now) + '</span>' +
+        '</div>' +
+        '<div class="gb-marks" aria-hidden="true"><span class="l" style="left:0">' + start + '</span>' + marks +
+          '<span class="r" style="left:100%">Goal ' + goalK + by + '</span></div>' +
+      '</div>' +
+      '<div class="gb-key"><span><i class="paid"></i>Paid ' + fmtMoney(paid) + '</span>' +
+        '<span><i class="owed"></i>Committed, not paid yet ' + fmtMoney(owed) + '</span></div>' +
+      (last ? '<p class="gb-last">' + esc(last) + '</p>' : '');
+    box.classList.add('goal');
+    box.classList.remove('hidden');
+  }
+
   function renderYoY() {
     var box = $('#spYoY');
     var h = S.history;
     if (!box || !h || !S.book || S.committed == null) return;
+    if (h.goal > 0) { renderGoal(box, h); return; }
+    box.classList.remove('goal');
     var prev = h.prev || {};
     var fin = prev.final ? prev.final.committed : null;
     var pts = prev.points || [];
@@ -1964,6 +2025,9 @@
       }).join('');
     $$('#spSummary [data-show]').forEach(function (b) { b.addEventListener('click', function () { showCount(b.dataset.show); }); });
     S.committed = committed;
+    S.paidAmt = paidAmt;
+    // The first sign-up date this season starts the money bar.
+    S.started = cash.map(function (s) { return s.signed; }).filter(Boolean).sort()[0] || '';
     renderYoY();
     $('#spReportsSum').innerHTML = 'Numbers and reports <span class="hint">' + inn.length + ' sponsors · ' + fmtMoney(committed) + ' committed · ' + fmtMoney(paidAmt) + ' paid</span>';
     applyMode();
